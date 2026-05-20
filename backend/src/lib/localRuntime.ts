@@ -219,8 +219,8 @@ async function listQueueFiles(directory: string, suffix: string): Promise<QueueF
 
 function findLoopProcess(processes: ProcessSnapshot[]) {
   return (
-    processes.find((processItem) => /Run-ModularLoop\.ps1/i.test(processItem.commandLine)) ??
-    processes.find((processItem) => /run-modular-loop/i.test(processItem.commandLine)) ??
+    processes.find((processItem) => /-File\s+.+Run-ModularLoop\.ps1/i.test(processItem.commandLine)) ??
+    processes.find((processItem) => /bash\.exe.+run-modular-loop/i.test(processItem.commandLine)) ??
     null
   );
 }
@@ -228,7 +228,8 @@ function findLoopProcess(processes: ProcessSnapshot[]) {
 function findImplementerProcess(processes: ProcessSnapshot[], loopPid: number | null) {
   const candidates = processes.filter(
     (processItem) =>
-      (processItem.name === "codex.exe" || /@openai\\codex/i.test(processItem.commandLine)) &&
+      processItem.name === "codex.exe" &&
+      /exec\s+-/i.test(processItem.commandLine) &&
       processItem.pid !== loopPid,
   );
 
