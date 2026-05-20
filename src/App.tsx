@@ -347,6 +347,14 @@ function CommandCenter() {
     refreshRuntimeStatus();
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      refreshRuntimeStatus({ silent: true });
+    }, 5000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
   async function refreshHealth() {
     setHealth("checking");
 
@@ -377,17 +385,27 @@ function CommandCenter() {
     }
   }
 
-  async function refreshRuntimeStatus() {
-    setIsRefreshingRuntime(true);
+  async function refreshRuntimeStatus(options: { silent?: boolean } = {}) {
+    if (!options.silent) {
+      setIsRefreshingRuntime(true);
+    }
     setRuntimeError(null);
 
     try {
       const status = await getLocalRuntimeStatus();
-      setRuntimeStatus(status);
+      setRuntimeStatus((previous) => {
+        if (previous && hasRuntimeChanged(previous, status)) {
+          refreshHistory();
+        }
+
+        return status;
+      });
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : "Could not load local runtime status.");
     } finally {
-      setIsRefreshingRuntime(false);
+      if (!options.silent) {
+        setIsRefreshingRuntime(false);
+      }
     }
   }
 
@@ -519,12 +537,12 @@ function CommandCenter() {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold text-slate-300">Current Workflow State</h3>
-            <p className="mt-1 text-xs text-slate-500">Read-only local loop snapshot</p>
+            <p className="mt-1 text-xs text-slate-500">Read-only local loop snapshot, auto-refreshes every 5 seconds</p>
           </div>
           <button
             className="rounded border border-white/10 px-3 py-1 text-xs font-medium text-slate-300 transition hover:border-cyan-300/50 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={isRefreshingRuntime}
-            onClick={refreshRuntimeStatus}
+            onClick={() => refreshRuntimeStatus()}
           >
             {isRefreshingRuntime ? "Refreshing..." : "Refresh Runtime"}
           </button>
@@ -541,6 +559,7 @@ function CommandCenter() {
                 {runtimeStatus.status}
               </StatusBadge>
               <span className="text-xs text-slate-500">checked {formatDate(runtimeStatus.checked_at)}</span>
+              <span className="text-xs text-slate-600">auto refresh on</span>
             </div>
             <div className="grid gap-2 sm:grid-cols-4">
               <RuntimeMetric label="Queue" value={`processing=${runtimeStatus.queue.processing}`} />
@@ -792,6 +811,25 @@ function formatProcess(processItem: LocalRuntimeStatus["processes"]["implementer
 
   const cpu = includeCpu && processItem.cpu !== null ? ` / CPU ${processItem.cpu.toFixed(1)}` : "";
   return `PID ${processItem.pid}${cpu}`;
+}
+
+function hasRuntimeChanged(previous: LocalRuntimeStatus, next: LocalRuntimeStatus) {
+  return (
+    previous.status !== next.status ||
+    previous.active_task !== next.active_task ||
+    previous.queue.inbox !== next.queue.inbox ||
+    previous.queue.processing !== next.queue.processing ||
+    previous.queue.outbox !== next.queue.outbox ||
+    previous.queue.reviews !== next.queue.reviews ||
+    previous.processes.loop?.pid !== next.processes.loop?.pid ||
+    previous.processes.reviewer_bridge?.pid !== next.processes.reviewer_bridge?.pid ||
+    previous.latest.processing?.name !== next.latest.processing?.name ||
+    previous.latest.processing?.updated_at !== next.latest.processing?.updated_at ||
+    previous.latest.outbox?.name !== next.latest.outbox?.name ||
+    previous.latest.outbox?.updated_at !== next.latest.outbox?.updated_at ||
+    previous.latest.review?.name !== next.latest.review?.name ||
+    previous.latest.review?.updated_at !== next.latest.review?.updated_at
+  );
 }
 
 function toCommandType(action: string) {
