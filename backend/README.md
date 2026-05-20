@@ -25,6 +25,10 @@ PORT=4000
 
 `SUPABASE_SERVICE_ROLE_KEY` is a backend-only secret. Never expose it to the Vite frontend, never prefix it with `VITE_`, and never commit it.
 
+## Supabase Client Note
+
+This backend only uses Supabase REST-style table operations. The `ws` dependency is present because the current `@supabase/supabase-js` client initializes its realtime client during construction, and Node.js 20 requires an explicit WebSocket transport for that initialization. Do not use realtime APIs unless they are explicitly added later.
+
 ## Endpoints
 
 ### GET /health
