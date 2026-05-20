@@ -94,3 +94,29 @@ set
   log_type = excluded.log_type,
   content = excluded.content,
   created_at = excluded.created_at;
+
+insert into public.command_runs (id, command, command_type, status, result, created_at)
+values
+  (
+    '20000000-0000-4000-8000-000000000001',
+    'Add Decision',
+    'add_decision',
+    'succeeded',
+    'Mock command recorded. Real execution is not enabled yet.',
+    now() - interval '45 minutes'
+  ),
+  (
+    '20000000-0000-4000-8000-000000000002',
+    'review latest PR',
+    'typed',
+    'pending',
+    'Command recorded as pending. Real execution is not enabled yet.',
+    now() - interval '15 minutes'
+  )
+on conflict (id) do update
+set
+  command = excluded.command,
+  command_type = excluded.command_type,
+  status = excluded.status,
+  result = excluded.result,
+  created_at = excluded.created_at;
