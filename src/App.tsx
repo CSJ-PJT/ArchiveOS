@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./lib/supabase";
-import type { Agent, AgentStatus, LogType, Task, TaskStatus, WorkLog } from "./types/database";
+import type {
+  Agent,
+  AgentStatus,
+  CommandRun,
+  CommandStatus,
+  LogType,
+  Task,
+  TaskStatus,
+  WorkLog,
+} from "./types/database";
 
 type DashboardData = {
   agents: Agent[];
@@ -32,6 +41,22 @@ const logTypeStyles: Record<LogType, string> = {
   error: "border-rose-400/30 bg-rose-400/5",
   review: "border-amber-400/30 bg-amber-400/5",
 };
+
+const commandStatusStyles: Record<CommandStatus, string> = {
+  pending: "bg-slate-500/15 text-slate-200 ring-slate-400/20",
+  running: "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25",
+  succeeded: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25",
+  failed: "bg-rose-500/15 text-rose-200 ring-rose-400/25",
+};
+
+const quickActions = [
+  "Add Work Log",
+  "Add Decision",
+  "Create Task",
+  "Request Review",
+  "Sync GitHub",
+  "Run Health Check",
+];
 
 function App() {
   const [view, setView] = useState<"dashboard" | "decisions">("dashboard");
@@ -203,6 +228,9 @@ function Dashboard({
             ))}
           </div>
         </Panel>
+        <Panel title="Command Center" className="sm:col-span-2">
+          <CommandCenter />
+        </Panel>
       </section>
 
       <section className="grid gap-5">
@@ -213,6 +241,123 @@ function Dashboard({
           <LogList logs={data.decisions.slice(0, 4)} />
         </Panel>
       </section>
+    </div>
+  );
+}
+
+function CommandCenter() {
+  const [command, setCommand] = useState("");
+  const [history, setHistory] = useState<CommandRun[]>([]);
+
+  async function submitCommand(commandText: string, commandType = "typed") {
+    const trimmed = commandText.trim();
+
+    if (!trimmed) {
+      return;
+    }
+
+    const pendingRun = createLocalCommandRun(trimmed, commandType, "pending");
+    setHistory((current) => [pendingRun, ...current].slice(0, 8));
+    setCommand("");
+
+    if (commandType !== "health_check") {
+      const mockRun = {
+        ...pendingRun,
+        status: "succeeded" as const,
+        result: "Mock command recorded. Real execution is not enabled yet.",
+        updated_at: new Date().toISOString(),
+      };
+      setHistory((current) =>
+        current.map((item) => (item.id === pendingRun.id ? mockRun : item)),
+      );
+      return;
+    }
+
+    try {
+      const response = await fetch("http://localhost:4000/health");
+      const status = response.ok ? "succeeded" : "failed";
+      setHistory((current) =>
+        current.map((item) =>
+          item.id === pendingRun.id
+            ? {
+                ...item,
+                status,
+                result: response.ok ? "Backend health check succeeded." : "Backend health check failed.",
+                updated_at: new Date().toISOString(),
+              }
+            : item,
+        ),
+      );
+    } catch {
+      setHistory((current) =>
+        current.map((item) =>
+          item.id === pendingRun.id
+            ? {
+                ...item,
+                status: "failed",
+                result: "Backend health check could not reach localhost:4000.",
+                updated_at: new Date().toISOString(),
+              }
+            : item,
+        ),
+      );
+    }
+  }
+
+  return (
+    <div className="grid gap-5">
+      <div className="grid gap-2 sm:grid-cols-3">
+        {quickActions.map((action) => (
+          <button
+            key={action}
+            className="rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-cyan-300/50 hover:bg-cyan-300/10"
+            onClick={() => submitCommand(action, toCommandType(action))}
+          >
+            {action}
+          </button>
+        ))}
+      </div>
+
+      <form
+        className="flex flex-col gap-3 sm:flex-row"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submitCommand(command);
+        }}
+      >
+        <input
+          className="min-h-11 flex-1 rounded border border-white/10 bg-black/20 px-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/60"
+          value={command}
+          onChange={(event) => setCommand(event.target.value)}
+          placeholder="Type a command, e.g. review latest PR"
+        />
+        <button className="min-h-11 rounded bg-cyan-400 px-5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+          Execute
+        </button>
+      </form>
+
+      <div>
+        <h3 className="mb-3 text-sm font-semibold text-slate-300">Recent command history</h3>
+        {history.length ? (
+          <div className="grid gap-2">
+            {history.map((run) => (
+              <article
+                key={run.id}
+                className="rounded-md border border-white/10 bg-white/[0.03] p-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-white">{run.command}</p>
+                  <StatusBadge className={commandStatusStyles[run.status]}>{run.status}</StatusBadge>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">{formatDate(run.created_at)}</p>
+                {run.result ? <p className="mt-2 text-xs text-slate-400">{run.result}</p> : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">No commands submitted yet.</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -301,6 +446,24 @@ function formatDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function createLocalCommandRun(command: string, commandType: string, status: CommandStatus): CommandRun {
+  const now = new Date().toISOString();
+
+  return {
+    id: crypto.randomUUID(),
+    command,
+    command_type: commandType,
+    status,
+    result: null,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+function toCommandType(action: string) {
+  return action.toLowerCase().replace(/\s+/g, "_");
 }
 
 export default App;

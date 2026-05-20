@@ -58,11 +58,23 @@ create table if not exists public.work_logs (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.command_runs (
+  id uuid primary key default gen_random_uuid(),
+  command text not null,
+  command_type text,
+  status text not null default 'pending' check (status in ('pending', 'running', 'succeeded', 'failed')),
+  result text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists tasks_status_idx on public.tasks(status);
 create index if not exists tasks_assigned_agent_id_idx on public.tasks(assigned_agent_id);
 create index if not exists work_logs_task_id_idx on public.work_logs(task_id);
 create index if not exists work_logs_agent_id_idx on public.work_logs(agent_id);
 create index if not exists work_logs_log_type_created_at_idx on public.work_logs(log_type, created_at desc);
+create index if not exists command_runs_created_at_idx on public.command_runs(created_at desc);
+create index if not exists command_runs_status_idx on public.command_runs(status);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -86,9 +98,16 @@ before update on public.tasks
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_command_runs_updated_at on public.command_runs;
+create trigger set_command_runs_updated_at
+before update on public.command_runs
+for each row
+execute function public.set_updated_at();
+
 alter table public.agents enable row level security;
 alter table public.tasks enable row level security;
 alter table public.work_logs enable row level security;
+alter table public.command_runs enable row level security;
 
 drop policy if exists "Allow public read agents" on public.agents;
 create policy "Allow public read agents"
@@ -111,7 +130,15 @@ for select
 to anon, authenticated
 using (true);
 
+drop policy if exists "Allow public read command runs" on public.command_runs;
+create policy "Allow public read command runs"
+on public.command_runs
+for select
+to anon, authenticated
+using (true);
+
 grant usage on schema public to anon, authenticated;
 grant select on public.agents to anon, authenticated;
 grant select on public.tasks to anon, authenticated;
 grant select on public.work_logs to anon, authenticated;
+grant select on public.command_runs to anon, authenticated;

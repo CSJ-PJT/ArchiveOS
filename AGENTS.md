@@ -6,13 +6,17 @@
 - Do not add authentication until the dashboard workflow needs it.
 - Do not add OpenAI API calls yet.
 - Do not add MCP integrations yet.
-- Keep the MVP frontend-only with direct Supabase reads.
+- Keep the current frontend Supabase reads working until a deliberate migration is planned.
+- Route write operations and future integrations through the backend.
+- Command Center actions are logging-only until OpenAI, GitHub, or MCP integrations are explicitly added.
 
 ## Engineering rules
 
 - Use React, Vite, TypeScript, Tailwind CSS, and Supabase.
 - Store browser-safe Supabase config in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 - Never commit Supabase secret keys or service role keys.
+- Never expose `SUPABASE_SERVICE_ROLE_KEY` to frontend code or any `VITE_` environment variable.
+- The frontend uses only `VITE_SUPABASE_ANON_KEY`; the backend owns service-role writes.
 - Keep schema changes mirrored in `supabase/schema.sql`.
 - Keep sample data in `supabase/seed.sql`.
 - Prefer small, readable components over broad abstractions.

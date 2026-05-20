@@ -2,6 +2,7 @@ export type AgentStatus = "idle" | "working" | "reviewing" | "failed" | "waiting
 export type TaskPriority = "low" | "medium" | "high";
 export type TaskStatus = "todo" | "in_progress" | "review" | "done" | "failed";
 export type LogType = "summary" | "decision" | "error" | "review";
+export type CommandStatus = "pending" | "running" | "succeeded" | "failed";
 
 export interface Agent {
   id: string;
@@ -34,4 +35,14 @@ export interface WorkLog {
   created_at: string;
   task?: Pick<Task, "title" | "status"> | null;
   agent?: Pick<Agent, "name" | "role"> | null;
+}
+
+export interface CommandRun {
+  id: string;
+  command: string;
+  command_type: string | null;
+  status: CommandStatus;
+  result: string | null;
+  created_at: string;
+  updated_at: string;
 }
