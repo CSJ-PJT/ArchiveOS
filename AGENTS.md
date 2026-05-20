@@ -12,6 +12,7 @@
 - Command Center actions are recording-only until OpenAI, GitHub, or MCP integrations are explicitly added.
 - Local project actions must stay allowlisted and must never execute arbitrary user-provided shell commands or paths.
 - Local runtime status is read-only visibility; do not add process control without an explicit design review.
+- Manual Codex implementer/reviewer PID hints are local-only runtime metadata and must not become process-control features.
 
 ## Engineering rules
 

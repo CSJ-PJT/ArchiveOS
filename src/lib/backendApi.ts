@@ -61,6 +61,7 @@ export type LocalRuntimeStatus = {
   active_task: string | null;
   processes: {
     implementer: LocalRuntimeProcess | null;
+    reviewer: LocalRuntimeProcess | null;
     loop: LocalRuntimeProcess | null;
     reviewer_bridge: LocalRuntimeProcess | null;
   };

@@ -29,6 +29,7 @@ export type LocalRuntimeStatus = {
   active_task: string | null;
   processes: {
     implementer: ProcessSnapshot | null;
+    reviewer: ProcessSnapshot | null;
     loop: ProcessSnapshot | null;
     reviewer_bridge: ProcessSnapshot | null;
   };
@@ -45,6 +46,7 @@ export async function getLocalRuntimeStatus(): Promise<LocalRuntimeStatus> {
   const processes = await readCodexProcesses();
   const loop = findLoopProcess(processes);
   const implementer = findImplementerProcess(processes, loop?.pid ?? null);
+  const reviewer = findReviewerProcess(processes);
   const reviewerBridge = findReviewerBridgeProcess(processes);
   const repoPath = loop ? extractRepoPath(loop.commandLine) : null;
   const queuePath = repoPath ? path.join(repoPath, "tools", "mcp-codex-bridge", "queue") : null;
@@ -65,11 +67,20 @@ export async function getLocalRuntimeStatus(): Promise<LocalRuntimeStatus> {
     active_task: activeTask,
     processes: {
       implementer,
+      reviewer,
       loop,
       reviewer_bridge: reviewerBridge,
     },
     latest: queue.latest,
-    judgement: buildJudgement(status, queue.counts.processing, implementer, reviewerBridge, queue.latest.review, queue.latest.outbox),
+    judgement: buildJudgement(
+      status,
+      queue.counts.processing,
+      implementer,
+      reviewer,
+      reviewerBridge,
+      queue.latest.review,
+      queue.latest.outbox,
+    ),
   };
 }
 
@@ -226,6 +237,12 @@ function findLoopProcess(processes: ProcessSnapshot[]) {
 }
 
 function findImplementerProcess(processes: ProcessSnapshot[], loopPid: number | null) {
+  const configured = findConfiguredProcess(processes, process.env.CODEX_IMPLEMENTER_PID);
+
+  if (configured) {
+    return configured;
+  }
+
   const candidates = processes.filter(
     (processItem) =>
       processItem.name === "codex.exe" &&
@@ -244,8 +261,26 @@ function findImplementerProcess(processes: ProcessSnapshot[], loopPid: number | 
   return candidates.sort((left, right) => (right.cpu ?? 0) - (left.cpu ?? 0))[0] ?? null;
 }
 
+function findReviewerProcess(processes: ProcessSnapshot[]) {
+  return findConfiguredProcess(processes, process.env.CODEX_REVIEWER_PID);
+}
+
 function findReviewerBridgeProcess(processes: ProcessSnapshot[]) {
   return processes.find((processItem) => /gpt-session-bridge\.mjs/i.test(processItem.commandLine)) ?? null;
+}
+
+function findConfiguredProcess(processes: ProcessSnapshot[], rawPid: string | undefined) {
+  if (!rawPid) {
+    return null;
+  }
+
+  const pid = Number(rawPid);
+
+  if (!Number.isInteger(pid)) {
+    return null;
+  }
+
+  return processes.find((processItem) => processItem.pid === pid) ?? null;
 }
 
 function extractRepoPath(commandLine: string) {
@@ -261,11 +296,12 @@ function buildJudgement(
   status: LocalRuntimeStatus["status"],
   processingCount: number,
   implementer: ProcessSnapshot | null,
+  reviewer: ProcessSnapshot | null,
   reviewerBridge: ProcessSnapshot | null,
   latestReview: QueueFile | null,
   latestOutbox: QueueFile | null,
 ) {
-  if (status === "working" && reviewerBridge) {
+  if (status === "working" && (reviewer || reviewerBridge)) {
     const reviewNote =
       latestReview && latestOutbox && latestReview.updated_at > latestOutbox.updated_at
         ? " Latest review is newer than the latest outbox result."
@@ -277,8 +313,12 @@ function buildJudgement(
     return "A task is in processing, but no active Codex implementer process was detected.";
   }
 
-  if (implementer && !reviewerBridge) {
-    return "Codex implementer is detected, but reviewer bridge is not detected.";
+  if (implementer && reviewer) {
+    return "Manual implementer and reviewer Codex sessions are detected. No active processing task was detected.";
+  }
+
+  if (implementer && !reviewer && !reviewerBridge) {
+    return "Codex implementer is detected, but no reviewer Codex or reviewer bridge is detected.";
   }
 
   return "No active processing task was detected.";

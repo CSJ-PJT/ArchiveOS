@@ -24,10 +24,13 @@ SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 PORT=4000
 ARCHIVEOS_PROJECT_PATH=
+CODEX_IMPLEMENTER_PID=
+CODEX_REVIEWER_PID=
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` is a backend-only secret. Never expose it to the Vite frontend, never prefix it with `VITE_`, and never commit it.
 `ARCHIVEOS_PROJECT_PATH` should point to the ArchiveOS repository root when running local project actions.
+`CODEX_IMPLEMENTER_PID` and `CODEX_REVIEWER_PID` are optional local visibility hints for manually started Codex terminals. They are not secrets, but they are session-specific and should stay in local `.env`.
 
 ## Local Action Security
 
