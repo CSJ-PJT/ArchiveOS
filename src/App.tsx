@@ -1,4 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  createCommandRun,
+  getBackendHealth,
+  getLocalActionProjects,
+  getLocalRuntimeStatus,
+  getRecentCommands,
+  runLocalAction,
+  type LocalAction,
+  type LocalActionProject,
+  type LocalActionResult,
+  type LocalRuntimeStatus,
+} from "./lib/backendApi";
 import { supabase } from "./lib/supabase";
 import type {
   Agent,
@@ -49,13 +61,27 @@ const commandStatusStyles: Record<CommandStatus, string> = {
   failed: "bg-rose-500/15 text-rose-200 ring-rose-400/25",
 };
 
+const runtimeStatusStyles: Record<LocalRuntimeStatus["status"], string> = {
+  working: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25",
+  idle: "bg-slate-500/15 text-slate-200 ring-slate-400/20",
+  unknown: "bg-amber-500/15 text-amber-200 ring-amber-400/25",
+};
+
 const quickActions = [
-  "Add Work Log",
-  "Add Decision",
-  "Create Task",
-  "Request Review",
-  "Sync GitHub",
-  "Run Health Check",
+  "Record Work Log",
+  "Record Decision",
+  "Queue Review Request",
+  "Record GitHub Sync Request",
+  "Run Read-only Health Check",
+];
+
+const localActionButtons: { label: string; action: LocalAction }[] = [
+  { label: "Git Status", action: "git_status" },
+  { label: "Current Branch", action: "git_branch" },
+  { label: "Recent Commits", action: "git_log_recent" },
+  { label: "Frontend Build Check", action: "frontend_build" },
+  { label: "Backend Typecheck", action: "backend_typecheck" },
+  { label: "Backend Build Check", action: "backend_build" },
 ];
 
 function App() {
@@ -138,7 +164,8 @@ function App() {
             </p>
             <h1 className="mt-3 text-4xl font-semibold tracking-normal text-white">ArchiveOS</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
-              A compact command surface for agent status, task flow, work logs, and saved decisions.
+              A read-only PM operations dashboard for agent workflow visibility, safe command recording,
+              and decision history.
             </p>
           </div>
           <nav className="flex rounded-md border border-white/10 bg-white/[0.03] p-1">
@@ -191,54 +218,108 @@ function Dashboard({
   activeAgents: Agent[];
   taskCounts: { status: TaskStatus; label: string; count: number }[];
 }) {
+  const latestBuilderResult = data.logs.find((log) => log.log_type === "summary" || log.log_type === "error");
+  const latestReviewerResult = data.logs.find((log) => log.log_type === "review");
+
   return (
-    <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-      <section className="grid gap-5 sm:grid-cols-2">
-        <MetricCard label="Active agents" value={activeAgents.length} detail={`${data.agents.length} total agents`} />
-        <MetricCard
-          label="Open tasks"
-          value={data.tasks.filter((task) => !["done", "failed"].includes(task.status)).length}
-          detail={`${data.tasks.length} total tasks`}
-        />
-        <Panel title="Agents" className="sm:col-span-2">
-          <div className="grid gap-3 md:grid-cols-2">
-            {data.agents.map((agent) => (
-              <article key={agent.id} className="rounded-md border border-white/10 bg-white/[0.03] p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-medium text-white">{agent.name}</h3>
-                    <p className="mt-1 text-sm text-slate-400">{agent.role}</p>
+    <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+      <section className="grid gap-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <MetricCard label="Active agents" value={activeAgents.length} detail={`${data.agents.length} total agents`} />
+          <MetricCard
+            label="Open tasks"
+            value={data.tasks.filter((task) => !["done", "failed"].includes(task.status)).length}
+            detail={`${data.tasks.length} total tasks`}
+          />
+          <MetricCard
+            label="Decisions"
+            value={data.decisions.length}
+            detail={data.decisions.length ? "saved PM memory" : "No data yet"}
+          />
+        </div>
+
+        <Panel title="Agent State">
+          {data.agents.length ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {data.agents.map((agent) => (
+                <article key={agent.id} className="rounded-md border border-white/10 bg-white/[0.03] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-medium text-white">{agent.name}</h3>
+                      <p className="mt-1 text-sm text-slate-400">{agent.role}</p>
+                    </div>
+                    <StatusBadge className={agentStatusStyles[agent.status]}>{agent.status}</StatusBadge>
                   </div>
-                  <StatusBadge className={agentStatusStyles[agent.status]}>{agent.status}</StatusBadge>
+                  <p className="mt-4 min-h-10 text-sm leading-5 text-slate-300">
+                    {agent.current_task ?? "No current task"}
+                  </p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No data yet"
+              detail="No agents were returned. Load Supabase seed data or check the frontend Supabase environment."
+            />
+          )}
+        </Panel>
+
+        <Panel title="Task Queue State">
+          {data.tasks.length ? (
+            <div className="grid gap-3 sm:grid-cols-5">
+              {taskCounts.map((item) => (
+                <div key={item.status} className="rounded-md border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{item.label}</p>
+                  <p className="mt-3 text-3xl font-semibold text-white">{item.count}</p>
                 </div>
-                <p className="mt-4 min-h-10 text-sm leading-5 text-slate-300">
-                  {agent.current_task ?? "No current task"}
-                </p>
-              </article>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="Supabase seed not loaded"
+              detail="No tasks were returned. Run the schema and seed SQL before using this as an operations view."
+            />
+          )}
         </Panel>
-        <Panel title="Tasks by status" className="sm:col-span-2">
-          <div className="grid gap-3 sm:grid-cols-5">
-            {taskCounts.map((item) => (
-              <div key={item.status} className="rounded-md border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{item.label}</p>
-                <p className="mt-3 text-3xl font-semibold text-white">{item.count}</p>
-              </div>
-            ))}
-          </div>
-        </Panel>
-        <Panel title="Command Center" className="sm:col-span-2">
+
+        <Panel title="Command Center">
           <CommandCenter />
         </Panel>
       </section>
 
       <section className="grid gap-5">
-        <Panel title="Recent work logs">
-          <LogList logs={data.logs} />
+        <Panel title="Latest Builder Result">
+          {latestBuilderResult ? (
+            <LogItem log={latestBuilderResult} />
+          ) : (
+            <EmptyState title="No builder result yet" detail="Waiting for a recorded summary or error work log." />
+          )}
         </Panel>
-        <Panel title="Recent decisions">
+
+        <Panel title="Latest Reviewer Result">
+          {latestReviewerResult ? (
+            <LogItem log={latestReviewerResult} />
+          ) : (
+            <EmptyState title="No reviewer result yet" detail="Waiting for a recorded review work log." />
+          )}
+        </Panel>
+
+        <Panel title="Latest Decisions">
           <LogList logs={data.decisions.slice(0, 4)} />
+        </Panel>
+
+        <Panel title="Stale/Stuck Warnings">
+          <EmptyState
+            title="No warning rules connected yet"
+            detail="This placeholder will summarize stale processing, missing reviews, and stuck queues later."
+          />
+        </Panel>
+
+        <Panel title="Screenshot Freshness">
+          <EmptyState
+            title="No screenshot freshness signal yet"
+            detail="This placeholder will track whether proof screenshots are current for PM review."
+          />
         </Panel>
       </section>
     </div>
@@ -248,6 +329,67 @@ function Dashboard({
 function CommandCenter() {
   const [command, setCommand] = useState("");
   const [history, setHistory] = useState<CommandRun[]>([]);
+  const [projects, setProjects] = useState<LocalActionProject[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("archiveos");
+  const [localActionResult, setLocalActionResult] = useState<LocalActionResult | null>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<LocalRuntimeStatus | null>(null);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [health, setHealth] = useState<"checking" | "online" | "offline">("checking");
+  const [commandError, setCommandError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRunningLocalAction, setIsRunningLocalAction] = useState(false);
+  const [isRefreshingRuntime, setIsRefreshingRuntime] = useState(false);
+
+  useEffect(() => {
+    refreshHealth();
+    refreshHistory();
+    refreshProjects();
+    refreshRuntimeStatus();
+  }, []);
+
+  async function refreshHealth() {
+    setHealth("checking");
+
+    try {
+      await getBackendHealth();
+      setHealth("online");
+    } catch {
+      setHealth("offline");
+    }
+  }
+
+  async function refreshHistory() {
+    try {
+      const commands = await getRecentCommands();
+      setHistory(commands);
+    } catch {
+      setCommandError("Could not load backend command history.");
+    }
+  }
+
+  async function refreshProjects() {
+    try {
+      const configuredProjects = await getLocalActionProjects();
+      setProjects(configuredProjects);
+      setSelectedProjectId(configuredProjects[0]?.id ?? "archiveos");
+    } catch {
+      setCommandError("Could not load local action projects.");
+    }
+  }
+
+  async function refreshRuntimeStatus() {
+    setIsRefreshingRuntime(true);
+    setRuntimeError(null);
+
+    try {
+      const status = await getLocalRuntimeStatus();
+      setRuntimeStatus(status);
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : "Could not load local runtime status.");
+    } finally {
+      setIsRefreshingRuntime(false);
+    }
+  }
 
   async function submitCommand(commandText: string, commandType = "typed") {
     const trimmed = commandText.trim();
@@ -256,66 +398,94 @@ function CommandCenter() {
       return;
     }
 
-    const pendingRun = createLocalCommandRun(trimmed, commandType, "pending");
-    setHistory((current) => [pendingRun, ...current].slice(0, 8));
+    setIsSubmitting(true);
+    setCommandError(null);
     setCommand("");
 
-    if (commandType !== "health_check") {
-      const mockRun = {
-        ...pendingRun,
-        status: "succeeded" as const,
-        result: "Mock command recorded. Real execution is not enabled yet.",
-        updated_at: new Date().toISOString(),
-      };
-      setHistory((current) =>
-        current.map((item) => (item.id === pendingRun.id ? mockRun : item)),
-      );
-      return;
-    }
-
     try {
-      const response = await fetch("http://localhost:4000/health");
-      const status = response.ok ? "succeeded" : "failed";
-      setHistory((current) =>
-        current.map((item) =>
-          item.id === pendingRun.id
-            ? {
-                ...item,
-                status,
-                result: response.ok ? "Backend health check succeeded." : "Backend health check failed.",
-                updated_at: new Date().toISOString(),
-              }
-            : item,
-        ),
-      );
-    } catch {
-      setHistory((current) =>
-        current.map((item) =>
-          item.id === pendingRun.id
-            ? {
-                ...item,
-                status: "failed",
-                result: "Backend health check could not reach localhost:4000.",
-                updated_at: new Date().toISOString(),
-              }
-            : item,
-        ),
-      );
+      if (commandType.includes("health_check")) {
+        await refreshHealth();
+      }
+
+      const savedRun = await createCommandRun({
+        command: trimmed,
+        command_type: commandType,
+        status: commandType.includes("health_check") ? "succeeded" : "pending",
+      });
+
+      setHistory((current) => [savedRun, ...current].slice(0, 8));
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : "Command request failed.");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
+  async function submitLocalAction(action: LocalAction) {
+    setIsRunningLocalAction(true);
+    setCommandError(null);
+    setLocalActionResult(null);
+
+    try {
+      const result = await runLocalAction({
+        project_id: selectedProjectId,
+        action,
+      });
+      setLocalActionResult(result);
+      await refreshHistory();
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : "Local action request failed.");
+    } finally {
+      setIsRunningLocalAction(false);
+    }
+  }
+
+  const healthStyles =
+    health === "online"
+      ? "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25"
+      : health === "offline"
+        ? "bg-rose-500/15 text-rose-200 ring-rose-400/25"
+        : "bg-slate-500/15 text-slate-200 ring-slate-400/20";
+
+  const healthLabel =
+    health === "online" ? "backend online" : health === "offline" ? "backend offline" : "checking backend";
+
   return (
     <div className="grid gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge className={healthStyles}>{healthLabel}</StatusBadge>
+          <span className="text-xs text-slate-500">
+            {health === "offline" ? "Commands cannot be recorded while the backend is offline." : "Visibility and recording only"}
+          </span>
+        </div>
+        <button
+          className="rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-cyan-300/50 hover:bg-cyan-300/10"
+          onClick={refreshHealth}
+        >
+          Refresh Health
+        </button>
+      </div>
+
+      <div>
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold text-slate-300">Recorded Quick Actions</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            These buttons only record mock command intent unless marked as a read-only check.
+          </p>
+        </div>
       <div className="grid gap-2 sm:grid-cols-3">
         {quickActions.map((action) => (
           <button
             key={action}
-            className="rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-cyan-300/50 hover:bg-cyan-300/10"
+            className="rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-cyan-300/50 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isSubmitting}
             onClick={() => submitCommand(action, toCommandType(action))}
           >
             {action}
           </button>
         ))}
+      </div>
       </div>
 
       <form
@@ -329,15 +499,156 @@ function CommandCenter() {
           className="min-h-11 flex-1 rounded border border-white/10 bg-black/20 px-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/60"
           value={command}
           onChange={(event) => setCommand(event.target.value)}
-          placeholder="Type a command, e.g. review latest PR"
+          placeholder="Type a command to record, e.g. review latest PR"
         />
-        <button className="min-h-11 rounded bg-cyan-400 px-5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
-          Execute
+        <button
+          className="min-h-11 rounded bg-cyan-400 px-5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={isSubmitting}
+        >
+          Record Command
         </button>
       </form>
 
+      {commandError ? (
+        <p className="rounded border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">
+          {commandError}
+        </p>
+      ) : null}
+
+      <div className="rounded-md border border-white/10 bg-white/[0.03] p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-300">Current Workflow State</h3>
+            <p className="mt-1 text-xs text-slate-500">Read-only local loop snapshot</p>
+          </div>
+          <button
+            className="rounded border border-white/10 px-3 py-1 text-xs font-medium text-slate-300 transition hover:border-cyan-300/50 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isRefreshingRuntime}
+            onClick={refreshRuntimeStatus}
+          >
+            {isRefreshingRuntime ? "Refreshing..." : "Refresh Runtime"}
+          </button>
+        </div>
+
+        {runtimeError ? (
+          <p className="rounded border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">
+            {runtimeError}
+          </p>
+        ) : runtimeStatus ? (
+          <div className="grid gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge className={runtimeStatusStyles[runtimeStatus.status]}>
+                {runtimeStatus.status}
+              </StatusBadge>
+              <span className="text-xs text-slate-500">checked {formatDate(runtimeStatus.checked_at)}</span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-4">
+              <RuntimeMetric label="Queue" value={`processing=${runtimeStatus.queue.processing}`} />
+              <RuntimeMetric label="Task" value={runtimeStatus.active_task ?? "none"} />
+              <RuntimeMetric label="Outbox" value={runtimeStatus.latest.outbox?.name ?? "none"} />
+              <RuntimeMetric label="Review" value={runtimeStatus.latest.review?.name ?? "none"} />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <RuntimeMetric
+                label="Implementer"
+                value={formatProcess(runtimeStatus.processes.implementer, true)}
+              />
+              <RuntimeMetric label="Loop" value={formatProcess(runtimeStatus.processes.loop)} />
+              <RuntimeMetric
+                label="Reviewer bridge"
+                value={formatProcess(runtimeStatus.processes.reviewer_bridge)}
+              />
+            </div>
+            <p className="rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-400">
+              {runtimeStatus.judgement}
+            </p>
+          </div>
+        ) : (
+            <EmptyState title="No local workflow state loaded" detail="Start the backend and refresh runtime status." />
+        )}
+      </div>
+
       <div>
-        <h3 className="mb-3 text-sm font-semibold text-slate-300">Recent command history</h3>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-300">Local Diagnostics</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Allowlisted project checks only. No arbitrary shell input is accepted.
+            </p>
+          </div>
+          <select
+            className="rounded border border-white/10 bg-black/20 px-3 py-2 text-xs text-slate-200 outline-none"
+            value={selectedProjectId}
+            onChange={(event) => setSelectedProjectId(event.target.value)}
+          >
+            {projects.length ? (
+              projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))
+            ) : (
+              <option value="archiveos">No local project configured</option>
+            )}
+          </select>
+        </div>
+
+        {projects.length ? (
+          <div className="mb-3 rounded-md border border-white/10 bg-white/[0.03] p-3 text-xs text-slate-400">
+            {projects.map((project) => (
+              <p key={project.id}>
+                {project.name} / {project.repo}
+              </p>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No local project configured"
+            detail="The backend did not return an allowlisted project registry."
+          />
+        )}
+
+        {projects.length ? (
+          <div className="grid gap-2 sm:grid-cols-3">
+            {localActionButtons.map((item) => (
+              <button
+                key={item.action}
+                className="rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-emerald-300/50 hover:bg-emerald-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isRunningLocalAction}
+                onClick={() => submitLocalAction(item.action)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {localActionResult ? (
+          <div className="mt-3 rounded-md border border-white/10 bg-black/30 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-medium text-white">{localActionResult.action}</p>
+              <StatusBadge className={commandStatusStyles[localActionResult.status]}>
+                {localActionResult.status}
+              </StatusBadge>
+            </div>
+            <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-black/40 p-3 text-xs leading-5 text-slate-300">
+              {[localActionResult.stdout, localActionResult.stderr].filter(Boolean).join("\n\n") ||
+                `Exit code ${localActionResult.exitCode}`}
+            </pre>
+          </div>
+        ) : null}
+      </div>
+
+      <div>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-slate-300">Command History</h3>
+          <button
+            className="rounded border border-white/10 px-3 py-1 text-xs font-medium text-slate-300 transition hover:border-cyan-300/50 hover:bg-cyan-300/10"
+            onClick={refreshHistory}
+          >
+            Refresh
+          </button>
+        </div>
         {history.length ? (
           <div className="grid gap-2">
             {history.map((run) => (
@@ -355,7 +666,10 @@ function CommandCenter() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-slate-400">No commands submitted yet.</p>
+          <EmptyState
+            title="No recent commands"
+            detail="Recorded PM commands and mock action requests will appear here."
+          />
         )}
       </div>
     </div>
@@ -375,7 +689,6 @@ function Decisions({ decisions }: { decisions: WorkLog[] }) {
     </Panel>
   );
 }
-
 function MetricCard({ label, value, detail }: { label: string; value: number; detail: string }) {
   return (
     <article className="rounded-md border border-white/10 bg-white/[0.04] p-5">
@@ -383,6 +696,26 @@ function MetricCard({ label, value, detail }: { label: string; value: number; de
       <p className="mt-3 text-4xl font-semibold text-white">{value}</p>
       <p className="mt-2 text-sm text-slate-500">{detail}</p>
     </article>
+  );
+}
+
+function RuntimeMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-md border border-white/10 bg-black/20 p-3">
+      <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className="mt-2 truncate text-sm font-medium text-slate-200" title={value}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function EmptyState({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="rounded-md border border-dashed border-white/10 bg-black/10 p-4">
+      <p className="text-sm font-medium text-slate-300">{title}</p>
+      <p className="mt-1 text-sm leading-6 text-slate-500">{detail}</p>
+    </div>
   );
 }
 
@@ -405,7 +738,7 @@ function Panel({
 
 function LogList({ logs }: { logs: WorkLog[] }) {
   if (!logs.length) {
-    return <p className="text-sm text-slate-400">No work logs yet.</p>;
+    return <EmptyState title="No data yet" detail="No matching work logs were returned from Supabase." />;
   }
 
   return (
@@ -448,18 +781,13 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function createLocalCommandRun(command: string, commandType: string, status: CommandStatus): CommandRun {
-  const now = new Date().toISOString();
+function formatProcess(processItem: LocalRuntimeStatus["processes"]["implementer"], includeCpu = false) {
+  if (!processItem) {
+    return "not detected";
+  }
 
-  return {
-    id: crypto.randomUUID(),
-    command,
-    command_type: commandType,
-    status,
-    result: null,
-    created_at: now,
-    updated_at: now,
-  };
+  const cpu = includeCpu && processItem.cpu !== null ? ` / CPU ${processItem.cpu.toFixed(1)}` : "";
+  return `PID ${processItem.pid}${cpu}`;
 }
 
 function toCommandType(action: string) {
