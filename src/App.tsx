@@ -548,10 +548,14 @@ function CommandCenter() {
               <RuntimeMetric label="Outbox" value={runtimeStatus.latest.outbox?.name ?? "none"} />
               <RuntimeMetric label="Review" value={runtimeStatus.latest.review?.name ?? "none"} />
             </div>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-4">
               <RuntimeMetric
                 label="Implementer"
                 value={formatProcess(runtimeStatus.processes.implementer, true)}
+              />
+              <RuntimeMetric
+                label="Reviewer Codex"
+                value={formatProcess(runtimeStatus.processes.reviewer, true)}
               />
               <RuntimeMetric label="Loop" value={formatProcess(runtimeStatus.processes.loop)} />
               <RuntimeMetric

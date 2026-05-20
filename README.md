@@ -86,10 +86,13 @@ SUPABASE_URL=your-project-url
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 PORT=4000
 ARCHIVEOS_PROJECT_PATH=/absolute/path/to/ArchiveOS
+CODEX_IMPLEMENTER_PID=optional-local-codex-pid
+CODEX_REVIEWER_PID=optional-local-codex-pid
 ```
 
 The service role key is server-only. Never use a `VITE_` prefix for it and never expose it to frontend code.
 `ARCHIVEOS_PROJECT_PATH` lets the backend run allowlisted local actions against this repository. ArchiveOS never executes arbitrary typed shell commands; it only maps predefined action IDs to fixed commands.
+The optional Codex PID variables help the read-only runtime panel distinguish manually started implementer and reviewer terminals during local testing. Update them whenever those Codex sessions restart.
 
 Health check:
 
