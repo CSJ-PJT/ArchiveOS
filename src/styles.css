@@ -41,6 +41,22 @@ select {
   animation: pipeline-flow 1.8s ease-in-out infinite;
 }
 
+.pipeline-flow-line-current {
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.22), rgba(34, 211, 238, 0.42));
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.22);
+}
+
+.pipeline-flow-line-success {
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.28), rgba(16, 185, 129, 0.52));
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.22);
+}
+
+.pipeline-flow-line-success::after {
+  background: linear-gradient(90deg, transparent, rgba(110, 231, 183, 0.82), rgba(16, 185, 129, 0.64), transparent);
+  animation-duration: 2.4s;
+  opacity: 0.62;
+}
+
 @keyframes pipeline-flow {
   from {
     transform: translateX(-115%);
