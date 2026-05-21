@@ -25,6 +25,21 @@ function Test-IsRunning {
   }
 }
 
+function Get-PortOwner {
+  param([object]$Port)
+
+  if ([string]::IsNullOrWhiteSpace([string]$Port)) {
+    return $null
+  }
+
+  try {
+    return Get-NetTCPConnection -LocalPort ([int]$Port) -State Listen -ErrorAction Stop |
+      Select-Object -First 1 -ExpandProperty OwningProcess
+  } catch {
+    return $null
+  }
+}
+
 foreach ($entry in $config.processes) {
   $enabled = if ($null -ne $entry.PSObject.Properties["enabled"]) { [bool]$entry.enabled } else { $true }
   $logFile = if ($entry.PSObject.Properties["logFile"] -and $entry.logFile) { $entry.logFile } else { Join-Path $logDir "$($entry.id).log" }
@@ -41,6 +56,21 @@ foreach ($entry in $config.processes) {
       $status = "running"
     } else {
       $status = "stale-pid"
+    }
+  }
+
+  if ($status -eq "running" -and -not [string]::IsNullOrWhiteSpace([string]$port)) {
+    $portOwner = Get-PortOwner -Port $port
+    if ($null -eq $portOwner) {
+      $status = "not-listening"
+    }
+  }
+
+  if ($status -eq "stopped") {
+    $portOwner = Get-PortOwner -Port $port
+    if ($null -ne $portOwner) {
+      $processPid = [string]$portOwner
+      $status = "port-in-use"
     }
   }
 

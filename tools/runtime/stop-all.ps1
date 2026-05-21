@@ -5,6 +5,31 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $pidDir = Join-Path $scriptDir "pids"
 $summary = @()
 
+function Get-ChildProcessIds {
+  param([int]$ParentPid)
+
+  try {
+    return @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$ParentPid" -ErrorAction Stop |
+      Select-Object -ExpandProperty ProcessId)
+  } catch {
+    return @()
+  }
+}
+
+function Stop-ProcessTree {
+  param([int]$RootPid)
+
+  foreach ($childPid in Get-ChildProcessIds -ParentPid $RootPid) {
+    Stop-ProcessTree -RootPid ([int]$childPid)
+  }
+
+  try {
+    Stop-Process -Id $RootPid -Force -ErrorAction Stop
+  } catch {
+    # The process may have already exited while its children were stopping.
+  }
+}
+
 function Stop-Or-ClearPid {
   param(
     [string]$PidFile
@@ -20,7 +45,7 @@ function Stop-Or-ClearPid {
 
   try {
     $process = Get-Process -Id ([int]$pidText) -ErrorAction Stop
-    Stop-Process -Id $process.Id -Force -ErrorAction Stop
+    Stop-ProcessTree -RootPid $process.Id
     Remove-Item -LiteralPath $PidFile -Force
     return [pscustomobject]@{ id = $id; pid = $pidText; status = "stopped" }
   } catch {

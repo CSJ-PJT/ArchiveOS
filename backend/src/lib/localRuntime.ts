@@ -61,7 +61,35 @@ export type LocalRuntimeStatus = {
   judgement: string;
 };
 
+let runtimeCache: { value: LocalRuntimeStatus; expiresAt: number } | null = null;
+let runtimeInFlight: Promise<LocalRuntimeStatus> | null = null;
+
 export async function getLocalRuntimeStatus(): Promise<LocalRuntimeStatus> {
+  const now = Date.now();
+  if (runtimeCache && runtimeCache.expiresAt > now) {
+    return runtimeCache.value;
+  }
+
+  if (runtimeInFlight) {
+    return runtimeInFlight;
+  }
+
+  runtimeInFlight = readLocalRuntimeStatusFresh()
+    .then((status) => {
+      runtimeCache = {
+        value: status,
+        expiresAt: Date.now() + 3000,
+      };
+      return status;
+    })
+    .finally(() => {
+      runtimeInFlight = null;
+    });
+
+  return runtimeInFlight;
+}
+
+async function readLocalRuntimeStatusFresh(): Promise<LocalRuntimeStatus> {
   const checkedAt = new Date().toISOString();
   const processes = await readCodexProcesses().catch(() => []);
   const loop = findLoopProcess(processes);
@@ -117,6 +145,87 @@ async function readCodexProcesses(): Promise<ProcessSnapshot[]> {
     return [];
   }
 
+  const targeted = await readTargetedRuntimeProcesses();
+  if (targeted.length) {
+    return targeted;
+  }
+
+  return readBroadCodexProcesses();
+}
+
+async function readTargetedRuntimeProcesses(): Promise<ProcessSnapshot[]> {
+  const rootPids = (
+    await Promise.all([
+      readPidValue(process.env.CODEX_IMPLEMENTER_PID),
+      readPidValue(process.env.CODEX_REVIEWER_PID),
+      readPidFile(path.resolve(process.cwd(), "..", "tools", "runtime", "pids", "mcp-queue-loop.pid")),
+    ])
+  ).filter((pid): pid is number => Number.isInteger(pid));
+
+  if (!rootPids.length) {
+    return [];
+  }
+
+  const pidList = rootPids.join(", ");
+  const script = [
+    `$queue = [System.Collections.Generic.Queue[int]]::new()`,
+    `$seen = @{}`,
+    `$items = @()`,
+    `foreach ($pid in @(${pidList})) { $queue.Enqueue([int]$pid) }`,
+    "while ($queue.Count -gt 0) {",
+    "  $pid = $queue.Dequeue()",
+    "  if ($seen.ContainsKey([string]$pid)) { continue }",
+    "  $seen[[string]$pid] = $true",
+    "  $proc = Get-CimInstance Win32_Process -Filter \"ProcessId=$pid\" -ErrorAction SilentlyContinue",
+    "  if ($proc) {",
+    "    $p = Get-Process -Id $proc.ProcessId -ErrorAction SilentlyContinue",
+    "    $items += [PSCustomObject]@{",
+    "      pid = $proc.ProcessId",
+    "      name = $proc.Name",
+    "      parentProcessId = $proc.ParentProcessId",
+    "      commandLine = $proc.CommandLine",
+    "      cpu = if ($p) { $p.CPU } else { $null }",
+    "      startTime = if ($p) { $p.StartTime.ToUniversalTime().ToString('o') } else { $null }",
+    "    }",
+    "  }",
+    "  $children = Get-CimInstance Win32_Process -Filter \"ParentProcessId=$pid\" -ErrorAction SilentlyContinue",
+    "  foreach ($child in $children) { $queue.Enqueue([int]$child.ProcessId) }",
+    "}",
+    "$items | ConvertTo-Json -Depth 4 -Compress",
+  ].join("\n");
+
+  try {
+    const output = await runPowerShell(script, 7000);
+    if (!output.trim()) {
+      return [];
+    }
+
+    const parsed = JSON.parse(output) as ProcessSnapshot | ProcessSnapshot[];
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return [];
+  }
+}
+
+async function readPidValue(rawPid: string | undefined) {
+  if (!rawPid) {
+    return null;
+  }
+
+  const pid = Number(rawPid);
+  return Number.isInteger(pid) ? pid : null;
+}
+
+async function readPidFile(filePath: string) {
+  try {
+    const pid = Number((await readFile(filePath, "utf-8")).trim());
+    return Number.isInteger(pid) ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readBroadCodexProcesses(): Promise<ProcessSnapshot[]> {
   const script = [
     "$items = Get-CimInstance Win32_Process -Filter \"Name = 'codex.exe' OR Name = 'node.exe' OR Name = 'powershell.exe' OR Name = 'pwsh.exe' OR Name = 'bash.exe'\" | Where-Object {",
     "  $_.CommandLine -match 'Run-ModularLoop|run-modular-loop|gpt-session-bridge|@openai\\\\codex|codex.exe'",
@@ -144,7 +253,7 @@ async function readCodexProcesses(): Promise<ProcessSnapshot[]> {
   return Array.isArray(parsed) ? parsed : [parsed];
 }
 
-function runPowerShell(script: string): Promise<string> {
+function runPowerShell(script: string, timeoutMs = 20000): Promise<string> {
   return new Promise((resolve, reject) => {
     let stdout = "";
     let stderr = "";
@@ -163,7 +272,7 @@ function runPowerShell(script: string): Promise<string> {
       settled = true;
       child.kill("SIGTERM");
       reject(new Error("Timed out while reading local runtime status."));
-    }, 20000);
+    }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
       stdout += chunk.toString();
