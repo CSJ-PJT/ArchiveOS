@@ -39,6 +39,7 @@ type PipelineStage = {
   value: string;
   detail: string;
   active: boolean;
+  pulse: boolean;
   className: string;
   dotClassName: string;
 };
@@ -774,7 +775,9 @@ function PipelineOverview({
               {stages.map((stage, index) => (
                 <div key={stage.id} className="contents">
                   <PipelineNode stage={stage} />
-                  {index < stages.length - 1 ? <PipelineConnector active={stage.active} /> : null}
+                  {index < stages.length - 1 ? (
+                    <PipelineConnector active={stage.pulse && Boolean(stages[index + 1]?.pulse)} />
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -1093,7 +1096,13 @@ function PipelineNode({ stage }: { stage: PipelineStage }) {
           <p className="text-xs uppercase tracking-[0.14em] text-slate-400">{stage.kicker}</p>
           <h3 className="mt-2 truncate text-sm font-semibold text-white" title={stage.label}>{stage.label}</h3>
         </div>
-        <span className={`h-3 w-3 rounded-full ${stage.dotClassName}`} />
+        <span
+          className={`h-3 w-3 rounded-full ${stage.dotClassName} ${
+            stage.pulse ? "animate-pulse shadow-[0_0_14px_rgba(103,232,249,0.75)]" : ""
+          }`}
+          title={stage.pulse ? `${stage.label} active` : `${stage.label} idle`}
+          aria-label={stage.pulse ? `${stage.label} active` : `${stage.label} idle`}
+        />
       </div>
       <p className="mt-4 truncate text-3xl font-semibold text-white" title={stage.value}>{stage.value}</p>
       <CompactValue value={stage.detail} className="mt-3 min-h-10 text-xs leading-5 text-slate-400" copyable />
@@ -1104,7 +1113,13 @@ function PipelineNode({ stage }: { stage: PipelineStage }) {
 function PipelineConnector({ active }: { active: boolean }) {
   return (
     <div className="hidden min-w-8 items-center lg:flex" aria-hidden="true">
-      <div className={`h-px w-full ${active ? "bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.7)]" : "bg-white/10"}`} />
+      <div
+        className={`h-px w-full ${
+          active
+            ? "pipeline-flow-line shadow-[0_0_16px_rgba(103,232,249,0.7)]"
+            : "bg-white/10"
+        }`}
+      />
     </div>
   );
 }
@@ -1777,6 +1792,7 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
       value: "-",
       detail: "Waiting for runtime status.",
       active: false,
+      pulse: false,
       className: inactive,
       dotClassName: "bg-slate-500",
     }));
@@ -1799,6 +1815,7 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
       value: String(runtimeStatus.queue.inbox),
       detail: hasPendingInput ? "Queued work is waiting for the loop." : "No queued input.",
       active: hasPendingInput,
+      pulse: hasPendingInput,
       className: hasPendingInput ? warning : inactive,
       dotClassName: hasPendingInput ? "bg-amber-300" : "bg-slate-500",
     },
@@ -1811,6 +1828,7 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
         ? `PID ${runtimeStatus.processes.loop.pid}`
         : "Loop process not detected.",
       active: Boolean(runtimeStatus.processes.loop),
+      pulse: Boolean(runtimeStatus.processes.loop),
       className: runtimeStatus.processes.loop ? live : stopped,
       dotClassName: runtimeStatus.processes.loop ? "bg-cyan-300" : "bg-rose-300",
     },
@@ -1823,6 +1841,7 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
         ? `PID ${runtimeStatus.processes.implementer.pid}${runtimeStatus.active_task ? ` / ${runtimeStatus.active_task}` : ""}`
         : "Implementer process not detected.",
       active: hasProcessing,
+      pulse: hasProcessing || Boolean(runtimeStatus.processes.implementer),
       className: hasProcessing ? live : runtimeStatus.processes.implementer ? inactive : stopped,
       dotClassName: hasProcessing ? "bg-cyan-300" : runtimeStatus.processes.implementer ? "bg-slate-400" : "bg-rose-300",
     },
@@ -1833,6 +1852,7 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
       value: String(runtimeStatus.queue.outbox),
       detail: runtimeStatus.latest.outbox?.name ?? "No builder result.",
       active: Boolean(runtimeStatus.latest.outbox),
+      pulse: hasProcessing && Boolean(runtimeStatus.latest.outbox),
       className: runtimeStatus.latest_details.builder?.status === "done" ? success : inactive,
       dotClassName: runtimeStatus.latest_details.builder?.status === "done" ? "bg-emerald-300" : "bg-slate-500",
     },
@@ -1847,6 +1867,7 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
           ? `Reviewer PID ${runtimeStatus.processes.reviewer.pid}`
           : "Reviewer process not detected.",
       active: Boolean(runtimeStatus.processes.reviewer_bridge || runtimeStatus.processes.reviewer),
+      pulse: Boolean(runtimeStatus.processes.reviewer_bridge || runtimeStatus.processes.reviewer),
       className: resultNewerThanReview ? warning : runtimeStatus.processes.reviewer_bridge || runtimeStatus.processes.reviewer ? live : stopped,
       dotClassName: resultNewerThanReview ? "bg-amber-300" : runtimeStatus.processes.reviewer_bridge || runtimeStatus.processes.reviewer ? "bg-cyan-300" : "bg-rose-300",
     },
@@ -1861,6 +1882,7 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
           ? "Reviewer stopped. PM decision is needed."
           : "No next task queued by reviewer.",
       active: !reviewerStopped && Boolean(runtimeStatus.latest_details.reviewer?.next_task_id),
+      pulse: !reviewerStopped && Boolean(runtimeStatus.latest_details.reviewer?.next_task_id),
       className: reviewerStopped ? stopped : runtimeStatus.latest_details.reviewer?.next_task_id ? success : inactive,
       dotClassName: reviewerStopped ? "bg-rose-300" : runtimeStatus.latest_details.reviewer?.next_task_id ? "bg-emerald-300" : "bg-slate-500",
     },
