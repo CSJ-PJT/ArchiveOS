@@ -75,7 +75,7 @@ const commandStatusStyles: Record<CommandStatus, string> = {
 };
 
 const runtimeStatusStyles: Record<LocalRuntimeStatus["status"], string> = {
-  working: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25",
+  working: "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25",
   idle: "bg-slate-500/15 text-slate-200 ring-slate-400/20",
   unknown: "bg-amber-500/15 text-amber-200 ring-amber-400/25",
 };
@@ -199,11 +199,6 @@ function App() {
     loadDashboard();
   }, []);
 
-  const activeAgents = useMemo(
-    () => data.agents.filter((agent) => ["working", "reviewing"].includes(agent.status)),
-    [data.agents],
-  );
-
   const taskCounts = useMemo(
     () =>
       taskStatuses.map((status) => ({
@@ -260,7 +255,7 @@ function App() {
             Loading operations data...
           </section>
         ) : view === "dashboard" ? (
-          <Dashboard data={data} activeAgents={activeAgents} taskCounts={taskCounts} />
+          <Dashboard data={data} taskCounts={taskCounts} />
         ) : (
           <Decisions decisions={data.decisions} />
         )}
@@ -271,11 +266,9 @@ function App() {
 
 function Dashboard({
   data,
-  activeAgents,
   taskCounts,
 }: {
   data: DashboardData;
-  activeAgents: Agent[];
   taskCounts: { status: TaskStatus; label: string; count: number }[];
 }) {
   const [runtimeStatus, setRuntimeStatus] = useState<LocalRuntimeStatus | null>(null);
@@ -285,8 +278,6 @@ function Dashboard({
   const [isRefreshingEvents, setIsRefreshingEvents] = useState(true);
   const [isRefreshingRuntime, setIsRefreshingRuntime] = useState(true);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
-  const runtimeOpenTasks = runtimeStatus ? runtimeStatus.queue.inbox + runtimeStatus.queue.processing : 0;
-  const bottleneck = getPipelineBottleneck(runtimeStatus);
 
   useEffect(() => {
     refreshRuntime();
@@ -334,79 +325,49 @@ function Dashboard({
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-      <section className="grid gap-5">
-        <RuntimeSummary
-          runtimeStatus={runtimeStatus}
-          runtimeError={runtimeError}
-          isRefreshing={isRefreshingRuntime}
-          refresh={refreshRuntime}
-        />
+    <div className="grid gap-5">
+      <RuntimeSummary
+        runtimeStatus={runtimeStatus}
+        runtimeError={runtimeError}
+        isRefreshing={isRefreshingRuntime}
+        refresh={refreshRuntime}
+      />
 
-        <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
+      <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
 
-        <EventTimeline
-          events={runtimeEvents}
-          error={runtimeEventsError}
-          isRefreshing={isRefreshingEvents}
-          refresh={refreshRuntimeEvents}
-        />
+      <EventTimeline
+        events={runtimeEvents}
+        error={runtimeEventsError}
+        isRefreshing={isRefreshingEvents}
+        refresh={refreshRuntimeEvents}
+      />
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <MetricCard
-            label="Active agents"
-            value={activeAgents.length + runtimeAgents.length}
-            detail={
-              runtimeAgents.length
-                ? `${runtimeAgents.length} local Codex processes detected`
-                : data.agents.length
-                  ? `${data.agents.length} live Supabase agents`
-                  : "No live agent records"
-            }
-          />
-          <MetricCard
-            label="Open tasks"
-            value={data.tasks.filter((task) => !["done", "failed"].includes(task.status)).length + runtimeOpenTasks}
-            detail={
-              runtimeOpenTasks
-                ? `${runtimeOpenTasks} MCP queue task${runtimeOpenTasks === 1 ? "" : "s"}`
-                : data.tasks.length
-                  ? `${data.tasks.length} live Supabase tasks`
-                  : "No live task records"
-            }
-          />
-          <MetricCard
-            label="Bottleneck"
-            value={bottleneck.severity}
-            detail={bottleneck.label}
-          />
-        </div>
-
+      <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
         <Panel title="Agent State">
           {data.agents.length || runtimeAgents.length ? (
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
               {runtimeAgents.map((agent) => (
                 <article key={agent.id} className="rounded-md border border-cyan-300/20 bg-cyan-300/[0.04] p-4">
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="font-medium text-white">{agent.name}</h3>
-                      <p className="mt-1 text-sm text-slate-400">{agent.role}</p>
+                    <div className="min-w-0">
+                      <h3 className="truncate font-medium text-white" title={agent.name}>{agent.name}</h3>
+                      <p className="mt-1 truncate text-sm text-slate-400" title={agent.role}>{agent.role}</p>
                     </div>
                     <StatusBadge className={agentStatusStyles[agent.status]}>{agent.status}</StatusBadge>
                   </div>
-                  <p className="mt-4 min-h-10 text-sm leading-5 text-slate-300">{agent.current_task}</p>
+                  <p className="mt-4 truncate text-sm leading-5 text-slate-300" title={agent.current_task}>{agent.current_task}</p>
                 </article>
               ))}
               {data.agents.map((agent) => (
                 <article key={agent.id} className="rounded-md border border-white/10 bg-white/[0.03] p-4">
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="font-medium text-white">{agent.name}</h3>
-                      <p className="mt-1 text-sm text-slate-400">{agent.role}</p>
+                    <div className="min-w-0">
+                      <h3 className="truncate font-medium text-white" title={agent.name}>{agent.name}</h3>
+                      <p className="mt-1 truncate text-sm text-slate-400" title={agent.role}>{agent.role}</p>
                     </div>
                     <StatusBadge className={agentStatusStyles[agent.status]}>{agent.status}</StatusBadge>
                   </div>
-                  <p className="mt-4 min-h-10 text-sm leading-5 text-slate-300">
+                  <p className="mt-4 truncate text-sm leading-5 text-slate-300" title={agent.current_task ?? "No current task"}>
                     {agent.current_task ?? "No current task"}
                   </p>
                 </article>
@@ -444,17 +405,17 @@ function Dashboard({
           ) : (
             <EmptyState
               title="No live task records"
-              detail="Seed/demo tasks are hidden. Live MCP processing state is shown in the queue panel above."
+              detail="Seed/demo tasks are hidden. Live MCP processing state is summarized above."
             />
           )}
         </Panel>
+      </div>
 
-        <Panel title="Command Center">
-          <CommandCenter />
-        </Panel>
-      </section>
+      <Panel title="Pipeline Warnings">
+        <PipelineWarnings runtimeStatus={runtimeStatus} />
+      </Panel>
 
-      <section className="grid gap-5">
+      <div className="grid gap-5 xl:grid-cols-2">
         <Panel title="Latest Builder Result">
           {runtimeStatus?.latest_details.builder ? (
             <RuntimeResult
@@ -464,7 +425,7 @@ function Dashboard({
               body={runtimeStatus.latest_details.builder.summary ?? "No builder summary captured."}
             />
           ) : (
-            <EmptyState title="No live builder result" detail="No readable MCP builder result payload was returned." />
+            <EmptyState title="No live builder result" detail="No readable MCP builder result payload was returned." muted />
           )}
         </Panel>
 
@@ -477,25 +438,32 @@ function Dashboard({
               body={runtimeStatus.latest_details.reviewer.summary ?? "No reviewer summary captured."}
             />
           ) : (
-            <EmptyState title="No live reviewer result" detail="No readable MCP reviewer result payload was returned." />
+            <EmptyState title="No live reviewer result" detail="No readable MCP reviewer result payload was returned." muted />
           )}
         </Panel>
+      </div>
 
-        <Panel title="Recorded Decisions">
-          <LogList logs={data.decisions.slice(0, 4)} />
+      <div className="grid gap-5 xl:grid-cols-[1fr_0.9fr]">
+        <Panel title="Command Center">
+          <CommandCenter />
         </Panel>
 
-        <Panel title="Pipeline Warnings">
-          <PipelineWarnings runtimeStatus={runtimeStatus} />
+        <Panel title="Local Diagnostics">
+          <LocalDiagnostics />
         </Panel>
+      </div>
 
-        <Panel title="Screenshot Freshness">
-          <EmptyState
-            title="No screenshot freshness signal yet"
-            detail="This placeholder will track whether proof screenshots are current for PM review."
-          />
-        </Panel>
-      </section>
+      <Panel title="Screenshot Freshness" muted>
+        <EmptyState
+          title="No screenshot freshness signal yet"
+          detail="This placeholder will track whether proof screenshots are current for PM review."
+          muted
+        />
+      </Panel>
+
+      <Panel title="Recorded Decisions">
+        <LogList logs={data.decisions.slice(0, 4)} />
+      </Panel>
     </div>
   );
 }
@@ -511,6 +479,12 @@ function RuntimeSummary({
   isRefreshing: boolean;
   refresh: (options?: { silent?: boolean }) => void;
 }) {
+  const bottleneck = getPipelineBottleneck(runtimeStatus);
+  const latestVerdict = runtimeStatus?.latest_details.reviewer?.verdict ?? "none";
+  const queueStatus = runtimeStatus
+    ? `${runtimeStatus.queue.inbox} inbox / ${runtimeStatus.queue.processing} processing / ${runtimeStatus.queue.outbox} outbox / ${runtimeStatus.queue.reviews} reviews`
+    : "not loaded";
+
   return (
     <section className="rounded-md border border-cyan-300/20 bg-cyan-300/[0.04] p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -537,51 +511,15 @@ function RuntimeSummary({
             <StatusBadge className={runtimeStatusStyles[runtimeStatus.status]}>
               {runtimeStatus.status}
             </StatusBadge>
+            <StatusBadge className={bottleneck.className}>{bottleneck.label}</StatusBadge>
             <span className="text-xs text-slate-500">checked {formatDate(runtimeStatus.checked_at)}</span>
             <span className="text-xs text-slate-500">{runtimeStatus.queue.path ? "queue connected" : "queue not configured"}</span>
           </div>
-          <div className="grid gap-2 sm:grid-cols-4">
-            <RuntimeMetric label="Inbox" value={String(runtimeStatus.queue.inbox)} />
-            <RuntimeMetric label="Processing" value={String(runtimeStatus.queue.processing)} />
-            <RuntimeMetric label="Outbox" value={String(runtimeStatus.queue.outbox)} />
-            <RuntimeMetric label="Reviews" value={String(runtimeStatus.queue.reviews)} />
-          </div>
-          <div className="grid gap-2 lg:grid-cols-3">
+          <div className="grid gap-2 lg:grid-cols-4">
             <RuntimeMetric label="Active task" value={runtimeStatus.active_task ?? "none"} />
-            <RuntimeMetric label="Latest result" value={runtimeStatus.latest.outbox?.name ?? "none"} />
-            <RuntimeMetric label="Latest review" value={runtimeStatus.latest.review?.name ?? "none"} />
-          </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            <RuntimeDetailCard
-              title="Actual Latest Builder Result"
-              meta={[
-                runtimeStatus.latest_details.builder?.status
-                  ? `status=${runtimeStatus.latest_details.builder.status}`
-                  : null,
-                runtimeStatus.latest_details.builder?.exit_code != null
-                  ? `exit=${runtimeStatus.latest_details.builder?.exit_code}`
-                  : null,
-                runtimeStatus.latest_details.builder?.finished_at
-                  ? formatDate(runtimeStatus.latest_details.builder.finished_at)
-                  : null,
-              ]}
-              body={runtimeStatus.latest_details.builder?.summary ?? "No readable builder result payload."}
-            />
-            <RuntimeDetailCard
-              title="Actual Latest Reviewer Result"
-              meta={[
-                runtimeStatus.latest_details.reviewer?.verdict
-                  ? `verdict=${runtimeStatus.latest_details.reviewer.verdict}`
-                  : null,
-                runtimeStatus.latest_details.reviewer?.reviewed_at
-                  ? formatDate(runtimeStatus.latest_details.reviewer.reviewed_at)
-                  : null,
-                runtimeStatus.latest_details.reviewer?.next_task_id
-                  ? `next=${runtimeStatus.latest_details.reviewer.next_task_id}`
-                  : null,
-              ]}
-              body={runtimeStatus.latest_details.reviewer?.summary ?? "No readable reviewer result payload."}
-            />
+            <RuntimeMetric label="Bottleneck" value={bottleneck.severity} />
+            <RuntimeMetric label="Latest verdict" value={latestVerdict} />
+            <RuntimeMetric label="Queue status" value={queueStatus} />
           </div>
           <p className="rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-400">
             {runtimeStatus.judgement}
@@ -638,13 +576,6 @@ function PipelineOverview({
                 </div>
               ))}
             </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-4">
-            <RuntimeMetric label="Input backlog" value={`${runtimeStatus.queue.inbox} inbox`} />
-            <RuntimeMetric label="Active work" value={`${runtimeStatus.queue.processing} processing`} />
-            <RuntimeMetric label="Builder results" value={`${runtimeStatus.queue.outbox} outbox`} />
-            <RuntimeMetric label="Reviewer results" value={`${runtimeStatus.queue.reviews} reviews`} />
           </div>
 
           <div className="rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-400">
@@ -706,8 +637,8 @@ function EventTimeline({
                   <StatusBadge className={runtimeEventStatusStyles[event.status]}>{event.status}</StatusBadge>
                   <span className="rounded bg-black/20 px-2 py-1 text-xs text-slate-400">{event.source}</span>
                 </div>
-                <h3 className="mt-3 text-sm font-semibold text-white">{event.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-400">{event.description}</p>
+                <h3 className="mt-3 truncate text-sm font-semibold text-white" title={event.title}>{event.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-400" title={event.description}>{event.description}</p>
               </div>
             </article>
           ))}
@@ -723,14 +654,14 @@ function PipelineNode({ stage }: { stage: PipelineStage }) {
   return (
     <article className={`min-h-36 rounded-md border p-3 ${stage.className}`}>
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs uppercase tracking-[0.14em] text-slate-400">{stage.kicker}</p>
-          <h3 className="mt-2 text-sm font-semibold text-white">{stage.label}</h3>
+          <h3 className="mt-2 truncate text-sm font-semibold text-white" title={stage.label}>{stage.label}</h3>
         </div>
         <span className={`h-3 w-3 rounded-full ${stage.dotClassName}`} />
       </div>
-      <p className="mt-4 text-3xl font-semibold text-white">{stage.value}</p>
-      <p className="mt-3 min-h-10 text-xs leading-5 text-slate-400">{stage.detail}</p>
+      <p className="mt-4 truncate text-3xl font-semibold text-white" title={stage.value}>{stage.value}</p>
+      <p className="mt-3 min-h-10 text-xs leading-5 text-slate-400" title={stage.detail}>{stage.detail}</p>
     </article>
   );
 }
@@ -746,30 +677,13 @@ function PipelineConnector({ active }: { active: boolean }) {
 function CommandCenter() {
   const [command, setCommand] = useState("");
   const [history, setHistory] = useState<CommandRun[]>([]);
-  const [projects, setProjects] = useState<LocalActionProject[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState("archiveos");
-  const [localActionResult, setLocalActionResult] = useState<LocalActionResult | null>(null);
-  const [runtimeStatus, setRuntimeStatus] = useState<LocalRuntimeStatus | null>(null);
-  const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [health, setHealth] = useState<"checking" | "online" | "offline">("checking");
   const [commandError, setCommandError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isRunningLocalAction, setIsRunningLocalAction] = useState(false);
-  const [isRefreshingRuntime, setIsRefreshingRuntime] = useState(false);
 
   useEffect(() => {
     refreshHealth();
     refreshHistory();
-    refreshProjects();
-    refreshRuntimeStatus();
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      refreshRuntimeStatus({ silent: true });
-    }, 5000);
-
-    return () => window.clearInterval(timer);
   }, []);
 
   async function refreshHealth() {
@@ -789,40 +703,6 @@ function CommandCenter() {
       setHistory(commands.filter((commandRun) => !seedCommandRunIds.has(commandRun.id)));
     } catch {
       setCommandError("Could not load backend command history.");
-    }
-  }
-
-  async function refreshProjects() {
-    try {
-      const configuredProjects = await getLocalActionProjects();
-      setProjects(configuredProjects);
-      setSelectedProjectId(configuredProjects[0]?.id ?? "archiveos");
-    } catch {
-      setCommandError("Could not load local action projects.");
-    }
-  }
-
-  async function refreshRuntimeStatus(options: { silent?: boolean } = {}) {
-    if (!options.silent) {
-      setIsRefreshingRuntime(true);
-    }
-    setRuntimeError(null);
-
-    try {
-      const status = await getLocalRuntimeStatus();
-      setRuntimeStatus((previous) => {
-        if (previous && hasRuntimeChanged(previous, status)) {
-          refreshHistory();
-        }
-
-        return status;
-      });
-    } catch (error) {
-      setRuntimeError(error instanceof Error ? error.message : "Could not load local runtime status.");
-    } finally {
-      if (!options.silent) {
-        setIsRefreshingRuntime(false);
-      }
     }
   }
 
@@ -853,25 +733,6 @@ function CommandCenter() {
       setCommandError(error instanceof Error ? error.message : "Command request failed.");
     } finally {
       setIsSubmitting(false);
-    }
-  }
-
-  async function submitLocalAction(action: LocalAction) {
-    setIsRunningLocalAction(true);
-    setCommandError(null);
-    setLocalActionResult(null);
-
-    try {
-      const result = await runLocalAction({
-        project_id: selectedProjectId,
-        action,
-      });
-      setLocalActionResult(result);
-      await refreshHistory();
-    } catch (error) {
-      setCommandError(error instanceof Error ? error.message : "Local action request failed.");
-    } finally {
-      setIsRunningLocalAction(false);
     }
   }
 
@@ -950,149 +811,6 @@ function CommandCenter() {
         </p>
       ) : null}
 
-      <div className="rounded-md border border-white/10 bg-white/[0.03] p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-300">Current Workflow State</h3>
-            <p className="mt-1 text-xs text-slate-500">Read-only local loop snapshot, auto-refreshes every 5 seconds</p>
-          </div>
-          <button
-            className="rounded border border-white/10 px-3 py-1 text-xs font-medium text-slate-300 transition hover:border-cyan-300/50 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={isRefreshingRuntime}
-            onClick={() => refreshRuntimeStatus()}
-          >
-            {isRefreshingRuntime ? "Refreshing..." : "Refresh Runtime"}
-          </button>
-        </div>
-
-        {runtimeError ? (
-          <p className="rounded border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">
-            {runtimeError}
-          </p>
-        ) : runtimeStatus ? (
-          <div className="grid gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge className={runtimeStatusStyles[runtimeStatus.status]}>
-                {runtimeStatus.status}
-              </StatusBadge>
-              <span className="text-xs text-slate-500">checked {formatDate(runtimeStatus.checked_at)}</span>
-              <span className="text-xs text-slate-600">auto refresh on</span>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-5">
-              <RuntimeMetric
-                label="Queue"
-                value={`inbox=${runtimeStatus.queue.inbox} / processing=${runtimeStatus.queue.processing}`}
-              />
-              <RuntimeMetric
-                label="Results"
-                value={`outbox=${runtimeStatus.queue.outbox} / reviews=${runtimeStatus.queue.reviews}`}
-              />
-              <RuntimeMetric label="Task" value={runtimeStatus.active_task ?? "none"} />
-              <RuntimeMetric label="Outbox" value={runtimeStatus.latest.outbox?.name ?? "none"} />
-              <RuntimeMetric label="Review" value={runtimeStatus.latest.review?.name ?? "none"} />
-            </div>
-            <div className="grid gap-2 sm:grid-cols-4">
-              <RuntimeMetric
-                label="Implementer"
-                value={formatProcess(runtimeStatus.processes.implementer, true)}
-              />
-              <RuntimeMetric
-                label="Reviewer Codex"
-                value={formatProcess(runtimeStatus.processes.reviewer, true)}
-              />
-              <RuntimeMetric label="Loop" value={formatProcess(runtimeStatus.processes.loop)} />
-              <RuntimeMetric
-                label="Reviewer bridge"
-                value={formatProcess(runtimeStatus.processes.reviewer_bridge)}
-              />
-            </div>
-            <p className="rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-400">
-              {runtimeStatus.judgement}
-            </p>
-          </div>
-        ) : (
-          <EmptyState
-            title={isRefreshingRuntime ? "Loading local workflow state" : "No local workflow state loaded"}
-            detail={
-              isRefreshingRuntime
-                ? "Reading backend runtime status and MCP queue files."
-                : "Start the backend and refresh runtime status."
-            }
-          />
-        )}
-      </div>
-
-      <div>
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-300">Local Diagnostics</h3>
-            <p className="mt-1 text-xs text-slate-500">
-              Allowlisted project checks only. No arbitrary shell input is accepted.
-            </p>
-          </div>
-          <select
-            className="rounded border border-white/10 bg-black/20 px-3 py-2 text-xs text-slate-200 outline-none"
-            value={selectedProjectId}
-            onChange={(event) => setSelectedProjectId(event.target.value)}
-          >
-            {projects.length ? (
-              projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))
-            ) : (
-              <option value="archiveos">No local project configured</option>
-            )}
-          </select>
-        </div>
-
-        {projects.length ? (
-          <div className="mb-3 rounded-md border border-white/10 bg-white/[0.03] p-3 text-xs text-slate-400">
-            {projects.map((project) => (
-              <p key={project.id}>
-                {project.name} / {project.repo}
-              </p>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="No local project configured"
-            detail="The backend did not return an allowlisted project registry."
-          />
-        )}
-
-        {projects.length ? (
-          <div className="grid gap-2 sm:grid-cols-3">
-            {localActionButtons.map((item) => (
-              <button
-                key={item.action}
-                className="rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-emerald-300/50 hover:bg-emerald-300/10 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={isRunningLocalAction}
-                onClick={() => submitLocalAction(item.action)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {localActionResult ? (
-          <div className="mt-3 rounded-md border border-white/10 bg-black/30 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm font-medium text-white">{localActionResult.action}</p>
-              <StatusBadge className={commandStatusStyles[localActionResult.status]}>
-                {localActionResult.status}
-              </StatusBadge>
-            </div>
-            <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-black/40 p-3 text-xs leading-5 text-slate-300">
-              {[localActionResult.stdout, localActionResult.stderr].filter(Boolean).join("\n\n") ||
-                `Exit code ${localActionResult.exitCode}`}
-            </pre>
-          </div>
-        ) : null}
-      </div>
-
       <div>
         <div className="mb-3 flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-slate-300">Command History</h3>
@@ -1126,6 +844,128 @@ function CommandCenter() {
           />
         )}
       </div>
+    </div>
+  );
+}
+
+function LocalDiagnostics() {
+  const [projects, setProjects] = useState<LocalActionProject[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("archiveos");
+  const [localActionResult, setLocalActionResult] = useState<LocalActionResult | null>(null);
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
+  const [isRunningLocalAction, setIsRunningLocalAction] = useState(false);
+
+  useEffect(() => {
+    refreshProjects();
+  }, []);
+
+  async function refreshProjects() {
+    try {
+      const configuredProjects = await getLocalActionProjects();
+      setProjects(configuredProjects);
+      setSelectedProjectId(configuredProjects[0]?.id ?? "archiveos");
+    } catch {
+      setDiagnosticsError("Could not load local action projects.");
+    }
+  }
+
+  async function submitLocalAction(action: LocalAction) {
+    setIsRunningLocalAction(true);
+    setDiagnosticsError(null);
+    setLocalActionResult(null);
+
+    try {
+      const result = await runLocalAction({
+        project_id: selectedProjectId,
+        action,
+      });
+      setLocalActionResult(result);
+    } catch (error) {
+      setDiagnosticsError(error instanceof Error ? error.message : "Local action request failed.");
+    } finally {
+      setIsRunningLocalAction(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-300">Allowlisted checks</p>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            Read-only diagnostics and build checks only. No arbitrary shell input is accepted.
+          </p>
+        </div>
+        <select
+          className="max-w-44 rounded border border-white/10 bg-black/20 px-3 py-2 text-xs text-slate-200 outline-none"
+          value={selectedProjectId}
+          onChange={(event) => setSelectedProjectId(event.target.value)}
+        >
+          {projects.length ? (
+            projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))
+          ) : (
+            <option value="archiveos">No project</option>
+          )}
+        </select>
+      </div>
+
+      {diagnosticsError ? (
+        <p className="rounded border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">
+          {diagnosticsError}
+        </p>
+      ) : null}
+
+      {projects.length ? (
+        <div className="rounded-md border border-white/10 bg-white/[0.03] p-3 text-xs text-slate-400">
+          {projects.map((project) => (
+            <p key={project.id} className="truncate" title={`${project.name} / ${project.repo} / ${project.path}`}>
+              {project.name} / {project.repo}
+            </p>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          title="No local project configured"
+          detail="The backend did not return an allowlisted project registry."
+          muted
+        />
+      )}
+
+      {projects.length ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {localActionButtons.map((item) => (
+            <button
+              key={item.action}
+              className="rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-cyan-300/50 hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isRunningLocalAction}
+              onClick={() => submitLocalAction(item.action)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {localActionResult ? (
+        <div className="rounded-md border border-white/10 bg-black/30 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="truncate text-sm font-medium text-white" title={localActionResult.action}>
+              {localActionResult.action}
+            </p>
+            <StatusBadge className={commandStatusStyles[localActionResult.status]}>
+              {localActionResult.status}
+            </StatusBadge>
+          </div>
+          <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-black/40 p-3 text-xs leading-5 text-slate-300">
+            {[localActionResult.stdout, localActionResult.stderr].filter(Boolean).join("\n\n") ||
+              `Exit code ${localActionResult.exitCode}`}
+          </pre>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1164,11 +1004,11 @@ function RuntimeResult({
           </h3>
           {timestamp ? <p className="mt-1 text-xs text-slate-500">{formatDate(timestamp)}</p> : null}
         </div>
-        <StatusBadge className={status === "done" ? commandStatusStyles.succeeded : status === "stop" ? commandStatusStyles.pending : commandStatusStyles.running}>
+        <StatusBadge className={getResultStatusStyle(status)}>
           {status}
         </StatusBadge>
       </div>
-      <p className="mt-4 text-sm leading-6 text-slate-300">{body}</p>
+      <p className="mt-4 text-sm leading-6 text-slate-300" title={body}>{body}</p>
     </article>
   );
 }
@@ -1214,16 +1054,6 @@ function PipelineWarnings({ runtimeStatus }: { runtimeStatus: LocalRuntimeStatus
   );
 }
 
-function MetricCard({ label, value, detail }: { label: string; value: React.ReactNode; detail: string }) {
-  return (
-    <article className="rounded-md border border-white/10 bg-white/[0.04] p-5">
-      <p className="text-sm text-slate-400">{label}</p>
-      <p className="mt-3 text-4xl font-semibold text-white">{value}</p>
-      <p className="mt-2 text-sm text-slate-500">{detail}</p>
-    </article>
-  );
-}
-
 function RuntimeMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-md border border-white/10 bg-black/20 p-3">
@@ -1235,27 +1065,9 @@ function RuntimeMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RuntimeDetailCard({ title, meta, body }: { title: string; meta: (string | null)[]; body: string }) {
-  const visibleMeta = meta.filter(Boolean);
-
+function EmptyState({ title, detail, muted = false }: { title: string; detail: string; muted?: boolean }) {
   return (
-    <article className="rounded-md border border-white/10 bg-black/20 p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">{title}</h3>
-        {visibleMeta.map((item) => (
-          <span key={item} className="rounded bg-white/[0.06] px-2 py-1 text-[11px] text-slate-300">
-            {item}
-          </span>
-        ))}
-      </div>
-      <p className="mt-3 text-xs leading-5 text-slate-300">{body}</p>
-    </article>
-  );
-}
-
-function EmptyState({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="rounded-md border border-dashed border-white/10 bg-black/10 p-4">
+    <div className={`rounded-md border border-dashed p-4 ${muted ? "border-white/5 bg-black/5" : "border-white/10 bg-black/10"}`}>
       <p className="text-sm font-medium text-slate-300">{title}</p>
       <p className="mt-1 text-sm leading-6 text-slate-500">{detail}</p>
     </div>
@@ -1265,14 +1077,16 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
 function Panel({
   title,
   className = "",
+  muted = false,
   children,
 }: {
   title: string;
   className?: string;
+  muted?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <section className={`rounded-md border border-white/10 bg-[#0d1117] p-5 ${className}`}>
+    <section className={`rounded-md border p-5 ${muted ? "border-white/5 bg-[#0a0d12]" : "border-white/10 bg-[#0d1117]"} ${className}`}>
       <h2 className="mb-4 text-lg font-semibold text-white">{title}</h2>
       {children}
     </section>
@@ -1339,6 +1153,26 @@ function formatProcess(processItem: LocalRuntimeStatus["processes"]["implementer
 
   const cpu = includeCpu && processItem.cpu !== null ? ` / CPU ${processItem.cpu.toFixed(1)}` : "";
   return `PID ${processItem.pid}${cpu}`;
+}
+
+function getResultStatusStyle(status: string) {
+  if (["done", "approved", "approve", "approve_next", "succeeded", "success"].includes(status)) {
+    return commandStatusStyles.succeeded;
+  }
+
+  if (["review", "reviewing", "request_changes"].includes(status)) {
+    return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
+  }
+
+  if (["failed", "error", "stop"].includes(status)) {
+    return commandStatusStyles.failed;
+  }
+
+  if (["idle", "none", "unknown"].includes(status)) {
+    return "bg-slate-500/15 text-slate-200 ring-slate-400/20";
+  }
+
+  return commandStatusStyles.running;
 }
 
 function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineStage[] {
