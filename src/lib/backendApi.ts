@@ -77,6 +77,7 @@ export type LocalRuntimeStatus = {
       exit_code: number | null;
       finished_at: string | null;
       summary: string | null;
+      image_ref: string | null;
     } | null;
     reviewer: {
       reviewed_task_id: string | null;
@@ -84,6 +85,7 @@ export type LocalRuntimeStatus = {
       reviewed_at: string | null;
       summary: string | null;
       next_task_id: string | null;
+      image_ref: string | null;
     } | null;
   };
   judgement: string;
@@ -112,6 +114,7 @@ export async function createCommandRun(input: {
   command: string;
   command_type?: string | null;
   status?: "pending" | "succeeded";
+  result?: string | null;
 }) {
   const response = await request<ApiEnvelope<CommandRun>>("/api/commands", {
     method: "POST",
