@@ -22,6 +22,7 @@ type BuilderResultDetails = {
   exit_code: number | null;
   finished_at: string | null;
   summary: string | null;
+  image_ref: string | null;
 };
 
 type ReviewerResultDetails = {
@@ -30,6 +31,7 @@ type ReviewerResultDetails = {
   reviewed_at: string | null;
   summary: string | null;
   next_task_id: string | null;
+  image_ref: string | null;
 };
 
 export type LocalRuntimeStatus = {
@@ -407,6 +409,18 @@ async function readBuilderResult(filePath: string): Promise<BuilderResultDetails
       task_id?: string;
       status?: string;
       finished_at?: string;
+      screenshot?: string;
+      screenshot_path?: string;
+      screenshot_url?: string;
+      image?: string;
+      image_path?: string;
+      image_url?: string;
+      artifact?: {
+        screenshot?: string;
+        image?: string;
+        path?: string;
+        url?: string;
+      };
       codex?: {
         exit_code?: number;
         stdout?: string;
@@ -420,6 +434,7 @@ async function readBuilderResult(filePath: string): Promise<BuilderResultDetails
       exit_code: typeof payload.codex?.exit_code === "number" ? payload.codex.exit_code : null,
       finished_at: payload.finished_at ?? null,
       summary: summarizeText(payload.codex?.stdout || payload.codex?.stderr || null),
+      image_ref: extractImageRef(payload),
     };
   } catch {
     return null;
@@ -433,6 +448,18 @@ async function readReviewerResult(filePath: string): Promise<ReviewerResultDetai
       reviewed_at?: string;
       verdict?: string;
       review_summary?: string;
+      screenshot?: string;
+      screenshot_path?: string;
+      screenshot_url?: string;
+      image?: string;
+      image_path?: string;
+      image_url?: string;
+      artifact?: {
+        screenshot?: string;
+        image?: string;
+        path?: string;
+        url?: string;
+      };
       next_task?: {
         task_id?: string;
       } | null;
@@ -444,6 +471,7 @@ async function readReviewerResult(filePath: string): Promise<ReviewerResultDetai
       reviewed_at: payload.reviewed_at ?? null,
       summary: summarizeText(payload.review_summary ?? null),
       next_task_id: payload.next_task?.task_id ?? null,
+      image_ref: extractImageRef(payload),
     };
   } catch {
     return null;
@@ -545,6 +573,35 @@ function summarizeText(value: string | null) {
 
   const clean = value.replace(/\s+/g, " ").trim();
   return clean.length > 420 ? `${clean.slice(0, 420)}...` : clean;
+}
+
+function extractImageRef(payload: {
+  screenshot?: string;
+  screenshot_path?: string;
+  screenshot_url?: string;
+  image?: string;
+  image_path?: string;
+  image_url?: string;
+  artifact?: {
+    screenshot?: string;
+    image?: string;
+    path?: string;
+    url?: string;
+  };
+}) {
+  return (
+    payload.screenshot_url ??
+    payload.image_url ??
+    payload.screenshot_path ??
+    payload.image_path ??
+    payload.screenshot ??
+    payload.image ??
+    payload.artifact?.url ??
+    payload.artifact?.path ??
+    payload.artifact?.screenshot ??
+    payload.artifact?.image ??
+    null
+  );
 }
 
 function buildJudgement(

@@ -239,6 +239,15 @@ function App() {
               onClick={() => setView("decisions")}
             >
               Decisions
+              {data.decisions.length ? (
+                <span
+                  className={`ml-2 rounded px-1.5 py-0.5 text-xs ${
+                    view === "decisions" ? "bg-slate-950/15 text-slate-950" : "bg-cyan-400/15 text-cyan-200"
+                  }`}
+                >
+                  {data.decisions.length}
+                </span>
+              ) : null}
             </button>
           </nav>
         </header>
@@ -331,6 +340,7 @@ function Dashboard({
         runtimeError={runtimeError}
         isRefreshing={isRefreshingRuntime}
         refresh={refreshRuntime}
+        onRecorded={refreshRuntimeEvents}
       />
 
       <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
@@ -396,7 +406,7 @@ function Dashboard({
               <div className="grid gap-3 sm:grid-cols-3">
                 <RuntimeMetric label="Inbox" value={String(runtimeStatus.queue.inbox)} />
                 <RuntimeMetric label="Processing" value={String(runtimeStatus.queue.processing)} />
-                <RuntimeMetric label="Active MCP task" value={runtimeStatus.active_task ?? "none"} />
+                <RuntimeMetric label="Active MCP task" value={runtimeStatus.active_task ?? "none"} copyable />
               </div>
               <p className="rounded border border-cyan-300/20 bg-cyan-300/[0.04] p-3 text-xs leading-5 text-cyan-100">
                 Supabase task rows are empty, so this panel is showing the live MCP queue task state.
@@ -423,6 +433,7 @@ function Dashboard({
               status={runtimeStatus.latest_details.builder.status ?? "unknown"}
               timestamp={runtimeStatus.latest_details.builder.finished_at}
               body={runtimeStatus.latest_details.builder.summary ?? "No builder summary captured."}
+              imageRef={runtimeStatus.latest_details.builder.image_ref}
             />
           ) : (
             <EmptyState title="No live builder result" detail="No readable MCP builder result payload was returned." muted />
@@ -436,6 +447,7 @@ function Dashboard({
               status={runtimeStatus.latest_details.reviewer.verdict ?? "unknown"}
               timestamp={runtimeStatus.latest_details.reviewer.reviewed_at}
               body={runtimeStatus.latest_details.reviewer.summary ?? "No reviewer summary captured."}
+              imageRef={runtimeStatus.latest_details.reviewer.image_ref}
             />
           ) : (
             <EmptyState title="No live reviewer result" detail="No readable MCP reviewer result payload was returned." muted />
@@ -473,23 +485,29 @@ function RuntimeSummary({
   runtimeError,
   isRefreshing,
   refresh,
+  onRecorded,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
   runtimeError: string | null;
   isRefreshing: boolean;
   refresh: (options?: { silent?: boolean }) => void;
+  onRecorded: (options?: { silent?: boolean }) => void;
 }) {
   const bottleneck = getPipelineBottleneck(runtimeStatus);
   const latestVerdict = runtimeStatus?.latest_details.reviewer?.verdict ?? "none";
   const queueStatus = runtimeStatus
     ? `${runtimeStatus.queue.inbox} inbox / ${runtimeStatus.queue.processing} processing / ${runtimeStatus.queue.outbox} outbox / ${runtimeStatus.queue.reviews} reviews`
     : "not loaded";
+  const liveState = getLiveLoopState(runtimeStatus);
 
   return (
     <section className="rounded-md border border-cyan-300/20 bg-cyan-300/[0.04] p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Live MCP Queue</p>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <LiveIndicator active={liveState.active} title={liveState.title} />
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Live MCP Queue</p>
+          </div>
           <h2 className="mt-2 text-lg font-semibold text-white">Current Workflow State</h2>
         </div>
         <button
@@ -516,11 +534,12 @@ function RuntimeSummary({
             <span className="text-xs text-slate-500">{runtimeStatus.queue.path ? "queue connected" : "queue not configured"}</span>
           </div>
           <div className="grid gap-2 lg:grid-cols-4">
-            <RuntimeMetric label="Active task" value={runtimeStatus.active_task ?? "none"} />
+            <RuntimeMetric label="Active task" value={runtimeStatus.active_task ?? "none"} copyable />
             <RuntimeMetric label="Bottleneck" value={bottleneck.severity} />
             <RuntimeMetric label="Latest verdict" value={latestVerdict} />
-            <RuntimeMetric label="Queue status" value={queueStatus} />
+            <RuntimeMetric label="Queue status" value={queueStatus} copyable />
           </div>
+          <NowWorkingPanel runtimeStatus={runtimeStatus} onRecorded={onRecorded} />
           <p className="rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-400">
             {runtimeStatus.judgement}
           </p>
@@ -539,6 +558,135 @@ function RuntimeSummary({
   );
 }
 
+function LiveIndicator({ active, title }: { active: boolean; title: string }) {
+  return (
+    <span
+      className={`inline-flex h-3 w-3 rounded-full ${
+        active ? "animate-pulse bg-cyan-300 shadow-[0_0_14px_rgba(103,232,249,0.85)]" : "bg-slate-600"
+      }`}
+      title={title}
+      aria-label={title}
+    />
+  );
+}
+
+function NowWorkingPanel({
+  runtimeStatus,
+  onRecorded,
+}: {
+  runtimeStatus: LocalRuntimeStatus;
+  onRecorded: (options?: { silent?: boolean }) => void;
+}) {
+  const targetTask =
+    runtimeStatus.active_task ??
+    runtimeStatus.latest_details.reviewer?.reviewed_task_id ??
+    runtimeStatus.latest_details.builder?.task_id ??
+    runtimeStatus.latest.outbox?.name ??
+    null;
+  const workerRole =
+    runtimeStatus.queue.processing > 0
+      ? "Implementer"
+      : runtimeStatus.latest_details.reviewer?.verdict === "stop"
+        ? "PM decision"
+        : runtimeStatus.processes.loop
+          ? "Queue loop"
+          : "No active worker";
+  const workerPid =
+    runtimeStatus.queue.processing > 0
+      ? runtimeStatus.processes.implementer?.pid
+      : runtimeStatus.processes.reviewer_bridge?.pid ?? runtimeStatus.processes.loop?.pid;
+
+  return (
+    <div className="rounded-md border border-cyan-300/20 bg-[#07121d] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Now Working</p>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            Current worker, latest result, and PM recording actions.
+          </p>
+        </div>
+        <ApprovalRecorder targetTask={targetTask} onRecorded={onRecorded} />
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <RuntimeMetric label="Current worker role" value={workerRole} />
+        <RuntimeMetric label="PID" value={workerPid ? String(workerPid) : "not detected"} />
+        <RuntimeMetric label="Active task" value={runtimeStatus.active_task ?? "none"} copyable />
+        <RuntimeMetric label="Latest result" value={runtimeStatus.latest.outbox?.name ?? "none"} copyable />
+        <RuntimeMetric label="Latest review verdict" value={runtimeStatus.latest_details.reviewer?.verdict ?? "none"} />
+      </div>
+      <p className="mt-3 rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-400">
+        {runtimeStatus.judgement}
+      </p>
+    </div>
+  );
+}
+
+function ApprovalRecorder({
+  targetTask,
+  onRecorded,
+}: {
+  targetTask: string | null;
+  onRecorded: (options?: { silent?: boolean }) => void;
+}) {
+  const [rejectReason, setRejectReason] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function record(action: "approve" | "reject") {
+    setIsRecording(true);
+    setMessage(null);
+
+    try {
+      const reason = action === "reject" && rejectReason.trim() ? ` Reason: ${rejectReason.trim()}` : "";
+      await createCommandRun({
+        command: `${action} ${targetTask ?? "current-runtime-state"}`,
+        command_type: `pm_${action}`,
+        status: "succeeded",
+        result: `Recording-only ${action} from PM dashboard. Target: ${targetTask ?? "unknown"}.${reason}`,
+      });
+      setMessage(action === "approve" ? "Approval recorded." : "Rejection recorded.");
+      if (action === "reject") {
+        setRejectReason("");
+      }
+      onRecorded({ silent: true });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not record PM action.");
+    } finally {
+      setIsRecording(false);
+    }
+  }
+
+  return (
+    <div className="grid min-w-64 gap-2">
+      <div className="flex flex-wrap gap-2">
+        <button
+          className="rounded border border-emerald-300/30 bg-emerald-300/[0.08] px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-300/15 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={isRecording}
+          onClick={() => record("approve")}
+          type="button"
+        >
+          Record Approval
+        </button>
+        <button
+          className="rounded border border-rose-300/30 bg-rose-300/[0.08] px-3 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-300/15 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={isRecording}
+          onClick={() => record("reject")}
+          type="button"
+        >
+          Record Rejection
+        </button>
+      </div>
+      <textarea
+        className="min-h-16 rounded border border-white/10 bg-black/20 px-3 py-2 text-xs leading-5 text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/60"
+        value={rejectReason}
+        onChange={(event) => setRejectReason(event.target.value)}
+        placeholder="Optional rejection reason"
+      />
+      {message ? <p className="text-xs text-slate-400">{message}</p> : null}
+    </div>
+  );
+}
+
 function PipelineOverview({
   runtimeStatus,
   runtimeError,
@@ -548,6 +696,7 @@ function PipelineOverview({
 }) {
   const stages = getPipelineStages(runtimeStatus);
   const bottleneck = getPipelineBottleneck(runtimeStatus);
+  const liveState = getLiveLoopState(runtimeStatus);
 
   return (
     <Panel title="Live Pipeline Map" className="overflow-hidden">
@@ -558,9 +707,12 @@ function PipelineOverview({
           <div className="rounded-md border border-cyan-300/20 bg-[#07121d] p-4">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">
-                  Runtime Flow
-                </p>
+                <div className="flex items-center gap-2">
+                  <LiveIndicator active={liveState.active} title={liveState.title} />
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">
+                    Runtime Flow
+                  </p>
+                </div>
                 <p className="mt-1 text-sm text-slate-400">
                   PM queue to builder, reviewer, and next decision.
                 </p>
@@ -600,6 +752,11 @@ function EventTimeline({
   isRefreshing: boolean;
   refresh: (options?: { silent?: boolean }) => void;
 }) {
+  const [showAllToday, setShowAllToday] = useState(false);
+  const todayEvents = events.filter((event) => isToday(event.created_at));
+  const visibleEvents = showAllToday ? todayEvents : todayEvents.slice(0, 6);
+  const hiddenCount = Math.max(todayEvents.length - visibleEvents.length, 0);
+
   return (
     <Panel title="Event Timeline">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -622,10 +779,10 @@ function EventTimeline({
 
       {error ? (
         <EmptyState title="Event timeline unavailable" detail={error} />
-      ) : events.length ? (
+      ) : todayEvents.length ? (
         <div className="relative grid gap-3">
           <div className="absolute bottom-3 left-[5.5rem] top-3 hidden w-px bg-white/10 sm:block" />
-          {events.map((event) => (
+          {visibleEvents.map((event) => (
             <article
               key={event.id}
               className={`relative grid gap-3 rounded-md border p-3 sm:grid-cols-[4.75rem_1fr] ${runtimeEventTypeStyles[event.type]}`}
@@ -642,9 +799,21 @@ function EventTimeline({
               </div>
             </article>
           ))}
+          {todayEvents.length > 6 ? (
+            <button
+              className="justify-self-start rounded border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-cyan-300/50 hover:bg-cyan-300/10"
+              onClick={() => setShowAllToday((current) => !current)}
+              type="button"
+            >
+              {showAllToday ? "Show less" : `Show ${hiddenCount} more today`}
+            </button>
+          ) : null}
         </div>
       ) : (
-        <EmptyState title="No runtime events yet" detail="No MCP, Supabase, or backend runtime events were derived." />
+        <EmptyState
+          title="No runtime events today"
+          detail={events.length ? "Older derived events exist, but the timeline only shows today's events by default." : "No MCP, Supabase, or backend runtime events were derived today."}
+        />
       )}
     </Panel>
   );
@@ -661,7 +830,7 @@ function PipelineNode({ stage }: { stage: PipelineStage }) {
         <span className={`h-3 w-3 rounded-full ${stage.dotClassName}`} />
       </div>
       <p className="mt-4 truncate text-3xl font-semibold text-white" title={stage.value}>{stage.value}</p>
-      <p className="mt-3 min-h-10 text-xs leading-5 text-slate-400" title={stage.detail}>{stage.detail}</p>
+      <CompactValue value={stage.detail} className="mt-3 min-h-10 text-xs leading-5 text-slate-400" copyable />
     </article>
   );
 }
@@ -989,26 +1158,64 @@ function RuntimeResult({
   status,
   timestamp,
   body,
+  imageRef,
 }: {
   title: string;
   status: string;
   timestamp: string | null;
   body: string;
+  imageRef: string | null;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+  const shouldCollapse = body.length > 260;
+  const visibleBody = !expanded && shouldCollapse ? `${body.slice(0, 260)}...` : body;
+
   return (
     <article className="rounded-md border border-white/10 bg-black/20 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold text-white" title={title}>
-            {title}
-          </h3>
+          <CompactValue value={title} className="text-sm font-semibold text-white" copyable />
           {timestamp ? <p className="mt-1 text-xs text-slate-500">{formatDate(timestamp)}</p> : null}
         </div>
         <StatusBadge className={getResultStatusStyle(status)}>
           {status}
         </StatusBadge>
       </div>
-      <p className="mt-4 text-sm leading-6 text-slate-300" title={body}>{body}</p>
+      <div className="mt-4">
+        {imageRef ? (
+          <div className="mb-4 rounded-md border border-white/10 bg-black/30 p-2">
+            {imageFailed ? (
+              <p className="text-xs leading-5 text-slate-500" title={imageRef}>
+                Screenshot reference found, but the image could not be previewed.
+              </p>
+            ) : (
+              <img
+                className="max-h-44 w-full rounded object-contain"
+                src={imageRef}
+                alt="Attached runtime result screenshot"
+                title={imageRef}
+                onError={() => setImageFailed(true)}
+              />
+            )}
+            <CompactValue value={imageRef} className="mt-2 text-xs text-slate-500" copyable />
+          </div>
+        ) : (
+          <p className="mb-3 rounded border border-white/10 bg-black/20 p-2 text-xs text-slate-500">
+            No screenshot attached
+          </p>
+        )}
+        <p className="text-sm leading-6 text-slate-300" title={body}>{visibleBody}</p>
+        {shouldCollapse ? (
+          <button
+            className="mt-3 rounded border border-white/10 px-3 py-1 text-xs font-medium text-slate-300 transition hover:border-cyan-300/50 hover:bg-cyan-300/10"
+            onClick={() => setExpanded((current) => !current)}
+            type="button"
+          >
+            {expanded ? "Show less" : "Show full text"}
+          </button>
+        ) : null}
+      </div>
     </article>
   );
 }
@@ -1054,13 +1261,41 @@ function PipelineWarnings({ runtimeStatus }: { runtimeStatus: LocalRuntimeStatus
   );
 }
 
-function RuntimeMetric({ label, value }: { label: string; value: string }) {
+function RuntimeMetric({ label, value, copyable = false }: { label: string; value: string; copyable?: boolean }) {
   return (
     <div className="min-w-0 rounded-md border border-white/10 bg-black/20 p-3">
       <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{label}</p>
-      <p className="mt-2 truncate text-sm font-medium text-slate-200" title={value}>
-        {value}
-      </p>
+      <CompactValue value={value} className="mt-2 text-sm font-medium text-slate-200" copyable={copyable} />
+    </div>
+  );
+}
+
+function CompactValue({
+  value,
+  className = "",
+  copyable = false,
+}: {
+  value: string;
+  className?: string;
+  copyable?: boolean;
+}) {
+  const compact = compactValue(value);
+
+  return (
+    <div className={`flex min-w-0 items-center gap-2 ${className}`}>
+      <span className="min-w-0 flex-1 break-all" title={value}>
+        {compact}
+      </span>
+      {copyable && value !== "none" && value !== "not loaded" ? (
+        <button
+          className="shrink-0 rounded border border-white/10 px-2 py-1 text-[11px] font-medium text-slate-400 transition hover:border-cyan-300/50 hover:text-cyan-100"
+          onClick={() => copyText(value)}
+          title="Copy full value"
+          type="button"
+        >
+          Copy
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -1146,6 +1381,33 @@ function formatTime(value: string) {
   }).format(new Date(value));
 }
 
+function isToday(value: string) {
+  const date = new Date(value);
+  const now = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+}
+
+function compactValue(value: string) {
+  if (value.length <= 48) {
+    return value;
+  }
+
+  const fileLike = value.split(/[\\/]/).pop() ?? value;
+  if (fileLike.length <= 48 && fileLike.length >= 12) {
+    return fileLike;
+  }
+
+  return `${value.slice(0, 24)}...${value.slice(-16)}`;
+}
+
+function copyText(value: string) {
+  void navigator.clipboard?.writeText(value);
+}
+
 function formatProcess(processItem: LocalRuntimeStatus["processes"]["implementer"], includeCpu = false) {
   if (!processItem) {
     return "not detected";
@@ -1173,6 +1435,24 @@ function getResultStatusStyle(status: string) {
   }
 
   return commandStatusStyles.running;
+}
+
+function getLiveLoopState(runtimeStatus: LocalRuntimeStatus | null) {
+  const active = Boolean(
+    runtimeStatus &&
+      (runtimeStatus.status === "working" ||
+        ((runtimeStatus.queue.inbox > 0 || runtimeStatus.queue.processing > 0) && runtimeStatus.processes.loop)),
+  );
+
+  if (active) {
+    return { active: true, title: "Live loop active" };
+  }
+
+  if (runtimeStatus?.processes.loop) {
+    return { active: false, title: "Loop idle" };
+  }
+
+  return { active: false, title: runtimeStatus ? "Loop offline" : "Runtime not loaded" };
 }
 
 function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineStage[] {
