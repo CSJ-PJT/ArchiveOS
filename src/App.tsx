@@ -1704,14 +1704,14 @@ function getResultStatusStyle(status: string) {
 }
 
 function getLiveLoopState(runtimeStatus: LocalRuntimeStatus | null) {
-  const active = Boolean(
-    runtimeStatus &&
-      (runtimeStatus.status === "working" ||
-        ((runtimeStatus.queue.inbox > 0 || runtimeStatus.queue.processing > 0) && runtimeStatus.processes.loop)),
-  );
+  const active = Boolean(runtimeStatus && (runtimeStatus.status === "working" || runtimeStatus.processes.loop));
 
   if (active) {
-    return { active: true, title: "Live loop active" };
+    const title =
+      runtimeStatus?.queue.inbox || runtimeStatus?.queue.processing
+        ? "Live loop active"
+        : "Loop process active; queue idle";
+    return { active: true, title };
   }
 
   if (runtimeStatus?.processes.loop) {
