@@ -48,8 +48,10 @@ export async function getLocalRuntimeStatus(): Promise<LocalRuntimeStatus> {
   const implementer = findImplementerProcess(processes, loop?.pid ?? null);
   const reviewer = findReviewerProcess(processes);
   const reviewerBridge = findReviewerBridgeProcess(processes);
-  const repoPath = loop ? extractRepoPath(loop.commandLine) : null;
-  const queuePath = repoPath ? path.join(repoPath, "tools", "mcp-codex-bridge", "queue") : null;
+  const configuredQueuePath = process.env.MCP_QUEUE_PATH?.trim() || null;
+  const configuredRepoPath = process.env.MCP_REPO_PATH?.trim() || null;
+  const repoPath = configuredRepoPath ?? (loop ? extractRepoPath(loop.commandLine) : null);
+  const queuePath = configuredQueuePath ?? (repoPath ? path.join(repoPath, "tools", "mcp-codex-bridge", "queue") : null);
   const queue = await readQueueSnapshot(queuePath);
   const activeTask = queue.latest.processing ? stripTaskExtension(queue.latest.processing.name) : null;
   const status = queue.counts.processing > 0 && implementer ? "working" : queue.counts.processing > 0 ? "unknown" : "idle";
@@ -284,8 +286,13 @@ function findConfiguredProcess(processes: ProcessSnapshot[], rawPid: string | un
 }
 
 function extractRepoPath(commandLine: string) {
+  const quotedMatch = commandLine.match(/-RepoPath\s+["']([^"']+)["']\s+-Branch/i);
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1];
+  }
+
   const match = commandLine.match(/-RepoPath\s+(.+?)\s+-Branch/i);
-  return match?.[1] ?? null;
+  return match?.[1]?.trim() ?? null;
 }
 
 function stripTaskExtension(fileName: string) {
