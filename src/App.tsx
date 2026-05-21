@@ -1114,10 +1114,10 @@ function PipelineConnector({ active }: { active: boolean }) {
   return (
     <div className="hidden min-w-8 items-center lg:flex" aria-hidden="true">
       <div
-        className={`h-px w-full ${
+        className={`h-2 w-full ${
           active
-            ? "pipeline-flow-line shadow-[0_0_16px_rgba(103,232,249,0.7)]"
-            : "bg-white/10"
+            ? "pipeline-flow-line"
+            : "rounded-full bg-white/[0.07]"
         }`}
       />
     </div>
