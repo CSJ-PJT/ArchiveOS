@@ -224,6 +224,8 @@ function Dashboard({
   return (
     <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
       <section className="grid gap-5">
+        <RuntimeSummary />
+
         <div className="grid gap-3 sm:grid-cols-3">
           <MetricCard label="Active agents" value={activeAgents.length} detail={`${data.agents.length} total agents`} />
           <MetricCard
@@ -323,6 +325,96 @@ function Dashboard({
         </Panel>
       </section>
     </div>
+  );
+}
+
+function RuntimeSummary() {
+  const [runtimeStatus, setRuntimeStatus] = useState<LocalRuntimeStatus | null>(null);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(true);
+
+  useEffect(() => {
+    refresh();
+    const timer = window.setInterval(() => {
+      refresh({ silent: true });
+    }, 5000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  async function refresh(options: { silent?: boolean } = {}) {
+    if (!options.silent) {
+      setIsRefreshing(true);
+    }
+    setRuntimeError(null);
+
+    try {
+      const status = await getLocalRuntimeStatus();
+      setRuntimeStatus(status);
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : "Could not load local runtime status.");
+    } finally {
+      if (!options.silent) {
+        setIsRefreshing(false);
+      }
+    }
+  }
+
+  return (
+    <section className="rounded-md border border-cyan-300/20 bg-cyan-300/[0.04] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Live MCP Queue</p>
+          <h2 className="mt-2 text-lg font-semibold text-white">Current Workflow State</h2>
+        </div>
+        <button
+          className="rounded border border-cyan-300/30 px-3 py-2 text-xs font-medium text-cyan-100 transition hover:bg-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={isRefreshing}
+          onClick={() => refresh()}
+        >
+          {isRefreshing ? "Refreshing..." : "Refresh"}
+        </button>
+      </div>
+
+      {runtimeError ? (
+        <p className="mt-4 rounded border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">
+          {runtimeError}
+        </p>
+      ) : runtimeStatus ? (
+        <div className="mt-4 grid gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge className={runtimeStatusStyles[runtimeStatus.status]}>
+              {runtimeStatus.status}
+            </StatusBadge>
+            <span className="text-xs text-slate-500">checked {formatDate(runtimeStatus.checked_at)}</span>
+            <span className="text-xs text-slate-500">{runtimeStatus.queue.path ? "queue connected" : "queue not configured"}</span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-4">
+            <RuntimeMetric label="Inbox" value={String(runtimeStatus.queue.inbox)} />
+            <RuntimeMetric label="Processing" value={String(runtimeStatus.queue.processing)} />
+            <RuntimeMetric label="Outbox" value={String(runtimeStatus.queue.outbox)} />
+            <RuntimeMetric label="Reviews" value={String(runtimeStatus.queue.reviews)} />
+          </div>
+          <div className="grid gap-2 lg:grid-cols-3">
+            <RuntimeMetric label="Active task" value={runtimeStatus.active_task ?? "none"} />
+            <RuntimeMetric label="Latest result" value={runtimeStatus.latest.outbox?.name ?? "none"} />
+            <RuntimeMetric label="Latest review" value={runtimeStatus.latest.review?.name ?? "none"} />
+          </div>
+          <p className="rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-400">
+            {runtimeStatus.judgement}
+          </p>
+        </div>
+      ) : (
+        <EmptyState
+          title={isRefreshing ? "Loading local workflow state" : "No local workflow state loaded"}
+          detail={
+            isRefreshing
+              ? "Reading backend runtime status and MCP queue files."
+              : "Start the backend and refresh runtime status."
+          }
+        />
+      )}
+    </section>
   );
 }
 
@@ -561,8 +653,15 @@ function CommandCenter() {
               <span className="text-xs text-slate-500">checked {formatDate(runtimeStatus.checked_at)}</span>
               <span className="text-xs text-slate-600">auto refresh on</span>
             </div>
-            <div className="grid gap-2 sm:grid-cols-4">
-              <RuntimeMetric label="Queue" value={`processing=${runtimeStatus.queue.processing}`} />
+            <div className="grid gap-2 sm:grid-cols-5">
+              <RuntimeMetric
+                label="Queue"
+                value={`inbox=${runtimeStatus.queue.inbox} / processing=${runtimeStatus.queue.processing}`}
+              />
+              <RuntimeMetric
+                label="Results"
+                value={`outbox=${runtimeStatus.queue.outbox} / reviews=${runtimeStatus.queue.reviews}`}
+              />
               <RuntimeMetric label="Task" value={runtimeStatus.active_task ?? "none"} />
               <RuntimeMetric label="Outbox" value={runtimeStatus.latest.outbox?.name ?? "none"} />
               <RuntimeMetric label="Review" value={runtimeStatus.latest.review?.name ?? "none"} />
@@ -587,7 +686,14 @@ function CommandCenter() {
             </p>
           </div>
         ) : (
-            <EmptyState title="No local workflow state loaded" detail="Start the backend and refresh runtime status." />
+          <EmptyState
+            title={isRefreshingRuntime ? "Loading local workflow state" : "No local workflow state loaded"}
+            detail={
+              isRefreshingRuntime
+                ? "Reading backend runtime status and MCP queue files."
+                : "Start the backend and refresh runtime status."
+            }
+          />
         )}
       </div>
 
