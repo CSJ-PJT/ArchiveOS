@@ -43,6 +43,8 @@ type PipelineStage = {
   dotClassName: string;
 };
 
+type ConsistencyStatus = "matched" | "missing" | "stale" | "unknown" | "error";
+
 const taskStatuses: TaskStatus[] = ["todo", "in_progress", "review", "done", "failed"];
 const statusLabels: Record<TaskStatus, string> = {
   todo: "Todo",
@@ -94,6 +96,14 @@ const runtimeEventTypeStyles: Record<RuntimeEvent["type"], string> = {
   command: "border-violet-300/30 bg-violet-300/[0.04]",
   decision: "border-sky-300/30 bg-sky-300/[0.04]",
   warning: "border-rose-300/30 bg-rose-300/[0.05]",
+};
+
+const consistencyStatusStyles: Record<ConsistencyStatus, string> = {
+  matched: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25",
+  missing: "bg-slate-500/15 text-slate-200 ring-slate-400/20",
+  stale: "bg-amber-500/15 text-amber-200 ring-amber-400/25",
+  unknown: "bg-violet-500/15 text-violet-200 ring-violet-400/25",
+  error: "bg-rose-500/15 text-rose-200 ring-rose-400/25",
 };
 
 const quickActions = [
@@ -286,14 +296,19 @@ function Dashboard({
   const [runtimeEventsError, setRuntimeEventsError] = useState<string | null>(null);
   const [isRefreshingEvents, setIsRefreshingEvents] = useState(true);
   const [isRefreshingRuntime, setIsRefreshingRuntime] = useState(true);
+  const [backendReachability, setBackendReachability] = useState<ConsistencyStatus>("unknown");
+  const [commandRunsReachability, setCommandRunsReachability] = useState<ConsistencyStatus>("unknown");
+  const [consistencyError, setConsistencyError] = useState<string | null>(null);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
 
   useEffect(() => {
     refreshRuntime();
     refreshRuntimeEvents();
+    refreshConsistency();
     const timer = window.setInterval(() => {
       refreshRuntime({ silent: true });
       refreshRuntimeEvents({ silent: true });
+      refreshConsistency({ silent: true });
     }, 5000);
 
     return () => window.clearInterval(timer);
@@ -333,6 +348,28 @@ function Dashboard({
     }
   }
 
+  async function refreshConsistency(options: { silent?: boolean } = {}) {
+    if (!options.silent) {
+      setConsistencyError(null);
+    }
+
+    try {
+      await getBackendHealth();
+      setBackendReachability("matched");
+    } catch (error) {
+      setBackendReachability("error");
+      setConsistencyError(error instanceof Error ? error.message : "Backend health check failed.");
+    }
+
+    try {
+      await getRecentCommands();
+      setCommandRunsReachability("matched");
+    } catch (error) {
+      setCommandRunsReachability("error");
+      setConsistencyError(error instanceof Error ? error.message : "command_runs table is not reachable.");
+    }
+  }
+
   return (
     <div className="grid gap-5">
       <RuntimeSummary
@@ -350,6 +387,15 @@ function Dashboard({
         error={runtimeEventsError}
         isRefreshing={isRefreshingEvents}
         refresh={refreshRuntimeEvents}
+      />
+
+      <DataConsistencyPanel
+        runtimeStatus={runtimeStatus}
+        runtimeError={runtimeError}
+        data={data}
+        backendReachability={backendReachability}
+        commandRunsReachability={commandRunsReachability}
+        consistencyError={consistencyError}
       />
 
       <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
@@ -414,8 +460,12 @@ function Dashboard({
             </div>
           ) : (
             <EmptyState
-              title="No live task records"
-              detail="Seed/demo tasks are hidden. Live MCP processing state is summarized above."
+              title={runtimeStatus?.queue.inbox === 0 && runtimeStatus.queue.processing === 0 ? "Queue is idle" : "No live task records"}
+              detail={
+                runtimeStatus?.queue.inbox === 0 && runtimeStatus.queue.processing === 0
+                  ? "Supabase task rows are empty and the MCP inbox/processing folders are also empty. This is an idle state, not a loop failure."
+                  : "Seed/demo tasks are hidden. Live MCP processing state is summarized above."
+              }
             />
           )}
         </Panel>
@@ -816,6 +866,222 @@ function EventTimeline({
         />
       )}
     </Panel>
+  );
+}
+
+function DataConsistencyPanel({
+  runtimeStatus,
+  runtimeError,
+  data,
+  backendReachability,
+  commandRunsReachability,
+  consistencyError,
+}: {
+  runtimeStatus: LocalRuntimeStatus | null;
+  runtimeError: string | null;
+  data: DashboardData;
+  backendReachability: ConsistencyStatus;
+  commandRunsReachability: ConsistencyStatus;
+  consistencyError: string | null;
+}) {
+  const runtimeQueue = runtimeStatus ? formatQueueCounts(runtimeStatus.queue) : "not loaded";
+  const frontendQueue = runtimeStatus ? formatQueueCounts(runtimeStatus.queue) : "not displayed";
+  const queueStatus = runtimeError ? "error" : runtimeStatus ? "matched" : "unknown";
+  const builderStatus = runtimeStatus?.latest.outbox?.name ? "matched" : runtimeStatus ? "missing" : "unknown";
+  const reviewerStatus = runtimeStatus?.latest.review?.name ? "matched" : runtimeStatus ? "missing" : "unknown";
+  const stopReason = getRuntimeStopReason(runtimeStatus);
+
+  const rows: { label: string; source: string; value: string; status: ConsistencyStatus; detail: string; copyable?: boolean }[] = [
+    {
+      label: "MCP queue counts",
+      source: "runtime source",
+      value: runtimeQueue,
+      status: queueStatus,
+      detail: runtimeStatus?.queue.path ? `Read from ${runtimeStatus.queue.path}` : runtimeError ?? "Runtime queue has not loaded yet.",
+      copyable: Boolean(runtimeStatus?.queue.path),
+    },
+    {
+      label: "Backend API queue counts",
+      source: "backend",
+      value: runtimeQueue,
+      status: queueStatus,
+      detail: runtimeError ? "Backend runtime endpoint failed." : "Loaded from GET /api/local-runtime/status.",
+    },
+    {
+      label: "Frontend displayed queue counts",
+      source: "frontend",
+      value: frontendQueue,
+      status: queueStatus,
+      detail: "Dashboard panels render from the same backend runtime snapshot.",
+    },
+    {
+      label: "Latest builder result",
+      source: "mcp",
+      value: runtimeStatus?.latest.outbox?.name ?? "none",
+      status: builderStatus,
+      detail: runtimeStatus?.latest_details.builder?.status
+        ? `Builder payload status: ${runtimeStatus.latest_details.builder.status}.`
+        : "No builder result filename is currently known.",
+      copyable: Boolean(runtimeStatus?.latest.outbox?.name),
+    },
+    {
+      label: "Latest reviewer result",
+      source: "mcp",
+      value: runtimeStatus?.latest.review?.name ?? "none",
+      status: reviewerStatus,
+      detail: runtimeStatus?.latest_details.reviewer?.verdict
+        ? `Reviewer verdict: ${runtimeStatus.latest_details.reviewer.verdict}. ${stopReason}`
+        : "No reviewer result filename is currently known.",
+      copyable: Boolean(runtimeStatus?.latest.review?.name),
+    },
+    {
+      label: "command_runs reachability",
+      source: "supabase via backend",
+      value: commandRunsReachability === "matched" ? "reachable" : "not confirmed",
+      status: commandRunsReachability,
+      detail: commandRunsReachability === "matched" ? "GET /api/commands/recent returned successfully." : consistencyError ?? "Waiting for command history check.",
+    },
+    {
+      label: "work_logs / decisions reachability",
+      source: "supabase frontend",
+      value: `${data.logs.length} logs / ${data.decisions.length} decisions`,
+      status: "matched",
+      detail: data.logs.length || data.decisions.length
+        ? "Supabase read succeeded and non-seed rows are available."
+        : "Supabase read succeeded. No non-seed work logs or decisions are present yet.",
+    },
+  ];
+
+  const checklist: { label: string; status: ConsistencyStatus; detail: string }[] = [
+    {
+      label: "backend online",
+      status: backendReachability,
+      detail: backendReachability === "matched" ? "Health endpoint responded." : consistencyError ?? "Backend has not been confirmed.",
+    },
+    {
+      label: "Supabase reachable",
+      status: "matched" as ConsistencyStatus,
+      detail: "Frontend agent/task/work_log queries loaded without a Supabase error.",
+    },
+    {
+      label: "command_runs table reachable",
+      status: commandRunsReachability,
+      detail: commandRunsReachability === "matched" ? "Command history can be read." : "Command history is not reachable yet.",
+    },
+    {
+      label: "MCP queue readable",
+      status: runtimeError ? "error" as ConsistencyStatus : runtimeStatus?.queue.path ? "matched" as ConsistencyStatus : "missing" as ConsistencyStatus,
+      detail: runtimeStatus?.queue.path ?? runtimeError ?? "No queue path has been detected.",
+    },
+    {
+      label: "implementer detected",
+      status: runtimeStatus?.processes.implementer ? "matched" as ConsistencyStatus : "missing" as ConsistencyStatus,
+      detail: runtimeStatus?.processes.implementer ? `PID ${runtimeStatus.processes.implementer.pid}` : "Manual implementer PID is not visible.",
+    },
+    {
+      label: "reviewer detected",
+      status: runtimeStatus?.processes.reviewer || runtimeStatus?.processes.reviewer_bridge ? "matched" as ConsistencyStatus : "missing" as ConsistencyStatus,
+      detail: runtimeStatus?.processes.reviewer
+        ? `Reviewer PID ${runtimeStatus.processes.reviewer.pid}`
+        : runtimeStatus?.processes.reviewer_bridge
+          ? `Reviewer bridge PID ${runtimeStatus.processes.reviewer_bridge.pid}`
+          : "Reviewer session or bridge is not visible.",
+    },
+    {
+      label: "loop status known",
+      status: runtimeStatus?.processes.loop ? (runtimeStatus.queue.inbox || runtimeStatus.queue.processing ? "matched" : "stale") as ConsistencyStatus : "missing" as ConsistencyStatus,
+      detail: runtimeStatus?.processes.loop
+        ? runtimeStatus.queue.inbox || runtimeStatus.queue.processing
+          ? `Loop PID ${runtimeStatus.processes.loop.pid} with active queue movement.`
+          : `Loop PID ${runtimeStatus.processes.loop.pid}; queue is idle, not failed.`
+        : "Loop process is not detected.",
+    },
+    {
+      label: "latest result path known",
+      status: builderStatus,
+      detail: runtimeStatus?.latest.outbox?.name ?? "No latest outbox result filename.",
+    },
+    {
+      label: "latest review path known",
+      status: reviewerStatus,
+      detail: runtimeStatus?.latest.review?.name ?? "No latest review filename.",
+    },
+  ];
+
+  return (
+    <Panel title="Data Consistency">
+      <div className="grid gap-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Read-only consistency checks</p>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            Compares the live runtime snapshot, backend reachability, and displayed PM data before an end-to-end visibility test.
+          </p>
+        </div>
+
+        <div className="grid gap-3 xl:grid-cols-2">
+          {rows.map((row) => (
+            <ConsistencyRow key={row.label} {...row} />
+          ))}
+        </div>
+
+        <div className="rounded-md border border-white/10 bg-black/20 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-white">E2E Test Readiness</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Checklist only. It does not start tasks or control the MCP loop.</p>
+            </div>
+            <StatusBadge className={getReadinessStatus(checklist).className}>{getReadinessStatus(checklist).label}</StatusBadge>
+          </div>
+          <div className="grid gap-2 md:grid-cols-3">
+            {checklist.map((item) => (
+              <div key={item.label} className="rounded border border-white/10 bg-white/[0.03] p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-slate-200">{item.label}</p>
+                  <StatusBadge className={consistencyStatusStyles[item.status]}>{item.status}</StatusBadge>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-500" title={item.detail}>{item.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {stopReason ? (
+          <p className="rounded border border-amber-300/20 bg-amber-300/[0.06] p-3 text-sm leading-6 text-amber-100">
+            {stopReason}
+          </p>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+function ConsistencyRow({
+  label,
+  source,
+  value,
+  status,
+  detail,
+  copyable = false,
+}: {
+  label: string;
+  source: string;
+  value: string;
+  status: ConsistencyStatus;
+  detail: string;
+  copyable?: boolean;
+}) {
+  return (
+    <article className="rounded-md border border-white/10 bg-white/[0.03] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{source}</p>
+          <h3 className="mt-1 text-sm font-semibold text-white">{label}</h3>
+        </div>
+        <StatusBadge className={consistencyStatusStyles[status]}>{status}</StatusBadge>
+      </div>
+      <CompactValue value={value} className="mt-3 text-sm font-medium text-slate-200" copyable={copyable} />
+      <p className="mt-2 text-xs leading-5 text-slate-500" title={detail}>{detail}</p>
+    </article>
   );
 }
 
@@ -1231,7 +1497,7 @@ function PipelineWarnings({ runtimeStatus }: { runtimeStatus: LocalRuntimeStatus
       ? "Processing has a task, but the implementer PID is not detected."
       : null,
     runtimeStatus.latest_details.reviewer?.verdict === "stop" && runtimeStatus.queue.inbox === 0
-      ? "Reviewer verdict is stop and inbox is empty. PM must queue the next task."
+      ? getRuntimeStopReason(runtimeStatus) || "Reviewer verdict is stop and inbox is empty. PM must decide the next task."
       : null,
     runtimeStatus.queue.inbox > 0 && !runtimeStatus.processes.loop
       ? "Inbox has queued work, but the loop process is not detected."
@@ -1455,6 +1721,47 @@ function getLiveLoopState(runtimeStatus: LocalRuntimeStatus | null) {
   return { active: false, title: runtimeStatus ? "Loop offline" : "Runtime not loaded" };
 }
 
+function formatQueueCounts(queue: LocalRuntimeStatus["queue"]) {
+  return `inbox=${queue.inbox}, processing=${queue.processing}, outbox=${queue.outbox}, reviews=${queue.reviews}`;
+}
+
+function getRuntimeStopReason(runtimeStatus: LocalRuntimeStatus | null) {
+  if (runtimeStatus?.latest_details.reviewer?.verdict !== "stop") {
+    return "";
+  }
+
+  const summary = runtimeStatus.latest_details.reviewer.summary ?? "";
+  if (/usage limit/i.test(summary)) {
+    return "Latest reviewer verdict is stop because Codex reported a usage limit. This is a usage-limit stop, not a runtime crash.";
+  }
+
+  if (runtimeStatus.queue.inbox === 0 && runtimeStatus.queue.processing === 0) {
+    return "Latest reviewer verdict is stop and the queue is empty. This means PM input is required before more work starts.";
+  }
+
+  return "Latest reviewer verdict is stop. Review the latest reviewer result before queueing more work.";
+}
+
+function getReadinessStatus(items: { status: ConsistencyStatus }[]) {
+  if (items.some((item) => item.status === "error")) {
+    return { label: "error", className: consistencyStatusStyles.error };
+  }
+
+  if (items.some((item) => item.status === "missing")) {
+    return { label: "missing items", className: consistencyStatusStyles.missing };
+  }
+
+  if (items.some((item) => item.status === "stale")) {
+    return { label: "idle but ready", className: consistencyStatusStyles.stale };
+  }
+
+  if (items.some((item) => item.status === "unknown")) {
+    return { label: "checking", className: consistencyStatusStyles.unknown };
+  }
+
+  return { label: "ready", className: consistencyStatusStyles.matched };
+}
+
 function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineStage[] {
   const inactive = "border-white/10 bg-white/[0.03]";
   const live = "border-cyan-300/30 bg-cyan-300/[0.06]";
@@ -1618,7 +1925,7 @@ function getPipelineBottleneck(runtimeStatus: LocalRuntimeStatus | null) {
   return {
     severity: "clear",
     label: "No active bottleneck",
-    detail: "Inbox and processing are empty. The loop and agents are visible, but no task is currently moving.",
+    detail: "Inbox and processing are empty. This is an idle queue state when the loop is visible, not a runtime crash.",
     className: commandStatusStyles.succeeded,
   };
 }

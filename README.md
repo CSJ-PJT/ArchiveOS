@@ -31,6 +31,46 @@ The Event Timeline is a read-only PM visibility surface. It calls `GET /api/runt
 
 ArchiveOS does not create a separate event bus yet, and execution control is still intentionally disabled. Timeline entries are summaries for PM context, not full builder/reviewer logs.
 
+## MVP stabilization
+
+ArchiveOS now includes a read-only Data Consistency panel and E2E Test Readiness checklist. The goal is to prepare for a real PM visibility test by confirming that the dashboard, backend runtime endpoint, Supabase reads, and MCP queue files are all describing the same workflow state.
+
+The consistency panel does not start tasks, run MCP commands, call OpenAI, or control Codex. It only displays:
+
+- MCP queue counts from the runtime source
+- backend API queue counts from `GET /api/local-runtime/status`
+- frontend-displayed queue counts
+- latest builder and reviewer result filenames
+- `command_runs` reachability
+- `work_logs` / decision reachability
+
+Manual E2E visibility test:
+
+```bash
+cd /c/Users/dan18/Documents/Codex/2026-05-20/create-a-new-project-named-archiveos/ArchiveOS
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools/runtime/status.ps1"
+curl http://127.0.0.1:4000/health
+curl http://127.0.0.1:4000/api/local-runtime/status
+npm run build
+cd backend && npm run typecheck && npm run build
+```
+
+Then open:
+
+```bash
+start http://127.0.0.1:5173/
+```
+
+Success looks like:
+
+- ArchiveOS frontend and backend are running.
+- The Data Consistency panel shows queue counts without errors.
+- `command_runs` and `work_logs` reachability are not `error`.
+- The E2E checklist distinguishes an empty `inbox=0` idle state from a loop failure.
+- If the reviewer verdict is `stop` because of a Codex usage limit, the dashboard says it is a usage-limit stop rather than a runtime crash.
+- Latest builder/reviewer filenames are shown when MCP result files exist.
+
 ## Setup
 
 1. Install dependencies:
