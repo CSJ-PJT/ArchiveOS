@@ -300,6 +300,7 @@ function Dashboard({
   const [backendReachability, setBackendReachability] = useState<ConsistencyStatus>("unknown");
   const [commandRunsReachability, setCommandRunsReachability] = useState<ConsistencyStatus>("unknown");
   const [consistencyError, setConsistencyError] = useState<string | null>(null);
+  const [focusMode, setFocusMode] = useState(false);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
 
   useEffect(() => {
@@ -373,6 +374,22 @@ function Dashboard({
 
   return (
     <div className="grid gap-5">
+      <button
+        className="fixed right-4 top-1/2 z-40 flex -translate-y-1/2 flex-col items-center gap-1 rounded-l-md border border-cyan-300/30 border-r-cyan-300/60 bg-[#07121d]/95 px-3 py-4 text-xs font-semibold text-cyan-100 shadow-2xl shadow-cyan-950/40 backdrop-blur transition hover:bg-cyan-300/15 focus:outline-none focus:ring-2 focus:ring-cyan-300/60"
+        onClick={() => setFocusMode((current) => !current)}
+        title={
+          focusMode
+            ? "Show all PM dashboard panels"
+            : "Show only Current Workflow State and Live Pipeline Map"
+        }
+        type="button"
+      >
+        <span className="text-[0.65rem] uppercase tracking-[0.16em] text-cyan-300">
+          {focusMode ? "Maximize" : "Minimize"}
+        </span>
+        <span>{focusMode ? "Full" : "Focus"}</span>
+      </button>
+
       <RuntimeSummary
         runtimeStatus={runtimeStatus}
         runtimeError={runtimeError}
@@ -383,6 +400,8 @@ function Dashboard({
 
       <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
 
+      {focusMode ? null : (
+        <>
       <EventTimeline
         events={runtimeEvents}
         error={runtimeEventsError}
@@ -527,6 +546,8 @@ function Dashboard({
       <Panel title="Recorded Decisions">
         <LogList logs={data.decisions.slice(0, 4)} />
       </Panel>
+        </>
+      )}
     </div>
   );
 }
@@ -665,9 +686,6 @@ function NowWorkingPanel({
         <RuntimeMetric label="Latest result" value={runtimeStatus.latest.outbox?.name ?? "none"} copyable />
         <RuntimeMetric label="Latest review verdict" value={runtimeStatus.latest_details.reviewer?.verdict ?? "none"} />
       </div>
-      <p className="mt-3 rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-400">
-        {runtimeStatus.judgement}
-      </p>
     </div>
   );
 }
