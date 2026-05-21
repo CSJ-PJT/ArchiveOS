@@ -44,6 +44,8 @@ type PipelineStage = {
   dotClassName: string;
 };
 
+type PipelineConnectorState = "idle" | "current" | "success";
+
 type ConsistencyStatus = "matched" | "missing" | "stale" | "unknown" | "error";
 
 const taskStatuses: TaskStatus[] = ["todo", "in_progress", "review", "done", "failed"];
@@ -764,6 +766,7 @@ function PipelineOverview({
   runtimeError: string | null;
 }) {
   const stages = getPipelineStages(runtimeStatus);
+  const activeConnectorIndex = getActivePipelineConnectorIndex(runtimeStatus);
   const bottleneck = getPipelineBottleneck(runtimeStatus);
   const liveState = getLiveLoopState(runtimeStatus);
 
@@ -794,11 +797,13 @@ function PipelineOverview({
                 <div key={stage.id} className="contents">
                   <PipelineNode stage={stage} />
                   {index < stages.length - 1 ? (
-                    <PipelineConnector active={stage.pulse && Boolean(stages[index + 1]?.pulse)} />
+                    <PipelineConnector state={getPipelineConnectorState(index, activeConnectorIndex, stages)} />
                   ) : null}
                 </div>
               ))}
             </div>
+
+            <CurrentHandoffLine runtimeStatus={runtimeStatus} />
           </div>
 
           <div className="rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-400">
@@ -809,6 +814,43 @@ function PipelineOverview({
         <EmptyState title="Loading pipeline" detail="Reading live MCP queue and local process state." />
       )}
     </Panel>
+  );
+}
+
+function CurrentHandoffLine({ runtimeStatus }: { runtimeStatus: LocalRuntimeStatus }) {
+  const hasCurrentWork = runtimeStatus.queue.processing > 0 && Boolean(runtimeStatus.active_task);
+  const previousSucceeded = runtimeStatus.latest_details.builder?.status === "done";
+
+  return (
+    <div className="mt-4 rounded-md border border-white/10 bg-black/20 p-3">
+      <div className="grid gap-3 lg:grid-cols-[1fr_8rem_1fr] lg:items-center">
+        <div className={`rounded border p-3 ${previousSucceeded ? "border-emerald-300/30 bg-emerald-300/[0.06]" : "border-white/10 bg-white/[0.03]"}`}>
+          <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Previous</p>
+          <CompactValue
+            value={runtimeStatus.latest.outbox?.name ?? "No previous builder result"}
+            className="mt-2 text-sm font-medium text-slate-200"
+            copyable={Boolean(runtimeStatus.latest.outbox?.name)}
+          />
+        </div>
+        <div className="hidden lg:block" title={hasCurrentWork ? "Current handoff active" : "No active handoff"}>
+          <div
+            className={`h-2 w-full ${
+              hasCurrentWork && previousSucceeded
+                ? "pipeline-flow-line pipeline-flow-line-current"
+                : "rounded-full bg-white/[0.07]"
+            }`}
+          />
+        </div>
+        <div className={`rounded border p-3 ${hasCurrentWork ? "border-cyan-300/30 bg-cyan-300/[0.06]" : "border-white/10 bg-white/[0.03]"}`}>
+          <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Current</p>
+          <CompactValue
+            value={runtimeStatus.active_task ?? "No active processing task"}
+            className="mt-2 text-sm font-medium text-slate-200"
+            copyable={Boolean(runtimeStatus.active_task)}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1128,14 +1170,16 @@ function PipelineNode({ stage }: { stage: PipelineStage }) {
   );
 }
 
-function PipelineConnector({ active }: { active: boolean }) {
+function PipelineConnector({ state }: { state: PipelineConnectorState }) {
   return (
     <div className="hidden min-w-8 items-center lg:flex" aria-hidden="true">
       <div
         className={`h-2 w-full ${
-          active
-            ? "pipeline-flow-line"
-            : "rounded-full bg-white/[0.07]"
+          state === "current"
+            ? "pipeline-flow-line pipeline-flow-line-current"
+            : state === "success"
+              ? "pipeline-flow-line pipeline-flow-line-success"
+              : "rounded-full bg-white/[0.07]"
         }`}
       />
     </div>
@@ -1819,11 +1863,18 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
   const reviewerVerdict = runtimeStatus.latest_details.reviewer?.verdict ?? "none";
   const hasPendingInput = runtimeStatus.queue.inbox > 0;
   const hasProcessing = runtimeStatus.queue.processing > 0;
+  const loopRunning = Boolean(runtimeStatus.processes.loop);
+  const loopWaiting = loopRunning && !hasPendingInput && !hasProcessing;
   const reviewerStopped = reviewerVerdict === "stop";
+  const builderSucceeded = runtimeStatus.latest_details.builder?.status === "done";
+  const reviewerApproved = reviewerVerdict === "approve_next";
   const resultNewerThanReview =
     runtimeStatus.latest.outbox?.updated_at &&
     runtimeStatus.latest.review?.updated_at &&
     runtimeStatus.latest.outbox.updated_at > runtimeStatus.latest.review.updated_at;
+
+  const waitingClass = loopWaiting ? live : inactive;
+  const waitingDot = loopWaiting ? "bg-cyan-300" : "bg-slate-500";
 
   return [
     {
@@ -1833,9 +1884,9 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
       value: String(runtimeStatus.queue.inbox),
       detail: hasPendingInput ? "Queued work is waiting for the loop." : "No queued input.",
       active: hasPendingInput,
-      pulse: hasPendingInput,
-      className: hasPendingInput ? warning : inactive,
-      dotClassName: hasPendingInput ? "bg-amber-300" : "bg-slate-500",
+      pulse: hasPendingInput || loopWaiting,
+      className: hasPendingInput ? live : waitingClass,
+      dotClassName: hasPendingInput ? "bg-cyan-300" : waitingDot,
     },
     {
       id: "loop",
@@ -1845,10 +1896,10 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
       detail: runtimeStatus.processes.loop
         ? `PID ${runtimeStatus.processes.loop.pid}`
         : "Loop process not detected.",
-      active: Boolean(runtimeStatus.processes.loop),
-      pulse: Boolean(runtimeStatus.processes.loop),
-      className: runtimeStatus.processes.loop ? live : stopped,
-      dotClassName: runtimeStatus.processes.loop ? "bg-cyan-300" : "bg-rose-300",
+      active: loopRunning,
+      pulse: loopRunning,
+      className: loopRunning ? live : stopped,
+      dotClassName: loopRunning ? "bg-cyan-300" : "bg-rose-300",
     },
     {
       id: "builder",
@@ -1859,9 +1910,9 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
         ? `PID ${runtimeStatus.processes.implementer.pid}${runtimeStatus.active_task ? ` / ${runtimeStatus.active_task}` : ""}`
         : "Implementer process not detected.",
       active: hasProcessing,
-      pulse: hasProcessing || Boolean(runtimeStatus.processes.implementer),
-      className: hasProcessing ? live : runtimeStatus.processes.implementer ? inactive : stopped,
-      dotClassName: hasProcessing ? "bg-cyan-300" : runtimeStatus.processes.implementer ? "bg-slate-400" : "bg-rose-300",
+      pulse: hasProcessing || loopWaiting,
+      className: hasProcessing || loopWaiting ? live : runtimeStatus.processes.implementer ? inactive : stopped,
+      dotClassName: hasProcessing || loopWaiting ? "bg-cyan-300" : runtimeStatus.processes.implementer ? "bg-slate-400" : "bg-rose-300",
     },
     {
       id: "result",
@@ -1870,9 +1921,9 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
       value: String(runtimeStatus.queue.outbox),
       detail: runtimeStatus.latest.outbox?.name ?? "No builder result.",
       active: Boolean(runtimeStatus.latest.outbox),
-      pulse: hasProcessing && Boolean(runtimeStatus.latest.outbox),
-      className: runtimeStatus.latest_details.builder?.status === "done" ? success : inactive,
-      dotClassName: runtimeStatus.latest_details.builder?.status === "done" ? "bg-emerald-300" : "bg-slate-500",
+      pulse: builderSucceeded || loopWaiting,
+      className: builderSucceeded ? success : waitingClass,
+      dotClassName: builderSucceeded ? "bg-emerald-300" : waitingDot,
     },
     {
       id: "reviewer",
@@ -1885,9 +1936,13 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
           ? `Reviewer PID ${runtimeStatus.processes.reviewer.pid}`
           : "Reviewer process not detected.",
       active: Boolean(runtimeStatus.processes.reviewer_bridge || runtimeStatus.processes.reviewer),
-      pulse: Boolean(runtimeStatus.processes.reviewer_bridge || runtimeStatus.processes.reviewer),
-      className: resultNewerThanReview ? warning : runtimeStatus.processes.reviewer_bridge || runtimeStatus.processes.reviewer ? live : stopped,
-      dotClassName: resultNewerThanReview ? "bg-amber-300" : runtimeStatus.processes.reviewer_bridge || runtimeStatus.processes.reviewer ? "bg-cyan-300" : "bg-rose-300",
+      pulse: resultNewerThanReview || loopWaiting || Boolean(runtimeStatus.processes.reviewer_bridge || runtimeStatus.processes.reviewer),
+      className: resultNewerThanReview
+        ? warning
+        : loopWaiting || runtimeStatus.processes.reviewer_bridge || runtimeStatus.processes.reviewer
+          ? live
+          : stopped,
+      dotClassName: resultNewerThanReview ? "bg-amber-300" : loopWaiting || runtimeStatus.processes.reviewer_bridge || runtimeStatus.processes.reviewer ? "bg-cyan-300" : "bg-rose-300",
     },
     {
       id: "decision",
@@ -1900,11 +1955,44 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
           ? "Reviewer stopped. PM decision is needed."
           : "No next task queued by reviewer.",
       active: !reviewerStopped && Boolean(runtimeStatus.latest_details.reviewer?.next_task_id),
-      pulse: !reviewerStopped && Boolean(runtimeStatus.latest_details.reviewer?.next_task_id),
-      className: reviewerStopped ? stopped : runtimeStatus.latest_details.reviewer?.next_task_id ? success : inactive,
-      dotClassName: reviewerStopped ? "bg-rose-300" : runtimeStatus.latest_details.reviewer?.next_task_id ? "bg-emerald-300" : "bg-slate-500",
+      pulse: reviewerApproved || loopWaiting,
+      className: reviewerStopped ? stopped : reviewerApproved ? success : waitingClass,
+      dotClassName: reviewerStopped ? "bg-rose-300" : reviewerApproved ? "bg-emerald-300" : waitingDot,
     },
   ];
+}
+
+function getActivePipelineConnectorIndex(runtimeStatus: LocalRuntimeStatus | null) {
+  if (!runtimeStatus) return null;
+
+  if (runtimeStatus.queue.processing > 0) return 1;
+  if (
+    runtimeStatus.latest.outbox?.updated_at &&
+    runtimeStatus.latest.review?.updated_at &&
+    runtimeStatus.latest.outbox.updated_at > runtimeStatus.latest.review.updated_at
+  ) {
+    return 3;
+  }
+  if (runtimeStatus.queue.inbox > 0) return 0;
+  if (runtimeStatus.processes.loop && runtimeStatus.queue.inbox === 0 && runtimeStatus.queue.processing === 0) return null;
+
+  return null;
+}
+
+function getPipelineConnectorState(
+  index: number,
+  activeConnectorIndex: number | null,
+  stages: PipelineStage[],
+): PipelineConnectorState {
+  if (index === activeConnectorIndex) return "current";
+
+  const left = stages[index];
+  const right = stages[index + 1];
+  if (left?.dotClassName.includes("emerald") && right?.dotClassName.includes("emerald")) {
+    return "success";
+  }
+
+  return "idle";
 }
 
 function getPipelineBottleneck(runtimeStatus: LocalRuntimeStatus | null) {
