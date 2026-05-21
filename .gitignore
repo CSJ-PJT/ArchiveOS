@@ -5,3 +5,6 @@ dist
 .DS_Store
 *.tsbuildinfo
 *.log
+tools/runtime/runtime.config.json
+tools/runtime/logs/
+tools/runtime/pids/
