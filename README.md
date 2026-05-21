@@ -140,6 +140,43 @@ Derived runtime events:
 curl http://localhost:4000/api/runtime/events/recent
 ```
 
+## Local Runtime Orchestrator
+
+ArchiveOS includes local PowerShell scripts for starting, stopping, and inspecting non-interactive runtime processes without opening many Git Bash terminals. This is a developer tool only; the ArchiveOS UI remains read-only and does not expose process control.
+
+Copy the example config, then edit local paths and manual Codex PID placeholders:
+
+```bash
+cp tools/runtime/runtime.config.example.json tools/runtime/runtime.config.json
+notepad tools/runtime/runtime.config.json
+```
+
+Start configured processes from Git Bash:
+
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools/runtime/start-all.ps1"
+```
+
+Inspect status:
+
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools/runtime/status.ps1"
+```
+
+Stop processes started by the orchestrator:
+
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools/runtime/stop-all.ps1"
+```
+
+The orchestrator can manage the ArchiveOS frontend, ArchiveOS backend, MCP queue loop, reviewer bridge, and an optional queue watcher placeholder. Interactive Codex implementer and reviewer sessions remain manual for now and should still be detected through PID hints such as `CODEX_IMPLEMENTER_PID` and `CODEX_REVIEWER_PID`.
+
+Local files are ignored by git:
+
+- `tools/runtime/runtime.config.json`
+- `tools/runtime/logs/`
+- `tools/runtime/pids/`
+
 ## Project structure
 
 - `src/lib/supabase.ts` creates the Supabase browser client.
@@ -150,3 +187,4 @@ curl http://localhost:4000/api/runtime/events/recent
 - `backend/src/server.ts` exposes the minimal Express API.
 - `backend/src/lib/supabaseAdmin.ts` creates the server-only Supabase admin client.
 - `backend/src/lib/localRuntime.ts` reads local Codex loop status without process control.
+- `tools/runtime/` contains local-only process orchestration scripts.

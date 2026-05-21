@@ -1,0 +1,84 @@
+{
+  "processes": [
+    {
+      "id": "archiveos-frontend",
+      "name": "ArchiveOS frontend",
+      "cwd": "C:\\Users\\dan18\\Documents\\Codex\\2026-05-20\\create-a-new-project-named-archiveos\\ArchiveOS",
+      "command": "npm.cmd",
+      "args": ["run", "dev", "--", "--host", "127.0.0.1"],
+      "port": 5173
+    },
+    {
+      "id": "archiveos-backend",
+      "name": "ArchiveOS backend",
+      "cwd": "C:\\Users\\dan18\\Documents\\Codex\\2026-05-20\\create-a-new-project-named-archiveos\\ArchiveOS\\backend",
+      "command": "npm.cmd",
+      "args": ["run", "dev"],
+      "port": 4000
+    },
+    {
+      "id": "mcp-queue-loop",
+      "name": "MCP queue loop",
+      "cwd": "C:\\Users\\dan18\\health-sync-daily\\tools\\mcp-codex-bridge",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "C:\\Users\\dan18\\health-sync-daily\\tools\\mcp-codex-bridge\\Run-ModularLoop.ps1",
+        "-RepoPath",
+        "C:\\Users\\dan18\\health-sync-daily",
+        "-Branch",
+        "plan",
+        "-TargetPid",
+        "MANUAL_IMPLEMENTER_PID",
+        "-ImplementerPid",
+        "MANUAL_IMPLEMENTER_PID",
+        "-ReviewerName",
+        "codex-reviewer",
+        "-MaxAutoTasks",
+        "1",
+        "-MaxQueueBacklog",
+        "1",
+        "-PollMilliseconds",
+        "500",
+        "-CodexHome",
+        "C:\\Users\\dan18\\AppData\\Local\\Temp\\codex-loop-home"
+      ]
+    },
+    {
+      "id": "reviewer-bridge",
+      "name": "Reviewer bridge",
+      "cwd": "C:\\Users\\dan18\\health-sync-daily\\tools\\mcp-codex-bridge",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "C:\\Users\\dan18\\health-sync-daily\\tools\\mcp-codex-bridge\\Run-ReviewerBridge.ps1",
+        "-RepoPath",
+        "C:\\Users\\dan18\\health-sync-daily",
+        "-ReviewerName",
+        "codex-reviewer",
+        "-PollMilliseconds",
+        "500"
+      ]
+    },
+    {
+      "id": "queue-watcher",
+      "name": "Queue watcher placeholder",
+      "cwd": "C:\\Users\\dan18\\health-sync-daily\\tools\\mcp-codex-bridge",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Write-Host 'Queue watcher placeholder. Replace with a real watcher script when ready.'; Start-Sleep -Seconds 3600"
+      ],
+      "enabled": false
+    }
+  ]
+}
