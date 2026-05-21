@@ -12,7 +12,8 @@ Phase 3 is intentionally a read-only PM visibility and recording dashboard, not 
 - Frontend Supabase reads for the current dashboard
 - Minimal backend API for server-side work log writes
 - Command Center UI for recorded quick actions, typed command intent, and command history
-- PM dashboard panels for workflow state, builder/reviewer placeholders, decisions, stale warnings, and screenshot freshness placeholders
+- PM dashboard panels for workflow state, actual MCP builder/reviewer results, decisions, stale warnings, and screenshot freshness zero-states
+- Event Timeline derived from live runtime state, backend judgement, and non-seed Supabase command/decision records
 
 No authentication, OpenAI API calls, GitHub webhooks, or MCP integrations are included yet.
 
@@ -23,6 +24,12 @@ The dashboard includes a Command Center panel with recorded quick actions, a typ
 It also includes a read-only Codex Runtime panel for local visibility into the detected loop process, implementer Codex process, reviewer bridge, and queue counts. This panel does not control Codex and does not execute arbitrary commands.
 
 Local Diagnostics are separated from command recording and are marked as allowlisted checks. ArchiveOS never accepts arbitrary shell commands from the UI.
+
+## Event Timeline
+
+The Event Timeline is a read-only PM visibility surface. It calls `GET /api/runtime/events/recent` and derives normalized events from existing sources only: MCP queue/runtime files, latest builder and reviewer result payloads, backend runtime judgement, and non-seed Supabase `command_runs` or decision `work_logs`.
+
+ArchiveOS does not create a separate event bus yet, and execution control is still intentionally disabled. Timeline entries are summaries for PM context, not full builder/reviewer logs.
 
 ## Setup
 
@@ -109,7 +116,7 @@ Command endpoints:
 curl http://localhost:4000/api/commands/recent
 curl -X POST http://localhost:4000/api/commands \
   -H "Content-Type: application/json" \
-  -d '{"command":"review latest PR","command_type":"typed"}'
+  -d '{"command":"summarize current queue","command_type":"typed"}'
 ```
 
 Local action endpoints:
@@ -125,6 +132,12 @@ Local runtime status:
 
 ```bash
 curl http://localhost:4000/api/local-runtime/status
+```
+
+Derived runtime events:
+
+```bash
+curl http://localhost:4000/api/runtime/events/recent
 ```
 
 ## Project structure

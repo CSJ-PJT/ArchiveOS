@@ -70,7 +70,33 @@ export type LocalRuntimeStatus = {
     outbox: LocalRuntimeQueueFile | null;
     review: LocalRuntimeQueueFile | null;
   };
+  latest_details: {
+    builder: {
+      task_id: string | null;
+      status: string | null;
+      exit_code: number | null;
+      finished_at: string | null;
+      summary: string | null;
+    } | null;
+    reviewer: {
+      reviewed_task_id: string | null;
+      verdict: string | null;
+      reviewed_at: string | null;
+      summary: string | null;
+      next_task_id: string | null;
+    } | null;
+  };
   judgement: string;
+};
+
+export type RuntimeEvent = {
+  id: string;
+  type: "queue" | "builder" | "reviewer" | "command" | "decision" | "warning";
+  title: string;
+  description: string;
+  status: "info" | "success" | "warning" | "error";
+  source: "mcp" | "supabase" | "backend";
+  created_at: string;
 };
 
 export async function getBackendHealth() {
@@ -115,6 +141,11 @@ export async function runLocalAction(input: { project_id: string; action: LocalA
 
 export async function getLocalRuntimeStatus() {
   const response = await request<ApiEnvelope<LocalRuntimeStatus>>("/api/local-runtime/status");
+  return response.data;
+}
+
+export async function getRecentRuntimeEvents() {
+  const response = await request<ApiEnvelope<RuntimeEvent[]>>("/api/runtime/events/recent");
   return response.data;
 }
 
