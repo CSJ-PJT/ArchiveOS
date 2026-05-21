@@ -24,6 +24,16 @@ const localActionTypes = new Set([
   "backend_typecheck",
   "backend_build",
 ]);
+const seedWorkLogIds = [
+  "10000000-0000-4000-8000-000000000001",
+  "10000000-0000-4000-8000-000000000002",
+  "10000000-0000-4000-8000-000000000003",
+  "10000000-0000-4000-8000-000000000004",
+];
+const seedCommandRunIds = [
+  "20000000-0000-4000-8000-000000000001",
+  "20000000-0000-4000-8000-000000000002",
+];
 
 app.use(
   cors({
@@ -50,6 +60,7 @@ app.get("/api/work-logs/recent", async (_request, response) => {
   const { data, error } = await supabaseAdmin
     .from("work_logs")
     .select("*, task:tasks(title), agent:agents(name)")
+    .not("id", "in", `(${seedWorkLogIds.join(",")})`)
     .order("created_at", { ascending: false })
     .limit(20);
 
@@ -87,6 +98,7 @@ app.get("/api/commands/recent", async (_request, response) => {
   const { data, error } = await supabaseAdmin
     .from("command_runs")
     .select("*")
+    .not("id", "in", `(${seedCommandRunIds.join(",")})`)
     .order("created_at", { ascending: false })
     .limit(20);
 
@@ -174,6 +186,15 @@ app.get("/api/local-runtime/status", async (_request, response) => {
   }
 });
 
+app.get("/api/runtime/events/recent", async (_request, response) => {
+  try {
+    const events = await getRecentRuntimeEvents();
+    response.json({ data: events });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch runtime events." });
+  }
+});
+
 app.use(
   (
     error: Error,
@@ -228,6 +249,16 @@ type LocalActionResult = {
   exitCode: number;
 };
 
+type RuntimeEvent = {
+  id: string;
+  type: "queue" | "builder" | "reviewer" | "command" | "decision" | "warning";
+  title: string;
+  description: string;
+  status: "info" | "success" | "warning" | "error";
+  source: "mcp" | "supabase" | "backend";
+  created_at: string;
+};
+
 type ValidationResult =
   | { ok: true; value: WorkLogBody }
   | { ok: false; error: string };
@@ -274,6 +305,125 @@ function validateWorkLogBody(body: unknown): ValidationResult {
   };
 }
 
+async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
+  const checkedAt = new Date().toISOString();
+  const [runtime, commandsResult, decisionsResult] = await Promise.all([
+    getLocalRuntimeStatus(),
+    supabaseAdmin
+      .from("command_runs")
+      .select("id, command, command_type, status, result, created_at")
+      .not("id", "in", `(${seedCommandRunIds.join(",")})`)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    supabaseAdmin
+      .from("work_logs")
+      .select("id, log_type, content, created_at, task:tasks(title), agent:agents(name)")
+      .eq("log_type", "decision")
+      .not("id", "in", `(${seedWorkLogIds.join(",")})`)
+      .order("created_at", { ascending: false })
+      .limit(5),
+  ]);
+
+  const events: RuntimeEvent[] = [];
+
+  events.push({
+    id: `queue-${runtime.checked_at}`,
+    type: "queue",
+    title: runtime.status === "working" ? "Queue is processing" : "Queue snapshot updated",
+    description: `Inbox ${runtime.queue.inbox}, processing ${runtime.queue.processing}, outbox ${runtime.queue.outbox}, reviews ${runtime.queue.reviews}.`,
+    status: runtime.status === "unknown" ? "warning" : "info",
+    source: "mcp",
+    created_at: runtime.checked_at,
+  });
+
+  if (runtime.latest.processing) {
+    events.push({
+      id: `processing-${runtime.latest.processing.name}`,
+      type: "queue",
+      title: "Processing task active",
+      description: runtime.active_task ?? runtime.latest.processing.name,
+      status: runtime.processes.implementer ? "info" : "warning",
+      source: "mcp",
+      created_at: runtime.latest.processing.updated_at,
+    });
+  }
+
+  if (runtime.latest_details.builder) {
+    const builder = runtime.latest_details.builder;
+    events.push({
+      id: `builder-${builder.task_id ?? runtime.latest.outbox?.name ?? builder.finished_at ?? checkedAt}`,
+      type: "builder",
+      title: builder.status === "done" ? "Builder result completed" : "Builder result recorded",
+      description: summarizeEventDescription(builder.summary ?? runtime.latest.outbox?.name ?? "No builder summary captured."),
+      status: builder.status === "done" ? "success" : builder.status === "failed" ? "error" : "info",
+      source: "mcp",
+      created_at: builder.finished_at ?? runtime.latest.outbox?.updated_at ?? checkedAt,
+    });
+  }
+
+  if (runtime.latest_details.reviewer) {
+    const reviewer = runtime.latest_details.reviewer;
+    events.push({
+      id: `reviewer-${reviewer.reviewed_task_id ?? runtime.latest.review?.name ?? reviewer.reviewed_at ?? checkedAt}`,
+      type: "reviewer",
+      title: reviewer.verdict === "stop" ? "Reviewer stopped pipeline" : "Reviewer decision recorded",
+      description: summarizeEventDescription(
+        reviewer.next_task_id
+          ? `${reviewer.summary ?? "Reviewer queued next task."} Next: ${reviewer.next_task_id}`
+          : reviewer.summary ?? runtime.latest.review?.name ?? "No reviewer summary captured.",
+      ),
+      status: reviewer.verdict === "stop" ? "warning" : reviewer.verdict === "request_changes" ? "error" : "success",
+      source: "mcp",
+      created_at: reviewer.reviewed_at ?? runtime.latest.review?.updated_at ?? checkedAt,
+    });
+  }
+
+  if (runtime.judgement) {
+    events.push({
+      id: `judgement-${runtime.checked_at}`,
+      type: runtime.status === "working" ? "queue" : "warning",
+      title: runtime.status === "working" ? "Runtime judgement: work in progress" : "Runtime judgement",
+      description: runtime.judgement,
+      status: runtime.status === "working" ? "info" : runtime.queue.processing > 0 ? "warning" : "info",
+      source: "backend",
+      created_at: runtime.checked_at,
+    });
+  }
+
+  for (const command of commandsResult.data ?? []) {
+    events.push({
+      id: `command-${command.id}`,
+      type: "command",
+      title: `Command recorded: ${command.command}`,
+      description: summarizeEventDescription(command.result ?? command.command_type ?? "Command intent recorded."),
+      status: command.status === "failed" ? "error" : command.status === "succeeded" ? "success" : "info",
+      source: "supabase",
+      created_at: command.created_at,
+    });
+  }
+
+  for (const decision of decisionsResult.data ?? []) {
+    events.push({
+      id: `decision-${decision.id}`,
+      type: "decision",
+      title: "Decision recorded",
+      description: summarizeEventDescription(decision.content),
+      status: "info",
+      source: "supabase",
+      created_at: decision.created_at,
+    });
+  }
+
+  return events
+    .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
+    .slice(0, 20);
+}
+
+function summarizeEventDescription(value: string) {
+  const clean = value.replace(/\s+/g, " ").trim();
+  return clean.length > 180 ? `${clean.slice(0, 180)}...` : clean;
+}
+
 function validateCommandBody(body: unknown): CommandValidationResult {
   if (!body || typeof body !== "object") {
     return { ok: false, error: "Request body must be a JSON object." };
@@ -316,7 +466,7 @@ function validateCommandBody(body: unknown): CommandValidationResult {
       result:
         candidate.result ??
         (status === "succeeded"
-          ? "Mock command recorded as succeeded. Real execution is not enabled yet."
+          ? "Command intent recorded as succeeded. Real execution is not enabled yet."
           : "Command recorded as pending. Real execution is not enabled yet."),
     },
   };

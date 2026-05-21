@@ -99,15 +99,15 @@ insert into public.command_runs (id, command, command_type, status, result, crea
 values
   (
     '20000000-0000-4000-8000-000000000001',
-    'Add Decision',
+    'Record Decision',
     'add_decision',
     'succeeded',
-    'Mock command recorded. Real execution is not enabled yet.',
+    'Command intent recorded. Real execution is not enabled yet.',
     now() - interval '45 minutes'
   ),
   (
     '20000000-0000-4000-8000-000000000002',
-    'review latest PR',
+    'summarize current queue',
     'typed',
     'pending',
     'Command recorded as pending. Real execution is not enabled yet.',

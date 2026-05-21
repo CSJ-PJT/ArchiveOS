@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readdir, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 type ProcessSnapshot = {
@@ -14,6 +14,22 @@ type ProcessSnapshot = {
 type QueueFile = {
   name: string;
   updated_at: string;
+};
+
+type BuilderResultDetails = {
+  task_id: string | null;
+  status: string | null;
+  exit_code: number | null;
+  finished_at: string | null;
+  summary: string | null;
+};
+
+type ReviewerResultDetails = {
+  reviewed_task_id: string | null;
+  verdict: string | null;
+  reviewed_at: string | null;
+  summary: string | null;
+  next_task_id: string | null;
 };
 
 export type LocalRuntimeStatus = {
@@ -38,21 +54,30 @@ export type LocalRuntimeStatus = {
     outbox: QueueFile | null;
     review: QueueFile | null;
   };
+  latest_details: {
+    builder: BuilderResultDetails | null;
+    reviewer: ReviewerResultDetails | null;
+  };
   judgement: string;
 };
 
 export async function getLocalRuntimeStatus(): Promise<LocalRuntimeStatus> {
   const checkedAt = new Date().toISOString();
-  const processes = await readCodexProcesses();
+  const processes = await readCodexProcesses().catch(() => []);
   const loop = findLoopProcess(processes);
-  const implementer = findImplementerProcess(processes, loop?.pid ?? null);
-  const reviewer = findReviewerProcess(processes);
+  const implementer =
+    findImplementerProcess(processes, loop?.pid ?? null) ??
+    (await readConfiguredProcess(process.env.CODEX_IMPLEMENTER_PID, "codex.exe", "configured implementer pid"));
+  const reviewer =
+    findReviewerProcess(processes) ??
+    (await readConfiguredProcess(process.env.CODEX_REVIEWER_PID, "codex.exe", "configured reviewer pid"));
   const reviewerBridge = findReviewerBridgeProcess(processes);
   const configuredQueuePath = process.env.MCP_QUEUE_PATH?.trim() || null;
   const configuredRepoPath = process.env.MCP_REPO_PATH?.trim() || null;
   const repoPath = configuredRepoPath ?? (loop ? extractRepoPath(loop.commandLine) : null);
   const queuePath = configuredQueuePath ?? (repoPath ? path.join(repoPath, "tools", "mcp-codex-bridge", "queue") : null);
   const queue = await readQueueSnapshot(queuePath);
+  const latestDetails = await readLatestDetails(queuePath, queue.latest.outbox, queue.latest.review);
   const activeTask = queue.latest.processing ? stripTaskExtension(queue.latest.processing.name) : null;
   const status = queue.counts.processing > 0 && implementer ? "working" : queue.counts.processing > 0 ? "unknown" : "idle";
 
@@ -74,6 +99,7 @@ export async function getLocalRuntimeStatus(): Promise<LocalRuntimeStatus> {
       reviewer_bridge: reviewerBridge,
     },
     latest: queue.latest,
+    latest_details: latestDetails,
     judgement: buildJudgement(
       status,
       queue.counts.processing,
@@ -92,7 +118,7 @@ async function readCodexProcesses(): Promise<ProcessSnapshot[]> {
   }
 
   const script = [
-    "$items = Get-CimInstance Win32_Process | Where-Object {",
+    "$items = Get-CimInstance Win32_Process -Filter \"Name = 'codex.exe' OR Name = 'node.exe' OR Name = 'powershell.exe' OR Name = 'pwsh.exe' OR Name = 'bash.exe'\" | Where-Object {",
     "  $_.CommandLine -match 'Run-ModularLoop|run-modular-loop|gpt-session-bridge|@openai\\\\codex|codex.exe'",
     "} | ForEach-Object {",
     "  $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue",
@@ -137,7 +163,7 @@ function runPowerShell(script: string): Promise<string> {
       settled = true;
       child.kill("SIGTERM");
       reject(new Error("Timed out while reading local runtime status."));
-    }, 10000);
+    }, 20000);
 
     child.stdout.on("data", (chunk: Buffer) => {
       stdout += chunk.toString();
@@ -175,6 +201,44 @@ function runPowerShell(script: string): Promise<string> {
   });
 }
 
+async function readConfiguredProcess(rawPid: string | undefined, name: string, commandLine: string) {
+  if (!rawPid) {
+    return null;
+  }
+
+  const pid = Number(rawPid);
+
+  if (!Number.isInteger(pid)) {
+    return null;
+  }
+
+  const script = [
+    `$p = Get-Process -Id ${pid} -ErrorAction SilentlyContinue`,
+    "if ($p) {",
+    "  [PSCustomObject]@{",
+    `    pid = ${pid}`,
+    `    name = "${name}"`,
+    "    parentProcessId = $null",
+    `    commandLine = "${commandLine}"`,
+    "    cpu = $p.CPU",
+    "    startTime = $p.StartTime.ToUniversalTime().ToString('o')",
+    "  } | ConvertTo-Json -Depth 4 -Compress",
+    "}",
+  ].join("\n");
+
+  try {
+    const output = await runPowerShell(script);
+
+    if (!output.trim()) {
+      return null;
+    }
+
+    return JSON.parse(output) as ProcessSnapshot;
+  } catch {
+    return null;
+  }
+}
+
 async function readQueueSnapshot(queuePath: string | null) {
   const empty = {
     counts: { inbox: 0, processing: 0, outbox: 0, reviews: 0 },
@@ -209,6 +273,72 @@ async function readQueueSnapshot(queuePath: string | null) {
       review: reviews[0] ?? null,
     },
   };
+}
+
+async function readLatestDetails(
+  queuePath: string | null,
+  outbox: QueueFile | null,
+  review: QueueFile | null,
+) {
+  if (!queuePath) {
+    return { builder: null, reviewer: null };
+  }
+
+  const [builder, reviewer] = await Promise.all([
+    outbox ? readBuilderResult(path.join(queuePath, "outbox", outbox.name)) : null,
+    review ? readReviewerResult(path.join(queuePath, "reviews", review.name)) : null,
+  ]);
+
+  return { builder, reviewer };
+}
+
+async function readBuilderResult(filePath: string): Promise<BuilderResultDetails | null> {
+  try {
+    const payload = JSON.parse(await readFile(filePath, "utf-8")) as {
+      task_id?: string;
+      status?: string;
+      finished_at?: string;
+      codex?: {
+        exit_code?: number;
+        stdout?: string;
+        stderr?: string;
+      };
+    };
+
+    return {
+      task_id: payload.task_id ?? null,
+      status: payload.status ?? null,
+      exit_code: typeof payload.codex?.exit_code === "number" ? payload.codex.exit_code : null,
+      finished_at: payload.finished_at ?? null,
+      summary: summarizeText(payload.codex?.stdout || payload.codex?.stderr || null),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function readReviewerResult(filePath: string): Promise<ReviewerResultDetails | null> {
+  try {
+    const payload = JSON.parse(await readFile(filePath, "utf-8")) as {
+      reviewed_task_id?: string;
+      reviewed_at?: string;
+      verdict?: string;
+      review_summary?: string;
+      next_task?: {
+        task_id?: string;
+      } | null;
+    };
+
+    return {
+      reviewed_task_id: payload.reviewed_task_id ?? null,
+      verdict: payload.verdict ?? null,
+      reviewed_at: payload.reviewed_at ?? null,
+      summary: summarizeText(payload.review_summary ?? null),
+      next_task_id: payload.next_task?.task_id ?? null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function listQueueFiles(directory: string, suffix: string): Promise<QueueFile[]> {
@@ -297,6 +427,15 @@ function extractRepoPath(commandLine: string) {
 
 function stripTaskExtension(fileName: string) {
   return fileName.replace(/\.result\.json$|\.review\.json$|\.json$/i, "");
+}
+
+function summarizeText(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const clean = value.replace(/\s+/g, " ").trim();
+  return clean.length > 420 ? `${clean.slice(0, 420)}...` : clean;
 }
 
 function buildJudgement(

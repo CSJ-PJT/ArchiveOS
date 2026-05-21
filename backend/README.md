@@ -75,13 +75,13 @@ Records a command run without executing external actions.
 
 ```json
 {
-  "command": "review latest PR",
+  "command": "summarize current queue",
   "command_type": "typed",
   "status": "pending"
 }
 ```
 
-Only `pending` and `succeeded` mock command results are recorded for now. This endpoint does not call OpenAI, GitHub, MCP, or any external automation.
+Only recorded command intents are stored for now. This endpoint does not call OpenAI, GitHub, MCP, or any external automation.
 
 ### GET /api/local-actions/projects
 
