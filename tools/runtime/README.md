@@ -16,6 +16,8 @@ The example config includes entries for:
 
 Interactive Codex implementer and reviewer sessions are not started by these scripts. Start those manually and keep using PID hints such as `CODEX_IMPLEMENTER_PID` and `CODEX_REVIEWER_PID` for ArchiveOS visibility.
 
+`Run-ModularLoop.ps1` starts `src/gpt-session-bridge.mjs` internally. The standalone `reviewer-bridge` entry is disabled by default to avoid duplicate reviewer bridge processes.
+
 ## Setup
 
 Copy the example config and edit local paths and PIDs:
@@ -26,6 +28,14 @@ notepad .\tools\runtime\runtime.config.json
 ```
 
 Set `enabled` to `false` for anything you do not want started. Replace placeholder DeepStake/WorldPrototype3D paths and `MANUAL_IMPLEMENTER_PID` values before starting the MCP loop.
+The committed example keeps `-MaxAutoTasks` at `1` as a safe default. Change your local ignored `runtime.config.json` to `unlimited` only when you intentionally want the loop to continue.
+
+You can also provide the implementer PID with an environment variable instead of editing every placeholder:
+
+```powershell
+$env:IMPLEMENTER_PID = "15232"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\runtime\start-all.ps1
+```
 
 ## Commands
 

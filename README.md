@@ -170,6 +170,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools/runtime/stop-all.
 ```
 
 The orchestrator can manage the ArchiveOS frontend, ArchiveOS backend, MCP queue loop, reviewer bridge, and an optional queue watcher placeholder. Interactive Codex implementer and reviewer sessions remain manual for now and should still be detected through PID hints such as `CODEX_IMPLEMENTER_PID` and `CODEX_REVIEWER_PID`.
+For the modular loop, `Run-ModularLoop.ps1` starts the local reviewer bridge internally. The standalone reviewer bridge entry is disabled by default so the bridge is not duplicated.
 
 Local files are ignored by git:
 

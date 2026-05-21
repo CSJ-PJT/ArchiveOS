@@ -13,7 +13,7 @@
       "name": "ArchiveOS backend",
       "cwd": "C:\\Users\\dan18\\Documents\\Codex\\2026-05-20\\create-a-new-project-named-archiveos\\ArchiveOS\\backend",
       "command": "npm.cmd",
-      "args": ["run", "dev"],
+      "args": ["run", "serve:dev"],
       "port": 4000
     },
     {
@@ -49,22 +49,14 @@
     },
     {
       "id": "reviewer-bridge",
-      "name": "Reviewer bridge",
+      "name": "Reviewer bridge standalone optional",
       "cwd": "C:\\Users\\dan18\\health-sync-daily\\tools\\mcp-codex-bridge",
-      "command": "powershell.exe",
+      "command": "npm.cmd",
       "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "C:\\Users\\dan18\\health-sync-daily\\tools\\mcp-codex-bridge\\Run-ReviewerBridge.ps1",
-        "-RepoPath",
-        "C:\\Users\\dan18\\health-sync-daily",
-        "-ReviewerName",
-        "codex-reviewer",
-        "-PollMilliseconds",
-        "500"
-      ]
+        "run",
+        "gpt:bridge"
+      ],
+      "enabled": false
     },
     {
       "id": "queue-watcher",
