@@ -303,6 +303,8 @@ function Dashboard({
   const [commandRunsReachability, setCommandRunsReachability] = useState<ConsistencyStatus>("unknown");
   const [consistencyError, setConsistencyError] = useState<string | null>(null);
   const [focusMode, setFocusMode] = useState(false);
+  const [floatingActionMessage, setFloatingActionMessage] = useState<string | null>(null);
+  const [isRecordingFloatingAction, setIsRecordingFloatingAction] = useState(false);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
 
   useEffect(() => {
@@ -374,23 +376,35 @@ function Dashboard({
     }
   }
 
+  async function recordFloatingRuntimeAction(action: "start" | "stop", role: "implementer" | "reviewer") {
+    setIsRecordingFloatingAction(true);
+    setFloatingActionMessage(null);
+
+    try {
+      await createCommandRun({
+        command: `${role} ${action}`,
+        command_type: `pm_${role}_${action}`,
+        status: "pending",
+        result: `Recording-only PM request to ${action} the ${role} session. ArchiveOS did not start or stop a process.`,
+      });
+      setFloatingActionMessage(`${role} ${action} recorded.`);
+      refreshRuntimeEvents({ silent: true });
+    } catch (error) {
+      setFloatingActionMessage(error instanceof Error ? error.message : "Could not record runtime request.");
+    } finally {
+      setIsRecordingFloatingAction(false);
+    }
+  }
+
   return (
     <div className="grid gap-5">
-      <button
-        className="fixed right-4 top-1/2 z-40 flex -translate-y-1/2 flex-col items-center gap-1 rounded-l-md border border-cyan-300/30 border-r-cyan-300/60 bg-[#07121d]/95 px-3 py-4 text-xs font-semibold text-cyan-100 shadow-2xl shadow-cyan-950/40 backdrop-blur transition hover:bg-cyan-300/15 focus:outline-none focus:ring-2 focus:ring-cyan-300/60"
-        onClick={() => setFocusMode((current) => !current)}
-        title={
-          focusMode
-            ? "Show all PM dashboard panels"
-            : "Show only Current Workflow State and Live Pipeline Map"
-        }
-        type="button"
-      >
-        <span className="text-[0.65rem] uppercase tracking-[0.16em] text-cyan-300">
-          {focusMode ? "Maximize" : "Minimize"}
-        </span>
-        <span>{focusMode ? "Full" : "Focus"}</span>
-      </button>
+      <FloatingRuntimeControls
+        focusMode={focusMode}
+        isRecording={isRecordingFloatingAction}
+        message={floatingActionMessage}
+        onToggleFocus={() => setFocusMode((current) => !current)}
+        onRecord={recordFloatingRuntimeAction}
+      />
 
       <RuntimeSummary
         runtimeStatus={runtimeStatus}
@@ -629,6 +643,76 @@ function RuntimeSummary({
         />
       )}
     </section>
+  );
+}
+
+function FloatingRuntimeControls({
+  focusMode,
+  isRecording,
+  message,
+  onToggleFocus,
+  onRecord,
+}: {
+  focusMode: boolean;
+  isRecording: boolean;
+  message: string | null;
+  onToggleFocus: () => void;
+  onRecord: (action: "start" | "stop", role: "implementer" | "reviewer") => void;
+}) {
+  const controlButtons: { label: string; action: "start" | "stop"; role: "implementer" | "reviewer" }[] = [
+    { label: "Impl Start", action: "start", role: "implementer" },
+    { label: "Impl Stop", action: "stop", role: "implementer" },
+    { label: "Review Start", action: "start", role: "reviewer" },
+    { label: "Review Stop", action: "stop", role: "reviewer" },
+  ];
+
+  return (
+    <aside className="fixed right-3 top-1/2 z-40 grid w-28 -translate-y-1/2 gap-2">
+      <button
+        className="rounded-l-md border border-cyan-300/30 border-r-cyan-300/60 bg-[#07121d]/95 px-2 py-2 text-[0.68rem] font-semibold text-cyan-100 shadow-2xl shadow-cyan-950/40 backdrop-blur transition hover:bg-cyan-300/15 focus:outline-none focus:ring-2 focus:ring-cyan-300/60"
+        onClick={onToggleFocus}
+        title={
+          focusMode
+            ? "Show all PM dashboard panels"
+            : "Show only Current Workflow State and Live Pipeline Map"
+        }
+        type="button"
+      >
+        <span className="block text-[0.56rem] uppercase tracking-[0.12em] text-cyan-300">
+          {focusMode ? "Max" : "Min"}
+        </span>
+        <span>{focusMode ? "Full" : "Focus"}</span>
+      </button>
+
+      <div className="rounded-l-md border border-white/10 border-r-white/20 bg-[#07121d]/95 p-2 shadow-2xl shadow-slate-950/40 backdrop-blur">
+        <p className="mb-2 text-center text-[0.56rem] font-semibold uppercase tracking-[0.12em] text-slate-500">
+          Record only
+        </p>
+        <div className="grid gap-1.5">
+          {controlButtons.map((button) => (
+            <button
+              key={`${button.role}-${button.action}`}
+              className={`rounded border px-2 py-1.5 text-[0.66rem] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                button.action === "start"
+                  ? "border-cyan-300/25 bg-cyan-300/[0.07] text-cyan-100 hover:bg-cyan-300/15"
+                  : "border-amber-300/25 bg-amber-300/[0.07] text-amber-100 hover:bg-amber-300/15"
+              }`}
+              disabled={isRecording}
+              onClick={() => onRecord(button.action, button.role)}
+              title={`${button.label} request is recorded only. It does not start or stop a Codex process.`}
+              type="button"
+            >
+              {button.label}
+            </button>
+          ))}
+        </div>
+        {message ? (
+          <p className="mt-2 break-words text-center text-[0.6rem] leading-4 text-slate-400" title={message}>
+            {message}
+          </p>
+        ) : null}
+      </div>
+    </aside>
   );
 }
 
