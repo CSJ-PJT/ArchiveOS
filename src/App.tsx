@@ -32,6 +32,8 @@ type DashboardData = {
   decisions: WorkLog[];
 };
 
+type AppView = "dashboard" | "decisions" | "operators" | "timeline" | "github" | "settings";
+
 type PipelineStage = {
   id: string;
   kicker: string;
@@ -153,7 +155,7 @@ const seedCommandRunIds = new Set([
 ]);
 
 function App() {
-  const [view, setView] = useState<"dashboard" | "decisions">("dashboard");
+  const [view, setView] = useState<AppView>("dashboard");
   const [data, setData] = useState<DashboardData>({
     agents: [],
     tasks: [],
@@ -236,33 +238,6 @@ function App() {
               and decision history.
             </p>
           </div>
-          <nav className="flex rounded-md border border-white/10 bg-white/[0.03] p-1">
-            <button
-              className={`rounded px-4 py-2 text-sm font-medium transition ${
-                view === "dashboard" ? "bg-cyan-400 text-slate-950" : "text-slate-300 hover:bg-white/10"
-              }`}
-              onClick={() => setView("dashboard")}
-            >
-              Dashboard
-            </button>
-            <button
-              className={`rounded px-4 py-2 text-sm font-medium transition ${
-                view === "decisions" ? "bg-cyan-400 text-slate-950" : "text-slate-300 hover:bg-white/10"
-              }`}
-              onClick={() => setView("decisions")}
-            >
-              Decisions
-              {data.decisions.length ? (
-                <span
-                  className={`ml-2 rounded px-1.5 py-0.5 text-xs ${
-                    view === "decisions" ? "bg-slate-950/15 text-slate-950" : "bg-cyan-400/15 text-cyan-200"
-                  }`}
-                >
-                  {data.decisions.length}
-                </span>
-              ) : null}
-            </button>
-          </nav>
         </header>
 
         {error ? (
@@ -276,22 +251,24 @@ function App() {
           <section className="rounded-md border border-white/10 bg-white/[0.03] p-8 text-sm text-slate-300">
             Loading operations data...
           </section>
-        ) : view === "dashboard" ? (
-          <Dashboard data={data} taskCounts={taskCounts} />
         ) : (
-          <Decisions decisions={data.decisions} />
+          <OperationsLayout data={data} taskCounts={taskCounts} view={view} setView={setView} />
         )}
       </div>
     </main>
   );
 }
 
-function Dashboard({
+function OperationsLayout({
   data,
   taskCounts,
+  view,
+  setView,
 }: {
   data: DashboardData;
   taskCounts: { status: TaskStatus; label: string; count: number }[];
+  view: AppView;
+  setView: (view: AppView) => void;
 }) {
   const [runtimeStatus, setRuntimeStatus] = useState<LocalRuntimeStatus | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
@@ -374,6 +351,9 @@ function Dashboard({
     }
   }
 
+  const warningCount = getPipelineWarningMessages(runtimeStatus).length;
+  const operatorActive = Boolean(runtimeStatus?.queue.processing || runtimeStatus?.processes.implementer || runtimeStatus?.processes.reviewer || runtimeStatus?.processes.reviewer_bridge);
+
   return (
     <div className="grid gap-5">
       <FloatingRuntimeControls
@@ -381,26 +361,294 @@ function Dashboard({
         onToggleFocus={() => setFocusMode((current) => !current)}
       />
 
-      <TopStatusStrip runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
+      <OperationsNav
+        view={view}
+        setView={setView}
+        decisionsCount={data.decisions.length}
+        warningsCount={warningCount}
+        operatorActive={operatorActive}
+      />
 
+      {view === "dashboard" ? (
+        <DashboardView
+          runtimeStatus={runtimeStatus}
+          runtimeError={runtimeError}
+          runtimeEvents={runtimeEvents}
+          isRefreshingRuntime={isRefreshingRuntime}
+          refreshRuntime={refreshRuntime}
+          refreshRuntimeEvents={refreshRuntimeEvents}
+          focusMode={focusMode}
+        />
+      ) : null}
+
+      {view === "decisions" ? (
+        <DecisionsView
+          decisions={data.decisions}
+          runtimeStatus={runtimeStatus}
+          onRecorded={refreshRuntimeEvents}
+        />
+      ) : null}
+
+      {view === "operators" ? (
+        <OperatorsView
+          runtimeStatus={runtimeStatus}
+          runtimeError={runtimeError}
+          data={data}
+          taskCounts={taskCounts}
+          backendReachability={backendReachability}
+          commandRunsReachability={commandRunsReachability}
+          consistencyError={consistencyError}
+          onRecorded={refreshRuntimeEvents}
+        />
+      ) : null}
+
+      {view === "timeline" ? (
+        <TimelineView
+          events={runtimeEvents}
+          error={runtimeEventsError}
+          isRefreshing={isRefreshingEvents}
+          refresh={refreshRuntimeEvents}
+        />
+      ) : null}
+
+      {view === "github" ? <GitHubView runtimeStatus={runtimeStatus} /> : null}
+
+      {view === "settings" ? (
+        <SettingsView
+          backendReachability={backendReachability}
+          commandRunsReachability={commandRunsReachability}
+          runtimeStatus={runtimeStatus}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function OperationsNav({
+  view,
+  setView,
+  decisionsCount,
+  warningsCount,
+  operatorActive,
+}: {
+  view: AppView;
+  setView: (view: AppView) => void;
+  decisionsCount: number;
+  warningsCount: number;
+  operatorActive: boolean;
+}) {
+  const items: { id: AppView; label: string }[] = [
+    { id: "dashboard", label: "Dashboard" },
+    { id: "decisions", label: "Decisions" },
+    { id: "operators", label: "Operators" },
+    { id: "timeline", label: "Timeline" },
+    { id: "github", label: "GitHub" },
+    { id: "settings", label: "Settings" },
+  ];
+
+  return (
+    <nav className="flex flex-wrap gap-2 rounded-md border border-white/10 bg-white/[0.03] p-2">
+      {items.map((item) => {
+        const active = view === item.id;
+        return (
+          <button
+            key={item.id}
+            className={`inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium transition ${
+              active ? "bg-cyan-400 text-slate-950" : "text-slate-300 hover:bg-white/10"
+            }`}
+            onClick={() => setView(item.id)}
+            type="button"
+          >
+            {item.id === "operators" ? (
+              <span
+                className={`h-2 w-2 rounded-full ${operatorActive ? "bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.8)]" : "bg-slate-600"}`}
+                title={operatorActive ? "Operator runtime detected" : "No operator runtime detected"}
+              />
+            ) : null}
+            <span>{item.label}</span>
+            {item.id === "decisions" && decisionsCount ? (
+              <span className={`rounded px-1.5 py-0.5 text-xs ${active ? "bg-slate-950/15 text-slate-950" : "bg-cyan-400/15 text-cyan-200"}`}>
+                {decisionsCount}
+              </span>
+            ) : null}
+            {item.id === "dashboard" && warningsCount ? (
+              <span className={`rounded px-1.5 py-0.5 text-xs ${active ? "bg-amber-950/15 text-amber-950" : "bg-amber-400/15 text-amber-200"}`}>
+                {warningsCount}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+function DashboardView({
+  runtimeStatus,
+  runtimeError,
+  runtimeEvents,
+  isRefreshingRuntime,
+  refreshRuntime,
+  refreshRuntimeEvents,
+  focusMode,
+}: {
+  runtimeStatus: LocalRuntimeStatus | null;
+  runtimeError: string | null;
+  runtimeEvents: RuntimeEvent[];
+  isRefreshingRuntime: boolean;
+  refreshRuntime: (options?: { silent?: boolean }) => void;
+  refreshRuntimeEvents: (options?: { silent?: boolean }) => void;
+  focusMode: boolean;
+}) {
+  return (
+    <div className="grid gap-5">
+      <TopStatusStrip runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
       <RuntimeSummary
         runtimeStatus={runtimeStatus}
         runtimeError={runtimeError}
         isRefreshing={isRefreshingRuntime}
         refresh={refreshRuntime}
         onRecorded={refreshRuntimeEvents}
+        showNowWorking={false}
       />
-
       <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
 
       {focusMode ? null : (
         <>
-      <EventTimeline
-        events={runtimeEvents}
-        error={runtimeEventsError}
-        isRefreshing={isRefreshingEvents}
-        refresh={refreshRuntimeEvents}
-      />
+          <Panel title="Pipeline Warnings">
+            <PipelineWarnings runtimeStatus={runtimeStatus} />
+          </Panel>
+
+          <div className="grid gap-5 xl:grid-cols-2">
+            <Panel title="Latest Builder Result">
+              {runtimeStatus?.latest_details.builder ? (
+                <RuntimeResult
+                  title={runtimeStatus.latest_details.builder.task_id ?? "Unknown builder task"}
+                  status={runtimeStatus.latest_details.builder.status ?? "unknown"}
+                  timestamp={runtimeStatus.latest_details.builder.finished_at}
+                  lastUpdated={runtimeStatus.latest_details.builder.finished_at ?? runtimeStatus.latest.outbox?.updated_at ?? null}
+                  sourceLabel="live MCP"
+                  body={runtimeStatus.latest_details.builder.summary ?? "No builder summary captured."}
+                  imageRef={runtimeStatus.latest_details.builder.image_ref}
+                />
+              ) : (
+                <EmptyState title="No live builder result" detail="No readable MCP builder result payload was returned." muted />
+              )}
+            </Panel>
+
+            <Panel title="Latest Reviewer Result">
+              {runtimeStatus?.latest_details.reviewer ? (
+                <RuntimeResult
+                  title={runtimeStatus.latest_details.reviewer.reviewed_task_id ?? "Unknown reviewed task"}
+                  status={runtimeStatus.latest_details.reviewer.verdict ?? "unknown"}
+                  timestamp={runtimeStatus.latest_details.reviewer.reviewed_at}
+                  lastUpdated={runtimeStatus.latest_details.reviewer.reviewed_at ?? runtimeStatus.latest.review?.updated_at ?? null}
+                  sourceLabel="live MCP"
+                  body={runtimeStatus.latest_details.reviewer.summary ?? "No reviewer summary captured."}
+                  imageRef={runtimeStatus.latest_details.reviewer.image_ref}
+                />
+              ) : (
+                <EmptyState title="No live reviewer result" detail="No readable MCP reviewer result payload was returned." muted />
+              )}
+            </Panel>
+          </div>
+
+          <Panel title="Recent Timeline Preview">
+            <TimelinePreview events={runtimeEvents} />
+          </Panel>
+
+          <Panel title="Screenshot Freshness" muted>
+            <EmptyState
+              title="No screenshot freshness signal yet"
+              detail="This placeholder will summarize proof screenshot freshness when that runtime source exists."
+              muted
+            />
+          </Panel>
+        </>
+      )}
+    </div>
+  );
+}
+
+function DecisionsView({
+  decisions,
+  runtimeStatus,
+  onRecorded,
+}: {
+  decisions: WorkLog[];
+  runtimeStatus: LocalRuntimeStatus | null;
+  onRecorded: (options?: { silent?: boolean }) => void;
+}) {
+  const targetTask =
+    runtimeStatus?.active_task ??
+    runtimeStatus?.latest_details.reviewer?.reviewed_task_id ??
+    runtimeStatus?.latest_details.builder?.task_id ??
+    runtimeStatus?.latest.outbox?.name ??
+    null;
+
+  return (
+    <div className="grid gap-5">
+      <Panel title="Decision Recorder">
+        <SourceLabel label="Supabase recorded command_runs. Recording-only." />
+        <div className="mt-4 grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+          <div className="rounded-md border border-white/10 bg-black/20 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Decision count</p>
+            <p className="mt-2 text-3xl font-semibold text-white">{decisions.length}</p>
+            <CompactValue value={targetTask ?? "No linked runtime task"} className="mt-3 text-sm text-slate-300" copyable={Boolean(targetTask)} />
+            <CompactValue value={runtimeStatus?.latest.outbox?.name ?? "No linked result file"} className="mt-3 text-xs text-slate-500" copyable={Boolean(runtimeStatus?.latest.outbox?.name)} />
+            <CompactValue value={runtimeStatus?.latest.review?.name ?? "No linked review file"} className="mt-2 text-xs text-slate-500" copyable={Boolean(runtimeStatus?.latest.review?.name)} />
+          </div>
+          <ApprovalRecorder targetTask={targetTask} onRecorded={onRecorded} />
+        </div>
+      </Panel>
+      <Panel title="Recorded Decisions">
+        <SourceLabel label="non-seed Supabase work_logs where log_type=decision" />
+        <div className="mt-3">
+          <LogList logs={decisions} />
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function OperatorsView({
+  runtimeStatus,
+  runtimeError,
+  data,
+  taskCounts,
+  backendReachability,
+  commandRunsReachability,
+  consistencyError,
+  onRecorded,
+}: {
+  runtimeStatus: LocalRuntimeStatus | null;
+  runtimeError: string | null;
+  data: DashboardData;
+  taskCounts: { status: TaskStatus; label: string; count: number }[];
+  backendReachability: ConsistencyStatus;
+  commandRunsReachability: ConsistencyStatus;
+  consistencyError: string | null;
+  onRecorded: (options?: { silent?: boolean }) => void;
+}) {
+  return (
+    <div className="grid gap-5">
+      <Panel title="Operators">
+        <SourceLabel label="live MCP + backend-derived process detection" />
+        {runtimeError ? (
+          <EmptyState title="Operator runtime unavailable" detail={runtimeError} />
+        ) : runtimeStatus ? (
+          <NowWorkingPanel runtimeStatus={runtimeStatus} onRecorded={onRecorded} showRecorder={false} />
+        ) : (
+          <EmptyState title="Loading operators" detail="Reading local runtime process state." />
+        )}
+      </Panel>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <ProcessCard title="MCP Loop" process={runtimeStatus?.processes.loop ?? null} interpretation={getLoopInterpretation(runtimeStatus)} />
+        <ProcessCard title="Reviewer Bridge" process={runtimeStatus?.processes.reviewer_bridge ?? null} interpretation={getBridgeInterpretation(runtimeStatus)} />
+      </div>
+
+      <QueueDetailsPanel runtimeStatus={runtimeStatus} taskCounts={taskCounts} />
 
       <DataConsistencyPanel
         runtimeStatus={runtimeStatus}
@@ -410,143 +658,85 @@ function Dashboard({
         commandRunsReachability={commandRunsReachability}
         consistencyError={consistencyError}
       />
+    </div>
+  );
+}
 
-      <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
-        <Panel title="Agent State">
-          <SourceLabel label="live MCP agents + non-seed Supabase agents" />
-          {data.agents.length || runtimeAgents.length ? (
-            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
-              {runtimeAgents.map((agent) => (
-                <article key={agent.id} className="rounded-md border border-cyan-300/20 bg-cyan-300/[0.04] p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="truncate font-medium text-white" title={agent.name}>{agent.name}</h3>
-                      <p className="mt-1 truncate text-sm text-slate-400" title={agent.role}>{agent.role}</p>
-                    </div>
-                    <StatusBadge className={agentStatusStyles[agent.status]}>{agent.status}</StatusBadge>
-                  </div>
-                  <p className="mt-4 truncate text-sm leading-5 text-slate-300" title={agent.current_task}>{agent.current_task}</p>
-                </article>
-              ))}
-              {data.agents.map((agent) => (
-                <article key={agent.id} className="rounded-md border border-white/10 bg-white/[0.03] p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="truncate font-medium text-white" title={agent.name}>{agent.name}</h3>
-                      <p className="mt-1 truncate text-sm text-slate-400" title={agent.role}>{agent.role}</p>
-                    </div>
-                    <StatusBadge className={agentStatusStyles[agent.status]}>{agent.status}</StatusBadge>
-                  </div>
-                  <p className="mt-4 truncate text-sm leading-5 text-slate-300" title={agent.current_task ?? "No current task"}>
-                    {agent.current_task ?? "No current task"}
-                  </p>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="No live agent records"
-              detail="Seed/demo agents are hidden, and no local Codex process was detected."
-            />
-          )}
-        </Panel>
+function TimelineView({
+  events,
+  error,
+  isRefreshing,
+  refresh,
+}: {
+  events: RuntimeEvent[];
+  error: string | null;
+  isRefreshing: boolean;
+  refresh: (options?: { silent?: boolean }) => void;
+}) {
+  return <EventTimeline events={events} error={error} isRefreshing={isRefreshing} refresh={refresh} />;
+}
 
-        <Panel title="Task Queue State">
-          <SourceLabel label="live MCP queue + non-seed Supabase tasks" />
-          {data.tasks.length ? (
-            <div className="mt-3 grid gap-3 sm:grid-cols-5">
-              {taskCounts.map((item) => (
-                <div key={item.status} className="rounded-md border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{item.label}</p>
-                  <p className="mt-3 text-3xl font-semibold text-white">{item.count}</p>
-                </div>
-              ))}
-            </div>
-          ) : runtimeStatus && (runtimeStatus.queue.inbox > 0 || runtimeStatus.queue.processing > 0) ? (
-            <div className="mt-3 grid gap-3">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <RuntimeMetric label="Inbox" value={String(runtimeStatus.queue.inbox)} />
-                <RuntimeMetric label="Processing" value={String(runtimeStatus.queue.processing)} />
-                <RuntimeMetric label="Active MCP task" value={runtimeStatus.active_task ?? "none"} copyable />
-              </div>
-              <p className="rounded border border-cyan-300/20 bg-cyan-300/[0.04] p-3 text-xs leading-5 text-cyan-100">
-                Supabase task rows are empty, so this panel is showing the live MCP queue task state.
-              </p>
-            </div>
-          ) : (
-            <EmptyState
-              title={runtimeStatus?.queue.inbox === 0 && runtimeStatus.queue.processing === 0 ? "Queue is idle" : "No live task records"}
-              detail={
-                runtimeStatus?.queue.inbox === 0 && runtimeStatus.queue.processing === 0
-                  ? "Supabase task rows are empty and the MCP inbox/processing folders are also empty. This is an idle state, not a loop failure."
-                  : "Seed/demo tasks are hidden. Live MCP processing state is summarized above."
-              }
-            />
-          )}
-        </Panel>
-      </div>
-
-      <Panel title="Pipeline Warnings">
-        <PipelineWarnings runtimeStatus={runtimeStatus} />
-      </Panel>
-
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Panel title="Latest Builder Result">
-          {runtimeStatus?.latest_details.builder ? (
-            <RuntimeResult
-              title={runtimeStatus.latest_details.builder.task_id ?? "Unknown builder task"}
-              status={runtimeStatus.latest_details.builder.status ?? "unknown"}
-              timestamp={runtimeStatus.latest_details.builder.finished_at}
-              lastUpdated={runtimeStatus.latest_details.builder.finished_at ?? runtimeStatus.latest.outbox?.updated_at ?? null}
-              sourceLabel="live MCP"
-              body={runtimeStatus.latest_details.builder.summary ?? "No builder summary captured."}
-              imageRef={runtimeStatus.latest_details.builder.image_ref}
-            />
-          ) : (
-            <EmptyState title="No live builder result" detail="No readable MCP builder result payload was returned." muted />
-          )}
-        </Panel>
-
-        <Panel title="Latest Reviewer Result">
-          {runtimeStatus?.latest_details.reviewer ? (
-            <RuntimeResult
-              title={runtimeStatus.latest_details.reviewer.reviewed_task_id ?? "Unknown reviewed task"}
-              status={runtimeStatus.latest_details.reviewer.verdict ?? "unknown"}
-              timestamp={runtimeStatus.latest_details.reviewer.reviewed_at}
-              lastUpdated={runtimeStatus.latest_details.reviewer.reviewed_at ?? runtimeStatus.latest.review?.updated_at ?? null}
-              sourceLabel="live MCP"
-              body={runtimeStatus.latest_details.reviewer.summary ?? "No reviewer summary captured."}
-              imageRef={runtimeStatus.latest_details.reviewer.image_ref}
-            />
-          ) : (
-            <EmptyState title="No live reviewer result" detail="No readable MCP reviewer result payload was returned." muted />
-          )}
-        </Panel>
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-[1fr_0.9fr]">
-        <Panel title="Command Center">
-          <CommandCenter />
-        </Panel>
-
-        <Panel title="Local Diagnostics">
-          <LocalDiagnostics />
-        </Panel>
-      </div>
-
-      <Panel title="Screenshot Freshness" muted>
+function GitHubView({ runtimeStatus }: { runtimeStatus: LocalRuntimeStatus | null }) {
+  return (
+    <Panel title="GitHub">
+      <div className="grid gap-4">
         <EmptyState
-          title="No screenshot freshness signal yet"
-          detail="This placeholder will track whether proof screenshots are current for PM review."
-          muted
+          title="GitHub integration not configured yet"
+          detail="This panel is intentionally read-only and does not call the GitHub API yet."
         />
-      </Panel>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <RuntimeMetric label="Repo" value="CSJ-PJT/ArchiveOS" copyable />
+          <RuntimeMetric label="Branch" value="main" />
+          <RuntimeMetric label="Latest commit" value="not connected" />
+          <RuntimeMetric label="Recent PRs" value="not connected" />
+          <RuntimeMetric label="CI status" value="not connected" />
+        </div>
+        <p className="rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-500">
+          Runtime source remains local MCP/backend. Latest MCP result: {runtimeStatus?.latest.outbox?.name ?? "none"}.
+        </p>
+      </div>
+    </Panel>
+  );
+}
 
-      <Panel title="Recorded Decisions">
-        <LogList logs={data.decisions.slice(0, 4)} />
+function SettingsView({
+  backendReachability,
+  commandRunsReachability,
+  runtimeStatus,
+}: {
+  backendReachability: ConsistencyStatus;
+  commandRunsReachability: ConsistencyStatus;
+  runtimeStatus: LocalRuntimeStatus | null;
+}) {
+  const supabaseConfigured = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+
+  return (
+    <div className="grid gap-5">
+      <Panel title="Runtime Configuration">
+        <div className="grid gap-3 md:grid-cols-2">
+          <RuntimeMetric label="Frontend URL" value="http://127.0.0.1:5173" copyable />
+          <RuntimeMetric label="Backend URL" value={(import.meta.env.VITE_BACKEND_URL as string | undefined) ?? "http://localhost:4000"} copyable />
+          <RuntimeMetric label="Supabase" value={supabaseConfigured ? "configured via frontend env" : "unknown / env missing"} />
+          <RuntimeMetric label="ARCHIVEOS_PROJECT_PATH" value="backend env, optional local path override" />
+          <RuntimeMetric label="CODEX_IMPLEMENTER_PID" value="backend/runtime env hint; do not expose secrets" />
+          <RuntimeMetric label="CODEX_REVIEWER_PID" value="backend/runtime env hint; do not expose secrets" />
+        </div>
       </Panel>
-        </>
-      )}
+      <Panel title="Status Checks">
+        <div className="grid gap-3 md:grid-cols-3">
+          <ConsistencyMini label="Backend" status={backendReachability} />
+          <ConsistencyMini label="command_runs" status={commandRunsReachability} />
+          <ConsistencyMini label="MCP queue" status={runtimeStatus?.queue.path ? "matched" : "unknown"} />
+        </div>
+      </Panel>
+      <Panel title="Security Principles">
+        <ul className="grid gap-2 text-sm leading-6 text-slate-400">
+          <li>Service role key stays backend-only and is never exposed in frontend UI.</li>
+          <li>Command Center records intent; it does not execute arbitrary typed shell commands.</li>
+          <li>Local diagnostics are allowlisted checks only.</li>
+          <li>No OpenAI API, MCP execution, Codex direct control, or GitHub automation is enabled from the UI.</li>
+        </ul>
+      </Panel>
     </div>
   );
 }
@@ -557,12 +747,14 @@ function RuntimeSummary({
   isRefreshing,
   refresh,
   onRecorded,
+  showNowWorking = true,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
   runtimeError: string | null;
   isRefreshing: boolean;
   refresh: (options?: { silent?: boolean }) => void;
   onRecorded: (options?: { silent?: boolean }) => void;
+  showNowWorking?: boolean;
 }) {
   const bottleneck = getPipelineBottleneck(runtimeStatus);
   const latestVerdict = runtimeStatus?.latest_details.reviewer?.verdict ?? "none";
@@ -614,7 +806,7 @@ function RuntimeSummary({
             <RuntimeMetric label="Latest verdict" value={latestVerdict} />
             <RuntimeMetric label="Queue status" value={queueStatus} copyable />
           </div>
-          <NowWorkingPanel runtimeStatus={runtimeStatus} onRecorded={onRecorded} />
+          {showNowWorking ? <NowWorkingPanel runtimeStatus={runtimeStatus} onRecorded={onRecorded} /> : null}
           <p className="rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-400">
             {runtimeStatus.judgement}
           </p>
@@ -745,9 +937,11 @@ function LiveIndicator({ active, title }: { active: boolean; title: string }) {
 function NowWorkingPanel({
   runtimeStatus,
   onRecorded,
+  showRecorder = true,
 }: {
   runtimeStatus: LocalRuntimeStatus;
   onRecorded: (options?: { silent?: boolean }) => void;
+  showRecorder?: boolean;
 }) {
   const targetTask =
     runtimeStatus.active_task ??
@@ -766,7 +960,7 @@ function NowWorkingPanel({
           </p>
           <SourceLabel label="live MCP + backend-derived" />
         </div>
-        <ApprovalRecorder targetTask={targetTask} onRecorded={onRecorded} />
+        {showRecorder ? <ApprovalRecorder targetTask={targetTask} onRecorded={onRecorded} /> : null}
       </div>
       <div className="mt-4 grid gap-3 xl:grid-cols-2">
         <WorkerStatusCard
@@ -1109,6 +1303,29 @@ function EventTimeline({
   );
 }
 
+function TimelinePreview({ events }: { events: RuntimeEvent[] }) {
+  const todayEvents = events.filter((event) => isToday(event.created_at)).slice(0, 3);
+
+  if (!todayEvents.length) {
+    return <EmptyState title="No recent runtime events today" detail="Open the Timeline tab for older operational history." muted />;
+  }
+
+  return (
+    <div className="grid gap-2">
+      {todayEvents.map((event) => (
+        <article key={event.id} className={`rounded border p-3 ${getEventCardClassName(event)}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge className={getEventTypeBadgeClassName(event)}>{getEventTypeLabel(event)}</StatusBadge>
+            <span className="text-xs text-slate-500" title={formatExactDate(event.created_at)}>{formatRelativeTime(event.created_at)}</span>
+            <span className="rounded bg-black/20 px-2 py-1 text-xs text-slate-400">{event.source}</span>
+          </div>
+          <p className="mt-2 truncate text-sm font-medium text-white" title={event.title}>{event.title}</p>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 function DataConsistencyPanel({
   runtimeStatus,
   runtimeError,
@@ -1292,6 +1509,83 @@ function DataConsistencyPanel({
         ) : null}
       </div>
     </Panel>
+  );
+}
+
+function ProcessCard({
+  title,
+  process,
+  interpretation,
+}: {
+  title: string;
+  process: LocalRuntimeStatus["processes"]["implementer"];
+  interpretation: string;
+}) {
+  return (
+    <Panel title={title}>
+      <SourceLabel label="backend-derived process detection" />
+      <div className="mt-3 grid gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <StatusBadge className={process ? commandStatusStyles.running : consistencyStatusStyles.missing}>
+            {process ? "detected" : "not detected"}
+          </StatusBadge>
+          <LastUpdatedIndicator value={process?.startTime ?? null} label="Started" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <RuntimeMetric label="PID" value={process ? String(process.pid) : "not detected"} />
+          <RuntimeMetric label="CPU" value={process?.cpu !== null && process?.cpu !== undefined ? process.cpu.toFixed(1) : "unknown"} />
+        </div>
+        <RuntimeMetric label="Command" value={process?.commandLine ?? "not detected"} copyable />
+        <p className="rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-300">{interpretation}</p>
+      </div>
+    </Panel>
+  );
+}
+
+function QueueDetailsPanel({
+  runtimeStatus,
+  taskCounts,
+}: {
+  runtimeStatus: LocalRuntimeStatus | null;
+  taskCounts: { status: TaskStatus; label: string; count: number }[];
+}) {
+  return (
+    <Panel title="Queue Details">
+      <SourceLabel label="live MCP queue + non-seed Supabase task counts" />
+      {runtimeStatus ? (
+        <div className="mt-3 grid gap-3">
+          <div className="grid gap-3 md:grid-cols-4">
+            <RuntimeMetric label="Inbox" value={String(runtimeStatus.queue.inbox)} />
+            <RuntimeMetric label="Processing" value={String(runtimeStatus.queue.processing)} />
+            <RuntimeMetric label="Outbox" value={String(runtimeStatus.queue.outbox)} />
+            <RuntimeMetric label="Reviews" value={String(runtimeStatus.queue.reviews)} />
+          </div>
+          <RuntimeMetric label="Active MCP task" value={runtimeStatus.active_task ?? "none"} copyable emphasized />
+          <RuntimeMetric label="Queue path" value={runtimeStatus.queue.path ?? "not configured"} copyable={Boolean(runtimeStatus.queue.path)} />
+        </div>
+      ) : (
+        <EmptyState title="Queue not loaded" detail="Backend runtime status has not returned MCP queue details yet." />
+      )}
+      <div className="mt-4 grid gap-3 sm:grid-cols-5">
+        {taskCounts.map((item) => (
+          <div key={item.status} className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{item.label}</p>
+            <p className="mt-2 text-2xl font-semibold text-white">{item.count}</p>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function ConsistencyMini({ label, status }: { label: string; status: ConsistencyStatus }) {
+  return (
+    <div className="rounded-md border border-white/10 bg-black/20 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-slate-200">{label}</p>
+        <StatusBadge className={consistencyStatusStyles[status]}>{status}</StatusBadge>
+      </div>
+    </div>
   );
 }
 
@@ -1755,20 +2049,7 @@ function PipelineWarnings({ runtimeStatus }: { runtimeStatus: LocalRuntimeStatus
   }
 
   const bottleneck = getPipelineBottleneck(runtimeStatus);
-  const warnings = [
-    runtimeStatus.queue.processing > 0 && !runtimeStatus.processes.implementer
-      ? "Processing has a task, but the implementer PID is not detected."
-      : null,
-    runtimeStatus.latest_details.reviewer?.verdict === "stop" && runtimeStatus.queue.inbox === 0
-      ? getRuntimeStopReason(runtimeStatus) || "Reviewer verdict is stop and inbox is empty. PM must decide the next task."
-      : null,
-    runtimeStatus.queue.inbox > 0 && !runtimeStatus.processes.loop
-      ? "Inbox has queued work, but the loop process is not detected."
-      : null,
-    runtimeStatus.queue.outbox > runtimeStatus.queue.reviews && runtimeStatus.latest.review?.updated_at && runtimeStatus.latest.outbox?.updated_at && runtimeStatus.latest.outbox.updated_at > runtimeStatus.latest.review.updated_at
-      ? "Latest outbox is newer than latest review. Reviewer bridge may be behind."
-      : null,
-  ].filter((warning): warning is string => Boolean(warning));
+  const warnings = getPipelineWarningMessages(runtimeStatus);
 
   if (!warnings.length) {
     return (
@@ -2096,6 +2377,25 @@ function getRuntimeStopReason(runtimeStatus: LocalRuntimeStatus | null) {
   return "Latest reviewer verdict is stop. Review the latest reviewer result before queueing more work.";
 }
 
+function getPipelineWarningMessages(runtimeStatus: LocalRuntimeStatus | null) {
+  if (!runtimeStatus) return [];
+
+  return [
+    runtimeStatus.queue.processing > 0 && !runtimeStatus.processes.implementer
+      ? "Processing has a task, but the implementer PID is not detected."
+      : null,
+    runtimeStatus.latest_details.reviewer?.verdict === "stop" && runtimeStatus.queue.inbox === 0
+      ? getRuntimeStopReason(runtimeStatus) || "Reviewer verdict is stop and inbox is empty. PM must decide the next task."
+      : null,
+    runtimeStatus.queue.inbox > 0 && !runtimeStatus.processes.loop
+      ? "Inbox has queued work, but the loop process is not detected."
+      : null,
+    runtimeStatus.queue.outbox > runtimeStatus.queue.reviews && runtimeStatus.latest.review?.updated_at && runtimeStatus.latest.outbox?.updated_at && runtimeStatus.latest.outbox.updated_at > runtimeStatus.latest.review.updated_at
+      ? "Latest outbox is newer than latest review. Reviewer bridge may be behind."
+      : null,
+  ].filter((warning): warning is string => Boolean(warning));
+}
+
 function getCurrentWorkerSummary(runtimeStatus: LocalRuntimeStatus | null) {
   if (!runtimeStatus) return { label: "unknown", detail: "Runtime has not loaded." };
   if (runtimeStatus.queue.processing > 0) {
@@ -2114,6 +2414,19 @@ function getCurrentWorkerSummary(runtimeStatus: LocalRuntimeStatus | null) {
     return { label: "Queue loop", detail: `${runtimeStatus.queue.inbox} inbox task waiting.` };
   }
   return { label: "No active worker", detail: "No active processing task." };
+}
+
+function getLoopInterpretation(runtimeStatus: LocalRuntimeStatus | null) {
+  if (!runtimeStatus?.processes.loop) return "MCP queue loop is not detected.";
+  if (runtimeStatus.queue.processing > 0) return "Loop is feeding an active implementer task.";
+  if (runtimeStatus.queue.inbox > 0) return "Loop is visible and inbox has work waiting.";
+  return "Loop is idle because inbox=0.";
+}
+
+function getBridgeInterpretation(runtimeStatus: LocalRuntimeStatus | null) {
+  if (!runtimeStatus?.processes.reviewer_bridge) return "Reviewer bridge process is not detected.";
+  if (runtimeStatus.latest_details.reviewer?.verdict) return `Reviewer bridge produced ${runtimeStatus.latest_details.reviewer.verdict}.`;
+  return "Reviewer bridge is detected and waiting for a builder result.";
 }
 
 function getImplementerInterpretation(runtimeStatus: LocalRuntimeStatus) {
