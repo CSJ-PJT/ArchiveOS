@@ -1,9 +1,17 @@
 import type { CommandRun } from "../types/database";
+import type { Agent, Task, WorkLog } from "../types/database";
 
 const backendUrl = (import.meta.env.VITE_BACKEND_URL as string | undefined) ?? "http://localhost:4000";
 
 type ApiEnvelope<T> = {
   data: T;
+};
+
+export type DashboardData = {
+  agents: Agent[];
+  tasks: Task[];
+  logs: WorkLog[];
+  decisions: WorkLog[];
 };
 
 type HealthResponse = {
@@ -103,6 +111,11 @@ export type RuntimeEvent = {
 
 export async function getBackendHealth() {
   return request<HealthResponse>("/health");
+}
+
+export async function getDashboardData() {
+  const response = await request<ApiEnvelope<DashboardData>>("/api/dashboard");
+  return response.data;
 }
 
 export async function getRecentCommands() {

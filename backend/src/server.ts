@@ -72,6 +72,44 @@ app.get("/api/work-logs/recent", async (_request, response) => {
   response.json({ data });
 });
 
+app.get("/api/dashboard", async (_request, response) => {
+  const [agentsResult, tasksResult, logsResult, decisionsResult] = await Promise.all([
+    supabaseAdmin.from("agents").select("*").order("name", { ascending: true }),
+    supabaseAdmin
+      .from("tasks")
+      .select("*, agent:agents(name,status)")
+      .order("updated_at", { ascending: false }),
+    supabaseAdmin
+      .from("work_logs")
+      .select("*, task:tasks(title,status), agent:agents(name,role)")
+      .order("created_at", { ascending: false })
+      .limit(8),
+    supabaseAdmin
+      .from("work_logs")
+      .select("*, task:tasks(title,status), agent:agents(name,role)")
+      .eq("log_type", "decision")
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
+
+  const firstError =
+    agentsResult.error ?? tasksResult.error ?? logsResult.error ?? decisionsResult.error;
+
+  if (firstError) {
+    response.status(500).json({ error: "Failed to fetch dashboard data." });
+    return;
+  }
+
+  response.json({
+    data: {
+      agents: agentsResult.data ?? [],
+      tasks: tasksResult.data ?? [],
+      logs: logsResult.data ?? [],
+      decisions: decisionsResult.data ?? [],
+    },
+  });
+});
+
 app.post("/api/work-logs", async (request, response) => {
   const validation = validateWorkLogBody(request.body);
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   createCommandRun,
+  getDashboardData,
   getBackendHealth,
   getLocalActionProjects,
   getLocalRuntimeStatus,
@@ -13,7 +14,6 @@ import {
   type LocalRuntimeStatus,
   type RuntimeEvent,
 } from "./lib/backendApi";
-import { supabase } from "./lib/supabase";
 import type {
   Agent,
   AgentStatus,
@@ -170,35 +170,12 @@ function App() {
       setLoading(true);
       setError(null);
 
-      const [agentsResult, tasksResult, logsResult, decisionsResult] = await Promise.all([
-        supabase.from("agents").select("*").order("name", { ascending: true }),
-        supabase
-          .from("tasks")
-          .select("*, agent:agents(name,status)")
-          .order("updated_at", { ascending: false }),
-        supabase
-          .from("work_logs")
-          .select("*, task:tasks(title,status), agent:agents(name,role)")
-          .order("created_at", { ascending: false })
-          .limit(8),
-        supabase
-          .from("work_logs")
-          .select("*, task:tasks(title,status), agent:agents(name,role)")
-          .eq("log_type", "decision")
-          .order("created_at", { ascending: false })
-          .limit(20),
-      ]);
-
-      const firstError =
-        agentsResult.error ?? tasksResult.error ?? logsResult.error ?? decisionsResult.error;
-
-      if (firstError) {
-        setError(firstError.message);
-      } else {
-        const agents = (agentsResult.data ?? []).filter((agent) => !seedAgentIds.has(agent.id));
-        const tasks = ((tasksResult.data ?? []) as Task[]).filter((task) => !seedTaskIds.has(task.id));
-        const logs = ((logsResult.data ?? []) as WorkLog[]).filter((log) => !seedWorkLogIds.has(log.id));
-        const decisions = ((decisionsResult.data ?? []) as WorkLog[]).filter((log) => !seedWorkLogIds.has(log.id));
+      try {
+        const dashboardData = await getDashboardData();
+        const agents = dashboardData.agents.filter((agent) => !seedAgentIds.has(agent.id));
+        const tasks = dashboardData.tasks.filter((task) => !seedTaskIds.has(task.id));
+        const logs = dashboardData.logs.filter((log) => !seedWorkLogIds.has(log.id));
+        const decisions = dashboardData.decisions.filter((log) => !seedWorkLogIds.has(log.id));
 
         setData({
           agents,
@@ -206,6 +183,8 @@ function App() {
           logs,
           decisions,
         });
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : "Failed to load dashboard data.");
       }
 
       setLoading(false);
@@ -229,10 +208,19 @@ function App() {
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-6 sm:px-8 lg:px-10">
         <header className="flex flex-col gap-5 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm font-medium uppercase tracking-[0.18em] text-cyan-300">
-              Agent operations
-            </p>
-            <h1 className="mt-3 text-4xl font-semibold tracking-normal text-white">ArchiveOS</h1>
+            <div className="flex items-center gap-3">
+              <img
+                src="/favicon.svg"
+                alt="ArchiveOS"
+                className="h-10 w-10 rounded-xl border border-cyan-300/30 bg-slate-950/80 p-1.5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]"
+              />
+              <div>
+                <p className="text-sm font-medium uppercase tracking-[0.18em] text-cyan-300">
+                  Agent operations
+                </p>
+                <h1 className="mt-1 text-4xl font-semibold tracking-normal text-white">ArchiveOS</h1>
+              </div>
+            </div>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
               A read-only PM operations dashboard for agent workflow visibility, safe command recording,
               and decision history.
