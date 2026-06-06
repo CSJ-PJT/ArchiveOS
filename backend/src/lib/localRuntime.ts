@@ -371,6 +371,9 @@ async function readQueueSnapshot(queuePath: string | null) {
     listQueueFiles(path.join(queuePath, "reviews"), ".review.json"),
   ]);
 
+  const reviewerOutbox = await findLatestReviewerOutboxFile(path.join(queuePath, "outbox"), outbox);
+  const latestReview = pickLatestQueueFile(reviews[0] ?? null, reviewerOutbox);
+
   return {
     counts: {
       inbox: inbox.length,
@@ -381,7 +384,7 @@ async function readQueueSnapshot(queuePath: string | null) {
     latest: {
       processing: processing[0] ?? null,
       outbox: outbox[0] ?? null,
-      review: reviews[0] ?? null,
+      review: latestReview,
     },
   };
 }
@@ -395,9 +398,16 @@ async function readLatestDetails(
     return { builder: null, reviewer: null };
   }
 
+  const outboxDir = path.join(queuePath, "outbox");
+  const reviewsDir = path.join(queuePath, "reviews");
+  const builderOutbox = await findLatestBuilderOutboxFile(outboxDir);
+  const reviewPath = review
+    ? path.join(review.name.endsWith(".result.json") ? outboxDir : reviewsDir, review.name)
+    : null;
+
   const [builder, reviewer] = await Promise.all([
-    outbox ? readBuilderResult(path.join(queuePath, "outbox", outbox.name)) : null,
-    review ? readReviewerResult(path.join(queuePath, "reviews", review.name)) : null,
+    builderOutbox ? readBuilderResult(path.join(outboxDir, builderOutbox.name)) : outbox ? readBuilderResult(path.join(outboxDir, outbox.name)) : null,
+    reviewPath ? readReviewerResult(reviewPath) : null,
   ]);
 
   return { builder, reviewer };
@@ -444,6 +454,10 @@ async function readBuilderResult(filePath: string): Promise<BuilderResultDetails
 async function readReviewerResult(filePath: string): Promise<ReviewerResultDetails | null> {
   try {
     const payload = JSON.parse(await readFile(filePath, "utf-8")) as {
+      task_id?: string;
+      parent_task_id?: string;
+      role?: string;
+      finished_at?: string;
       reviewed_task_id?: string;
       reviewed_at?: string;
       verdict?: string;
@@ -463,13 +477,21 @@ async function readReviewerResult(filePath: string): Promise<ReviewerResultDetai
       next_task?: {
         task_id?: string;
       } | null;
+      codex?: {
+        stdout?: string;
+        stderr?: string;
+      };
     };
 
+    const stdout = payload.codex?.stdout?.trim() ?? "";
+    const parsedVerdict = parseReviewerVerdict(stdout);
+    const summarySource = payload.review_summary ?? (stdout ? stdout : (payload.codex?.stderr ?? null));
+
     return {
-      reviewed_task_id: payload.reviewed_task_id ?? null,
-      verdict: payload.verdict ?? null,
-      reviewed_at: payload.reviewed_at ?? null,
-      summary: summarizeText(payload.review_summary ?? null),
+      reviewed_task_id: payload.reviewed_task_id ?? payload.parent_task_id ?? payload.task_id ?? null,
+      verdict: payload.verdict ?? parsedVerdict,
+      reviewed_at: payload.reviewed_at ?? payload.finished_at ?? null,
+      summary: summarizeText(summarySource),
       next_task_id: payload.next_task?.task_id ?? null,
       image_ref: extractImageRef(payload),
     };
@@ -495,6 +517,70 @@ async function listQueueFiles(directory: string, suffix: string): Promise<QueueF
   } catch {
     return [];
   }
+}
+
+async function findLatestReviewerOutboxFile(outboxDirectory: string, outboxFiles: QueueFile[]) {
+  for (const file of outboxFiles) {
+    if (await isReviewerOutboxResult(path.join(outboxDirectory, file.name))) {
+      return file;
+    }
+  }
+
+  return null;
+}
+
+async function findLatestBuilderOutboxFile(outboxDirectory: string) {
+  const outboxFiles = await listQueueFiles(outboxDirectory, ".result.json");
+
+  for (const file of outboxFiles) {
+    if (!(await isReviewerOutboxResult(path.join(outboxDirectory, file.name)))) {
+      return file;
+    }
+  }
+
+  return null;
+}
+
+async function isReviewerOutboxResult(filePath: string) {
+  try {
+    const payload = JSON.parse(await readFile(filePath, "utf-8")) as {
+      role?: string;
+      instruction?: string;
+      task_id?: string;
+      codex?: {
+        stdout?: string;
+      };
+    };
+    const stdout = payload.codex?.stdout?.trim() ?? "";
+
+    return (
+      payload.role === "reviewer" ||
+      /^Review only\./i.test(payload.instruction ?? "") ||
+      /final-review/i.test(payload.task_id ?? "") ||
+      parseReviewerVerdict(stdout) !== null
+    );
+  } catch {
+    return false;
+  }
+}
+
+function pickLatestQueueFile(left: QueueFile | null, right: QueueFile | null) {
+  if (!left) return right;
+  if (!right) return left;
+  return right.updated_at > left.updated_at ? right : left;
+}
+
+function parseReviewerVerdict(value: string) {
+  const firstLine = value
+    .split(/\r?\n/)
+    .map((line) => line.trim().toLowerCase())
+    .find(Boolean);
+
+  if (firstLine === "approve" || firstLine === "reject" || firstLine === "hold") {
+    return firstLine;
+  }
+
+  return null;
 }
 
 function findLoopProcess(processes: ProcessSnapshot[]) {
