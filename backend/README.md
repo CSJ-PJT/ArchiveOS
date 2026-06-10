@@ -1,14 +1,20 @@
-# ArchiveOS Backend
+# ArchiveOS 백엔드
 
-Minimal Express API for server-side ArchiveOS operations.
-Current Phase 3 behavior prioritizes read-only PM visibility and safe command recording.
+ArchiveOS 백엔드는 서버 측 쓰기, 명령 기록, 로컬 런타임 상태 조회를 위한 최소 Express API입니다. 현재 단계의 우선순위는 읽기 전용 PM 가시화와 안전한 기록입니다.
 
-## Purpose
+## 목적
 
-This service prepares ArchiveOS for secure server-side Supabase writes, command logging, and future integrations such as GitHub webhooks, AI review jobs, and MCP. The frontend still reads directly from Supabase for the current MVP.
-It does not provide arbitrary command execution, Codex process control, OpenAI calls, GitHub automation, or MCP integration.
+이 서비스는 향후 안전한 Supabase 서버 측 쓰기, GitHub Webhook, AI 리뷰 작업, MCP 연동을 위한 기반입니다. 현재 MVP에서는 프론트엔드가 Supabase 읽기를 계속 수행합니다.
 
-## Setup
+백엔드는 다음을 제공하지 않습니다.
+
+- 임의 셸 명령 실행
+- Codex 프로세스 직접 제어
+- OpenAI API 호출
+- GitHub 자동화
+- MCP 직접 실행
+
+## 실행 방법
 
 ```bash
 cd backend
@@ -17,7 +23,7 @@ cp .env.example .env
 npm run dev
 ```
 
-## Environment Variables
+## 환경 변수
 
 ```bash
 SUPABASE_URL=
@@ -26,70 +32,74 @@ PORT=4000
 ARCHIVEOS_PROJECT_PATH=
 CODEX_IMPLEMENTER_PID=
 CODEX_REVIEWER_PID=
+MCP_REPO_PATH=
+MCP_QUEUE_PATH=
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY` is a backend-only secret. Never expose it to the Vite frontend, never prefix it with `VITE_`, and never commit it.
-`ARCHIVEOS_PROJECT_PATH` should point to the ArchiveOS repository root when running local project actions.
-`CODEX_IMPLEMENTER_PID` and `CODEX_REVIEWER_PID` are optional local visibility hints for manually started Codex terminals. They are not secrets, but they are session-specific and should stay in local `.env`.
+`SUPABASE_SERVICE_ROLE_KEY`는 백엔드 전용 비밀값입니다. Vite 프론트엔드에 노출하지 말고, `VITE_` 접두사를 붙이지 말고, 커밋하지 마세요.
 
-## Local Action Security
+`ARCHIVEOS_PROJECT_PATH`는 allowlisted local action을 실행할 ArchiveOS 저장소 루트를 가리킵니다.
 
-ArchiveOS never executes arbitrary shell commands from user input. Local project actions are selected by predefined action IDs and mapped to fixed `spawn` commands on the backend. Request bodies cannot provide custom paths or custom command strings.
+`CODEX_IMPLEMENTER_PID`, `CODEX_REVIEWER_PID`는 수동으로 켠 Codex 터미널을 읽기 전용으로 감지하기 위한 로컬 힌트입니다. 비밀값은 아니지만 세션별 값이므로 `.env`에만 둡니다.
 
-## Supabase Client Note
+## 로컬 액션 보안
 
-This backend currently uses Supabase table operations only, but Node.js 20 does not provide the native WebSocket support expected by the current Supabase realtime client initialization. The `ws` dependency is kept only as the required transport so the service role client can be constructed. Do not add realtime features unless they are explicitly planned later.
+ArchiveOS는 사용자 입력으로 임의 셸 명령을 실행하지 않습니다. 로컬 프로젝트 액션은 미리 정의된 action ID를 고정된 `spawn` 명령에 매핑합니다. 요청 본문은 임의 경로나 임의 명령 문자열을 제공할 수 없습니다.
 
-## Endpoints
+## Supabase 클라이언트 주의사항
+
+백엔드는 service role client로 Supabase 테이블 작업을 수행합니다. service role key는 서버에서만 사용해야 합니다.
+
+## 엔드포인트
 
 ### GET /health
 
-Returns backend health status.
+백엔드 상태를 반환합니다.
 
 ### GET /api/work-logs/recent
 
-Returns the 20 most recent work logs, ordered by `created_at` descending. Includes task title and agent name when available.
+최근 작업 로그 20개를 `created_at` 내림차순으로 반환합니다. 가능한 경우 task title과 agent name을 함께 포함합니다.
 
 ### POST /api/work-logs
 
-Creates a work log using the server-side Supabase admin client.
+서버 측 Supabase admin client로 작업 로그를 생성합니다.
 
 ```json
 {
   "task_id": null,
   "agent_id": null,
   "log_type": "summary",
-  "content": "Short work log content"
+  "content": "짧은 작업 로그"
 }
 ```
 
-Validation errors return `400`. Supabase or server errors return `500` without leaking secrets.
+검증 오류는 `400`, Supabase 또는 서버 오류는 비밀값을 노출하지 않고 `500`을 반환합니다.
 
 ### GET /api/commands/recent
 
-Returns the 20 most recent command runs, ordered by `created_at` descending.
+최근 command run 20개를 `created_at` 내림차순으로 반환합니다.
 
 ### POST /api/commands
 
-Records a command run without executing external actions.
+외부 액션을 실행하지 않고 명령 의도를 기록합니다.
 
 ```json
 {
-  "command": "summarize current queue",
+  "command": "현재 큐 요약",
   "command_type": "typed",
   "status": "pending"
 }
 ```
 
-Only recorded command intents are stored for now. This endpoint does not call OpenAI, GitHub, MCP, or any external automation.
+현재 이 엔드포인트는 OpenAI, GitHub, MCP, 외부 자동화를 호출하지 않습니다.
 
 ### GET /api/local-actions/projects
 
-Returns the static allowlisted local projects configured on the backend.
+백엔드에 정적으로 설정된 allowlisted local project를 반환합니다.
 
 ### POST /api/local-actions/run
 
-Runs one allowlisted local action and records the result to `command_runs`.
+allowlisted local action 하나를 실행하고 결과를 `command_runs`에 기록합니다.
 
 ```json
 {
@@ -98,8 +108,8 @@ Runs one allowlisted local action and records the result to `command_runs`.
 }
 ```
 
-Allowed actions are `git_status`, `git_branch`, `git_log_recent`, `frontend_build`, `backend_typecheck`, and `backend_build`.
+허용된 액션은 `git_status`, `git_branch`, `git_log_recent`, `frontend_build`, `backend_typecheck`, `backend_build`입니다.
 
 ### GET /api/local-runtime/status
 
-Returns a read-only snapshot of the local Codex loop, implementer process, reviewer bridge process, and queue folders when they can be detected. This endpoint does not control processes and does not execute user-provided commands.
+로컬 Codex loop, implementer process, reviewer bridge process, queue folder를 감지 가능한 범위에서 읽기 전용으로 반환합니다. 이 엔드포인트는 프로세스를 제어하지 않으며 사용자 제공 명령을 실행하지 않습니다.
