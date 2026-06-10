@@ -1,50 +1,78 @@
 # ArchiveOS
 
-ArchiveOS is a small AI agent operations dashboard built with React, Vite, TypeScript, Tailwind CSS, and Supabase.
-Phase 3 is intentionally a read-only PM visibility and recording dashboard, not an execution console.
+ArchiveOS는 AI 에이전트 작업을 PM 관점에서 관찰하고 기록하기 위한 운영 대시보드입니다. React, Vite, TypeScript, Tailwind CSS, Supabase, Express 기반으로 구성되어 있습니다.
 
-## MVP scope
+현재 단계의 핵심 방향은 **실행 콘솔이 아니라 읽기 전용 PM 가시화 대시보드**입니다. OpenAI API 호출, GitHub Webhook 자동화, MCP 직접 실행 제어, Codex 직접 제어는 아직 포함하지 않습니다.
 
-- Agent list with role, status, and current task
-- Task queue grouped by status
-- Recent work logs
-- Memory / Decisions view backed by `work_logs` rows where `log_type = 'decision'`
-- Frontend Supabase reads for the current dashboard
-- Minimal backend API for server-side work log writes
-- Command Center UI for recorded quick actions, typed command intent, and command history
-- PM dashboard panels for workflow state, actual MCP builder/reviewer results, decisions, stale warnings, and screenshot freshness zero-states
-- Event Timeline derived from live runtime state, backend judgement, and non-seed Supabase command/decision records
+## 현재 MVP 범위
 
-No authentication, OpenAI API calls, GitHub webhooks, or MCP integrations are included yet.
+- 에이전트 목록: 이름, 역할, 상태, 현재 작업
+- 작업 큐: 상태별 작업 흐름과 담당 에이전트
+- 작업 로그: 요약, 결정, 오류, 리뷰 기록
+- Memory / Decisions: `work_logs` 중 `log_type = 'decision'`인 결정 기록 표시
+- Supabase 직접 읽기: 프론트엔드는 현재 MVP 데이터 조회를 위해 Supabase를 직접 읽습니다.
+- 백엔드 API: 서버 측 쓰기, 명령 기록, 런타임 상태 조회의 기반
+- Command Center: 빠른 액션과 입력 명령을 **실행하지 않고 기록**합니다.
+- Event Timeline: MCP 런타임, 백엔드 판단, Supabase 기록을 요약한 읽기 전용 타임라인
+- Data Consistency: 프론트엔드 표시값, 백엔드 API, MCP 큐 상태가 일치하는지 확인
+
+## ArchiveOS의 역할
+
+ArchiveOS는 사람이 여러 Git Bash, Codex 세션, 큐 폴더, 로그 파일을 직접 뒤지지 않아도 현재 AI 작업 상태를 볼 수 있게 만드는 PM 운영 화면입니다.
+
+- 현재 어떤 작업이 진행 중인지 확인합니다.
+- 구현자와 리뷰어 프로세스가 감지되는지 표시합니다.
+- 빌더 결과와 리뷰 결과 파일을 읽기 전용으로 보여줍니다.
+- 승인, 반려, 결정은 기록만 하며 실제 자동 실행은 하지 않습니다.
+- 빈 inbox 상태를 장애로 오해하지 않도록 idle 상태와 실패 상태를 구분합니다.
+
+## DeepStake3D 연계 설명
+
+DeepStake3D는 ArchiveOS가 관찰하는 대표 작업 프로젝트입니다. Unity 기반 3D 게임 PoC이며, 현재는 ModularConstructionPrototype을 중심으로 배치, 회전, 제거, 저장/복원, chunk/tile 기반 검증, settlement-scale 검증을 확장하는 단계입니다.
+
+ArchiveOS는 DeepStake3D를 직접 실행하거나 Unity를 제어하지 않습니다. 대신 MCP 큐, 빌더 결과, 리뷰 결과, 테스트 요약, 런타임 경고를 읽어 PM이 작업 흐름을 파악할 수 있게 합니다.
+
+현재 DeepStake3D 설명에서 정확히 구분해야 하는 상태는 다음과 같습니다.
+
+- 구현 완료: Unity 프로젝트 구조, 3D PoC 화면, ModularConstructionPrototype의 기본 배치/저장/복원 검증
+- PoC 수준: 월드/거점/상호작용 HUD, chunk 기반 건설 데이터 검증
+- 향후 확장 예정: AI NPC, 동적 퀘스트, 대규모 한국형 농촌/도시/시설 지역
+- 미구현 또는 제한사항: 상용 게임 완성 단계가 아니며, AI NPC와 동적 퀘스트는 아직 구현 완료가 아닙니다.
 
 ## Command Center
 
-The dashboard includes a Command Center panel with recorded quick actions, a typed command box, backend health status, and recent command history loaded from the backend API. At this stage, commands are only recorded as backend `command_runs` rows. They do not call OpenAI, GitHub, MCP, or other external automation.
+Command Center는 빠른 액션, 입력 명령, 백엔드 상태, 최근 명령 기록을 보여줍니다. 현재 명령은 백엔드 `command_runs` 행으로만 기록됩니다.
 
-It also includes a read-only Codex Runtime panel for local visibility into the detected loop process, implementer Codex process, reviewer bridge, and queue counts. This panel does not control Codex and does not execute arbitrary commands.
-
-Local Diagnostics are separated from command recording and are marked as allowlisted checks. ArchiveOS never accepts arbitrary shell commands from the UI.
+명령은 OpenAI, GitHub, MCP, Codex, 외부 자동화로 전달되지 않습니다. 사용자가 입력한 임의 셸 명령도 실행하지 않습니다.
 
 ## Event Timeline
 
-The Event Timeline is a read-only PM visibility surface. It calls `GET /api/runtime/events/recent` and derives normalized events from existing sources only: MCP queue/runtime files, latest builder and reviewer result payloads, backend runtime judgement, and non-seed Supabase `command_runs` or decision `work_logs`.
+Event Timeline은 `GET /api/runtime/events/recent`를 호출하여 기존 런타임 소스에서 파생된 이벤트를 표시합니다.
 
-ArchiveOS does not create a separate event bus yet, and execution control is still intentionally disabled. Timeline entries are summaries for PM context, not full builder/reviewer logs.
+사용되는 소스:
 
-## MVP stabilization
+- MCP 큐와 런타임 파일
+- 최신 빌더/리뷰어 결과
+- 백엔드 런타임 판단
+- seed/demo가 아닌 Supabase `command_runs`
+- seed/demo가 아닌 decision `work_logs`
 
-ArchiveOS now includes a read-only Data Consistency panel and E2E Test Readiness checklist. The goal is to prepare for a real PM visibility test by confirming that the dashboard, backend runtime endpoint, Supabase reads, and MCP queue files are all describing the same workflow state.
+ArchiveOS는 아직 별도 이벤트 버스를 만들지 않습니다. 타임라인은 PM 맥락을 위한 요약이며, 전체 빌더/리뷰어 로그를 대체하지 않습니다.
 
-The consistency panel does not start tasks, run MCP commands, call OpenAI, or control Codex. It only displays:
+## MVP 안정화
 
-- MCP queue counts from the runtime source
-- backend API queue counts from `GET /api/local-runtime/status`
-- frontend-displayed queue counts
-- latest builder and reviewer result filenames
-- `command_runs` reachability
-- `work_logs` / decision reachability
+ArchiveOS는 E2E PM 가시화 테스트를 위해 Data Consistency 패널과 E2E Test Readiness 체크리스트를 제공합니다.
 
-Manual E2E visibility test:
+이 패널은 작업 시작, MCP 명령 실행, OpenAI 호출, Codex 제어를 하지 않습니다. 오직 다음 상태를 표시합니다.
+
+- MCP 큐 카운트
+- 백엔드 API 큐 카운트
+- 프론트엔드에 표시된 큐 카운트
+- 최신 빌더/리뷰어 결과 파일명
+- `command_runs` 연결 상태
+- `work_logs`와 decision 연결 상태
+
+수동 E2E 가시화 테스트:
 
 ```bash
 cd /c/Users/dan18/Documents/Codex/2026-05-20/create-a-new-project-named-archiveos/ArchiveOS
@@ -56,68 +84,67 @@ npm run build
 cd backend && npm run typecheck && npm run build
 ```
 
-Then open:
+브라우저에서 확인:
 
 ```bash
 start http://127.0.0.1:5173/
 ```
 
-Success looks like:
+성공 기준:
 
-- ArchiveOS frontend and backend are running.
-- The Data Consistency panel shows queue counts without errors.
-- `command_runs` and `work_logs` reachability are not `error`.
-- The E2E checklist distinguishes an empty `inbox=0` idle state from a loop failure.
-- If the reviewer verdict is `stop` because of a Codex usage limit, the dashboard says it is a usage-limit stop rather than a runtime crash.
-- Latest builder/reviewer filenames are shown when MCP result files exist.
+- ArchiveOS 프론트엔드와 백엔드가 실행 중입니다.
+- Data Consistency 패널이 큐 카운트를 오류 없이 표시합니다.
+- `command_runs`와 `work_logs` 연결 상태가 `error`가 아닙니다.
+- `inbox=0` idle 상태와 루프 실패 상태가 구분됩니다.
+- Codex 사용량 제한으로 reviewer verdict가 `stop`인 경우 런타임 충돌이 아니라 사용량 제한 중단으로 표시됩니다.
+- MCP 결과 파일이 있으면 최신 빌더/리뷰어 파일명이 표시됩니다.
 
-## Setup
+## 실행 방법
 
-1. Install dependencies:
+의존성 설치:
 
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+```
 
-2. Create a local environment file:
+프론트엔드 환경 파일 생성:
 
-   ```bash
-   cp .env.example .env.local
-   ```
+```bash
+cp .env.example .env.local
+```
 
-   Required variables:
+필수 환경 변수:
 
-   ```bash
-   VITE_SUPABASE_URL=your-project-url
-   VITE_SUPABASE_ANON_KEY=your-publishable-or-anon-key
-   VITE_BACKEND_URL=http://localhost:4000
-   ```
+```bash
+VITE_SUPABASE_URL=your-project-url
+VITE_SUPABASE_ANON_KEY=your-publishable-or-anon-key
+VITE_BACKEND_URL=http://localhost:4000
+```
 
-   Use the Supabase publishable key for this frontend app. Do not put a secret key in `.env.local`.
-   `VITE_BACKEND_URL` points the Command Center to the local backend API.
+프론트엔드에는 Supabase publishable/anon key만 넣습니다. secret key나 service role key를 `.env.local`에 넣지 마세요.
 
-3. In the Supabase SQL editor, run:
+Supabase SQL editor에서 다음 순서로 실행합니다.
 
-   ```sql
-   -- supabase/schema.sql
-   -- then supabase/seed.sql
-   ```
+```sql
+-- supabase/schema.sql
+-- supabase/seed.sql
+```
 
-4. Start the local app:
+프론트엔드 실행:
 
-   ```bash
-   npm run dev
-   ```
+```bash
+npm run dev
+```
 
-## Build
+빌드:
 
 ```bash
 npm run build
 ```
 
-## Backend API
+## 백엔드 API
 
-The `backend/` service exists for secure server-side writes and future integrations. The current frontend still reads directly from Supabase and is not blocked by the backend.
+`backend/` 서비스는 서버 측 쓰기와 향후 통합을 위한 기반입니다. 현재 프론트엔드는 Supabase 읽기를 유지하며, 백엔드가 UI 표시를 완전히 대체하지는 않습니다.
 
 ```bash
 cd backend
@@ -126,7 +153,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Backend environment variables:
+백엔드 환경 변수:
 
 ```bash
 SUPABASE_URL=your-project-url
@@ -139,93 +166,53 @@ MCP_REPO_PATH=optional-local-mcp-repo-path
 MCP_QUEUE_PATH=optional-local-mcp-queue-path
 ```
 
-The service role key is server-only. Never use a `VITE_` prefix for it and never expose it to frontend code.
-`ARCHIVEOS_PROJECT_PATH` lets the backend run allowlisted local actions against this repository. ArchiveOS never executes arbitrary typed shell commands; it only maps predefined action IDs to fixed commands.
-The optional Codex PID variables help the read-only runtime panel distinguish manually started implementer and reviewer terminals during local testing. Update them whenever those Codex sessions restart.
-If the MCP queue lives outside the ArchiveOS repository, set `MCP_QUEUE_PATH` to the queue directory so the read-only runtime panel can display live counts and latest files.
+`SUPABASE_SERVICE_ROLE_KEY`는 백엔드 전용입니다. `VITE_` 접두사를 붙이거나 프론트엔드 코드에 노출하면 안 됩니다.
 
-Health check:
+## 로컬 런타임 오케스트레이터
 
-```bash
-curl http://localhost:4000/health
-```
+ArchiveOS는 여러 Git Bash 창을 줄이기 위해 로컬 PowerShell 스크립트를 제공합니다. 이 도구는 ArchiveOS 프론트엔드, 백엔드, MCP 큐 루프, reviewer bridge, 선택적 watcher를 시작/중지/조회할 수 있습니다.
 
-Command endpoints:
+ArchiveOS UI에는 프로세스 제어 기능을 노출하지 않습니다. Codex 구현자/리뷰어 세션은 여전히 수동으로 시작하고 PID 힌트로 감지합니다.
 
-```bash
-curl http://localhost:4000/api/commands/recent
-curl -X POST http://localhost:4000/api/commands \
-  -H "Content-Type: application/json" \
-  -d '{"command":"summarize current queue","command_type":"typed"}'
-```
-
-Local action endpoints:
-
-```bash
-curl http://localhost:4000/api/local-actions/projects
-curl -X POST http://localhost:4000/api/local-actions/run \
-  -H "Content-Type: application/json" \
-  -d '{"project_id":"archiveos","action":"git_status"}'
-```
-
-Local runtime status:
-
-```bash
-curl http://localhost:4000/api/local-runtime/status
-```
-
-Derived runtime events:
-
-```bash
-curl http://localhost:4000/api/runtime/events/recent
-```
-
-## Local Runtime Orchestrator
-
-ArchiveOS includes local PowerShell scripts for starting, stopping, and inspecting non-interactive runtime processes without opening many Git Bash terminals. This is a developer tool only; the ArchiveOS UI remains read-only and does not expose process control.
-
-Copy the example config, then edit local paths and manual Codex PID placeholders:
+설정 복사:
 
 ```bash
 cp tools/runtime/runtime.config.example.json tools/runtime/runtime.config.json
 notepad tools/runtime/runtime.config.json
 ```
 
-Start configured processes from Git Bash:
+시작:
 
 ```bash
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools/runtime/start-all.ps1"
 ```
 
-Inspect status:
+상태 확인:
 
 ```bash
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools/runtime/status.ps1"
 ```
 
-Stop processes started by the orchestrator:
+중지:
 
 ```bash
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools/runtime/stop-all.ps1"
 ```
 
-The orchestrator can manage the ArchiveOS frontend, ArchiveOS backend, MCP queue loop, reviewer bridge, and an optional queue watcher placeholder. Interactive Codex implementer and reviewer sessions remain manual for now and should still be detected through PID hints such as `CODEX_IMPLEMENTER_PID` and `CODEX_REVIEWER_PID`.
-For the modular loop, `Run-ModularLoop.ps1` starts the local reviewer bridge internally. The standalone reviewer bridge entry is disabled by default so the bridge is not duplicated.
-
-Local files are ignored by git:
+git에서 제외되는 로컬 파일:
 
 - `tools/runtime/runtime.config.json`
 - `tools/runtime/logs/`
 - `tools/runtime/pids/`
 
-## Project structure
+## 프로젝트 구조
 
-- `src/lib/supabase.ts` creates the Supabase browser client.
-- `src/App.tsx` contains the MVP dashboard and decisions view.
-- `src/types/database.ts` defines local TypeScript table types.
-- `supabase/schema.sql` creates enums, tables, indexes, RLS policies, and grants.
-- `supabase/seed.sql` inserts sample agents, tasks, and work logs.
-- `backend/src/server.ts` exposes the minimal Express API.
-- `backend/src/lib/supabaseAdmin.ts` creates the server-only Supabase admin client.
-- `backend/src/lib/localRuntime.ts` reads local Codex loop status without process control.
-- `tools/runtime/` contains local-only process orchestration scripts.
+- `src/lib/supabase.ts`: Supabase 브라우저 클라이언트
+- `src/App.tsx`: PM 운영 대시보드 UI
+- `src/types/database.ts`: Supabase 테이블 타입
+- `supabase/schema.sql`: enum, table, index, RLS, grant 정의
+- `supabase/seed.sql`: 샘플 에이전트, 작업, 로그 데이터
+- `backend/src/server.ts`: Express API
+- `backend/src/lib/supabaseAdmin.ts`: 서버 전용 Supabase admin client
+- `backend/src/lib/localRuntime.ts`: 로컬 Codex/MCP 런타임 상태 읽기
+- `tools/runtime/`: 로컬 전용 프로세스 오케스트레이션 스크립트

@@ -1,214 +1,99 @@
-# Obsidian Integration Strategy
+# Obsidian 연계 전략
 
-## Role Split
+## 역할 분리
 
-ArchiveOS and Obsidian should not compete.
+ArchiveOS와 Obsidian은 같은 역할을 하면 안 됩니다.
 
-ArchiveOS is the live operations cockpit:
+ArchiveOS는 실시간 운영 화면입니다.
 
-- Runtime state
-- Queue state
-- Agent operations
+- Runtime
+- Queue
 - Decisions
-- Reviews
-- Incidents
-- Warnings
-- Short-term command history
+- Agent Operations
+- Builder / Reviewer 결과
+- PM 승인/반려 기록
 
-Obsidian is the long-term organizational memory:
+Obsidian은 장기 기억 저장소입니다.
 
-- Design history
-- Architecture notes
-- Decision records
-- Lessons learned
-- Incident retrospectives
-- Review archives
-- Daily project journals
+- 설계 기록
+- 아키텍처 노트
+- 결정 기록
+- 리뷰 요약
+- 장애/사고 회고
+- 배운 점
 
-## Recommended Vault Structure
+## 권장 Vault 구조
 
 ```text
 Vault/
   Projects/
     ArchiveOS/
-    DeepStake/
+    DeepStake3D/
   Decisions/
-    2026/
   Architecture/
     ArchiveOS/
-    DeepStake/
+    DeepStake3D/
   Incidents/
-    2026/
   Reviews/
-    Builder/
-    Reviewer/
-  Agents/
-    Implementer/
-    Reviewer/
-    Architect/
-    Historian/
-  Tasks/
-    ArchiveOS/
-    DeepStake/
-  Commits/
   Daily/
 ```
 
-## Export Strategy
+## 1차 구현 권장안
 
-Start with manual or backend-triggered Markdown export. Do not add automatic execution control in the UI yet.
+초기에는 **Markdown Export Only**가 가장 적절합니다.
 
-Export candidates:
+이유:
 
-- PM approvals
-- PM rejections
-- Reviewer verdicts
-- Builder summaries
-- Architecture decisions
-- Incident reports
-- Lessons learned
-- Major task state transitions
+- 구현 비용이 낮습니다.
+- ArchiveOS 런타임 안정성을 해치지 않습니다.
+- Obsidian 포맷 오류가 ArchiveOS 운영에 영향을 주지 않습니다.
+- 사람이 export 결과를 검토하고 정리할 수 있습니다.
 
-## Markdown Frontmatter
+## 권장하지 않는 방식
 
-Each exported note should include structured metadata.
+초기 단계에서 Bidirectional Sync는 권장하지 않습니다.
 
-```yaml
----
-archiveos_id: "decision-uuid"
-source: "archiveos"
-source_type: "decision"
-project: "ArchiveOS"
-task_id: "task-uuid"
-agents:
-  - "Reviewer"
-  - "PM"
-status: "approved"
-created_at: "2026-05-29T00:00:00Z"
-related:
-  review: "review-artifact-id"
-  builder_result: "builder-artifact-id"
-tags:
-  - archiveos
-  - decision
----
-```
+위험:
 
-## Note Templates
+- 충돌 처리 비용 증가
+- 어느 쪽이 source of truth인지 불명확
+- PM이 추적하기 어려운 변경 경로 발생
 
-### Decision Record
+## Export 대상
+
+- PM 결정
+- 리뷰 verdict
+- milestone summary
+- incident report
+- DeepStake3D construction validation 결과
+- ArchiveOS 운영 회고
+
+## Markdown 예시
 
 ```markdown
-# Decision: <title>
+# Decision: Add settlement-scale construction validation
 
-## Summary
-
-<short decision summary>
+- Project: DeepStake3D
+- Source: ArchiveOS
+- Type: PM Decision
+- Status: approved
+- Created: 2026-06-10
 
 ## Context
 
-<why this decision was needed>
+World Construction Milestone 1 검증 결과를 바탕으로 settlement-scale validation을 승인했다.
 
-## Decision
+## Evidence
 
-<approved, rejected, deferred, reassigned, changed scope>
-
-## Rationale
-
-<reasoning>
-
-## Linked Work
-
-- Task: [[...]]
-- Review: [[...]]
-- Builder Result: [[...]]
-- Commit: [[...]]
-
-## Follow-up
-
-<next safe action>
+- 필수 PlayMode 테스트 통과
+- chunk boundary validation 통과
+- persistence regression 없음
 ```
 
-### Incident Note
+## ArchiveOS UI 연계
 
-```markdown
-# Incident: <title>
+- Decisions 탭: 선택한 결정 export
+- Timeline 탭: 이벤트 묶음 export
+- Settings 탭: 로컬 vault 경로 안내
 
-## Signal
-
-<what ArchiveOS detected>
-
-## Impact
-
-<what work was affected>
-
-## Cause
-
-<known or suspected cause>
-
-## Recovery
-
-<recommended action>
-
-## Prevention
-
-<future guardrail>
-```
-
-### Architecture Note
-
-```markdown
-# Architecture: <title>
-
-## Problem
-
-<system problem>
-
-## Constraints
-
-<technical and operational constraints>
-
-## Proposal
-
-<recommended structure>
-
-## Tradeoffs
-
-<costs and risks>
-
-## Decision Links
-
-- [[Decision ...]]
-```
-
-## Link Policy
-
-ArchiveOS should export stable links where possible:
-
-- `[[Tasks/<project>/<task-id>]]`
-- `[[Decisions/2026/<decision-title>]]`
-- `[[Reviews/Reviewer/<review-id>]]`
-- `[[Incidents/2026/<incident-title>]]`
-
-Obsidian links should be deterministic enough to regenerate without creating duplicates.
-
-## ArchiveOS UI Integration
-
-Recommended future UI:
-
-- Settings: Obsidian vault path configured locally, not exposed to frontend secrets
-- Decisions: export selected decision
-- Timeline: export selected event group
-- Knowledge: open/export linked note bundle
-
-Initial version should show export readiness only. Actual file write automation should be added after a review of local file permissions and duplicate handling.
-
-## Safety Rules
-
-- Do not export secrets.
-- Do not export service role keys.
-- Do not export full raw logs by default.
-- Mark exported notes as generated from ArchiveOS.
-- Preserve source IDs for traceability.
-- Treat Obsidian as memory, not as the runtime source of truth.
-
+설정에 secret 값을 표시하지 않습니다. Export 경로도 로컬 설정으로만 관리합니다.

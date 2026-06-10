@@ -1,134 +1,60 @@
 # Knowledge Graph MVP
 
-## Goal
+## 목적
 
-ArchiveOS does not need to recreate the full Obsidian graph in Phase 2.
+ArchiveOS는 Obsidian 전체 Graph 기능을 복제할 필요가 없습니다. MVP에서는 PM이 작업 맥락을 이해할 수 있는 최소 관계 그래프만 필요합니다.
 
-The MVP should answer operational questions:
+## 우선 노드
 
-- Which decision approved this work?
-- Which review blocked this task?
-- Which commit implemented this task?
-- Which incident explains the delay?
-- Which agent produced the current result?
-- Which architecture note guided this change?
-
-## MVP Entity Types
-
-| Entity | Meaning |
+| 노드 | 의미 |
 | --- | --- |
-| Task | Unit of work from queue or PM |
-| Agent | Implementer, Reviewer, Architect, Historian, PM, etc. |
-| Review | Reviewer result or verdict |
-| Decision | PM or reviewer decision |
-| Commit | Git commit or future GitHub commit |
-| Incident | Failure, stale processing, usage limit, runtime crash |
-| Artifact | Result file, screenshot, Markdown note, raw review |
-| Architecture Note | Design direction or constraint |
+| Task | 작업 단위 |
+| Review | 리뷰 결과 |
+| Decision | 승인, 반려, 보류 |
+| Commit | Git commit 또는 향후 GitHub commit |
+| Incident | 실패, stale, 사용량 제한, 런타임 장애 |
+| Screenshot | 결과 증거 이미지 |
 
-## MVP Relationships
-
-| Relationship | Example |
-| --- | --- |
-| produced_by | Builder result produced_by Implementer |
-| reviewed_by | Builder result reviewed_by Reviewer |
-| approved_by | Decision approved_by PM |
-| rejected_by | Decision rejected_by PM |
-| implements | Commit implements Task |
-| blocks | Incident blocks Task |
-| caused_by | Warning caused_by Codex usage limit |
-| supersedes | Decision supersedes older Decision |
-| references | Review references Architecture Note |
-| exported_to | Decision exported_to Obsidian Note |
-
-## Suggested Storage Model
-
-Use a generic relationship table first.
+## 우선 관계
 
 ```text
-entity_links
-  id
-  from_entity_type
-  from_entity_id
-  to_entity_type
-  to_entity_id
-  relationship_type
-  source
-  created_at
+Task -> Review
+Review -> Decision
+Decision -> Commit
+Incident -> Task
+Screenshot -> Review
 ```
 
-This avoids overfitting too early. Dedicated tables can be added later for high-volume relationships.
-
-## Graph Construction Sources
-
-| Source | Graph Contribution |
-| --- | --- |
-| MCP queue | Task state and result artifacts |
-| Reviewer result | Review entity, verdict edge |
-| Supabase decisions | Decision entity, PM action edges |
-| Git log | Commit entity, possible task links |
-| GitHub later | PR and CI nodes |
-| Obsidian export | Markdown note entities |
-
-## UI MVP
-
-Start with a focused graph, not a huge canvas.
-
-Recommended first view:
+## DeepStake3D 예시
 
 ```text
-Task
-  -> Builder Result
-  -> Review
-  -> Decision
-  -> Commit
+Task: Chunk World Foundation Milestone 1
+  -> Review: final approve
+  -> Decision: commit allowed
+  -> Commit: Add chunk world construction grouping
 ```
 
-Add side branches:
+이 정도 관계만 있어도 PM은 어떤 작업이 어떤 검증을 거쳐 commit으로 이어졌는지 추적할 수 있습니다.
 
-```text
-Incident -> blocks -> Task
-Architecture Note -> guides -> Task
-Historian -> exported_to -> Obsidian Note
-```
+## MVP 화면
 
-## Interaction Model
+초기 화면은 복잡한 그래프 엔진이 아니라 단순 관계 리스트로 충분합니다.
 
-Read-only first:
+- 선택한 Task의 관련 Review
+- 관련 Decision
+- 관련 Commit
+- 관련 Incident
+- 관련 Screenshot
 
-- Click node to inspect summary
-- Copy ID or filename
-- Filter by task
-- Filter by source
-- Filter by entity type
-- Highlight stale or failed paths
-- Open related Timeline events
+## 나중에 추가할 수 있는 것
 
-No graph node should trigger execution in Phase 2.
+- Agent 간 메시지 관계
+- GitHub PR / CI 관계
+- Obsidian note backlink
+- 검색 가능한 graph view
 
-## Visual Encoding
+## 도입 원칙
 
-| Type | Shape/Color Suggestion |
-| --- | --- |
-| Task | blue rounded node |
-| Agent | cyan circular node |
-| Review | amber node |
-| Decision | green or red depending on outcome |
-| Incident | red warning node |
-| Commit | purple or gray node |
-| Artifact | slate node |
-| Obsidian Note | green outlined node |
-
-## MVP Success Criteria
-
-The Knowledge Graph MVP is enough when it can show:
-
-- one active task's lifecycle
-- latest builder result
-- latest reviewer verdict
-- latest PM decision
-- related warning or incident
-- linked Obsidian export if present
-
-Avoid broad organization-wide graph exploration until the focused task graph is useful.
-
+- PM이 이해할 수 없는 자동 관계 생성을 피합니다.
+- seed/demo 데이터는 live operational truth처럼 표시하지 않습니다.
+- 모든 관계에는 source와 created_at이 있어야 합니다.

@@ -1,244 +1,117 @@
-# UI Wireframe Proposal
+# UI 와이어프레임 제안
 
-## Navigation
+## 탭 구조
 
-Recommended Phase 2 navigation:
+ArchiveOS는 다음 탭 구조를 기준으로 합니다.
 
 ```text
-[Dashboard] [Mesh] [Decisions] [Operators] [Timeline] [Knowledge] [GitHub] [Settings]
+Dashboard | Decisions | Operators | Timeline | GitHub | Settings
 ```
-
-If the current app should stay smaller, Mesh and Knowledge can be introduced behind feature flags or as read-only placeholders.
 
 ## Dashboard
 
-Purpose: answer the PM's top questions in five seconds.
+목적: 5초 안에 현재 상태를 판단합니다.
 
-```text
-┌──────────────────────────────────────────────────────────────┐
-│ PM Status Snapshot                                            │
-│ System: Working  Active Task: modular-construction...         │
-│ Worker: Implementer PID 15232  Verdict: approve_next          │
-│ Warning: No failure detected                                  │
-└──────────────────────────────────────────────────────────────┘
+표시 항목:
 
-┌─────────────────────────────┐ ┌─────────────────────────────┐
-│ Current Workflow State       │ │ Live Pipeline Map            │
-│ Inbox / Processing / Outbox  │ │ Inbox -> Builder -> Review   │
-│ Human-readable judgement     │ │ Animated only for live facts │
-└─────────────────────────────┘ └─────────────────────────────┘
+- PM Status Snapshot
+- Current Workflow State
+- Live Pipeline Map
+- Pipeline Warnings
+- Latest Builder Result
+- Latest Reviewer Result
+- Screenshot Freshness 요약
+- 최근 타임라인 3개
 
-┌─────────────────────────────┐ ┌─────────────────────────────┐
-│ Latest Builder Result        │ │ Latest Reviewer Result       │
-│ Summary first                │ │ Verdict first                │
-│ Raw collapsed                │ │ Raw collapsed                │
-└─────────────────────────────┘ └─────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────┐
-│ Recent Timeline Preview, max 3 events                         │
-└──────────────────────────────────────────────────────────────┘
-```
-
-Dashboard should not contain full operator diagnostics or long raw logs.
-
-## Agent Mesh View
-
-Purpose: show the organization, not just the queue.
-
-```text
-                 Architect
-                    ●
-                    │
-Historian ●────────● Reviewer
-     │              │
-     │              │
-     ● PM ─────────● Implementer
-                    │
-                 GitHub Sync
-                    ●
-```
-
-Node states:
-
-- gray: idle or offline
-- cyan: working
-- amber: reviewing
-- yellow: waiting or stale
-- red: error or blocked
-- green: recently succeeded
-
-Edge states:
-
-- dim: known relationship
-- cyan pulse: active communication
-- amber: waiting for review
-- red: blocked relationship
-- green: recent successful handoff
-
-Right-side detail panel:
-
-```text
-Selected Agent: Reviewer
-Status: reviewing
-PID: 18180
-Current Task: ...
-Latest Verdict: approve_next
-Last Seen: 3m ago
-Recent Messages:
-- Reviewer -> PM: approval recommendation
-- Architect -> Reviewer: constraint note
-```
+Dashboard에는 상세 프로세스 카드보다 고수준 요약을 둡니다.
 
 ## Decisions
 
-Purpose: PM decisions and decision archive.
+목적: PM 결정과 승인/반려 기록을 관리합니다.
 
-```text
-┌──────────────────────────────────────────────────────────────┐
-│ Approval / Rejection Recorder                                │
-│ Target Task: <current task>                                   │
-│ [Record Approval] [Record Rejection]                          │
-│ Optional reason                                               │
-└──────────────────────────────────────────────────────────────┘
+표시 항목:
 
-┌──────────────────────────────────────────────────────────────┐
-│ Recorded Decisions                                            │
-│ approve | task id | source PM dashboard | 5m ago              │
-│ reject  | task id | reason | source PM dashboard | yesterday  │
-└──────────────────────────────────────────────────────────────┘
-```
+- Recorded Decisions
+- Record Approval
+- Record Rejection
+- decision count badge
+- task/result/review 연결 정보
+- source label
 
-Buttons remain recording-only.
+승인/반려 버튼은 기록 전용입니다. MCP나 Codex를 실행하지 않습니다.
 
 ## Operators
 
-Purpose: concrete runtime status.
+목적: 구현자, 리뷰어, 루프, 브리지의 실제 감지 상태를 확인합니다.
 
-```text
-┌──────────────────────┐ ┌──────────────────────┐
-│ Implementer Codex     │ │ Reviewer Codex        │
-│ detected              │ │ detected              │
-│ PID / CPU             │ │ PID / CPU             │
-│ active task           │ │ latest review file    │
-│ latest builder result │ │ latest verdict        │
-└──────────────────────┘ └──────────────────────┘
+표시 항목:
 
-┌──────────────────────┐ ┌──────────────────────┐
-│ MCP Loop              │ │ Reviewer Bridge       │
-│ running / stopped     │ │ running / stopped     │
-│ queue counts          │ │ last review time      │
-│ stale judgement       │ │ source path           │
-└──────────────────────┘ └──────────────────────┘
-```
+- Implementer Codex card
+- Reviewer Codex card
+- MCP Loop card
+- Reviewer Bridge card
+- Queue details
+- PID, CPU, detected/not detected
+- latest builder result file
+- latest reviewer result file
+- 사람 말로 된 해석
 
-No start or stop controls in this phase.
+시작/종료 버튼은 아직 두지 않습니다.
 
 ## Timeline
 
-Purpose: explain how the state changed.
+목적: 상태 변화의 시간 흐름을 이해합니다.
 
-```text
-Today
-  10:32  builder completed       success   mcp
-  10:34  reviewer verdict        success   mcp
-  10:35  PM approval recorded    info      supabase
+표시 항목:
 
-Yesterday
-  23:10  usage limit stop        warning   backend
-```
-
-Features:
-
-- Group by day
-- Relative time visible
-- Exact timestamp in tooltip
-- Source badges
-- Show more / show less
-- Type filters later
-
-## Knowledge
-
-Purpose: focused task graph.
-
-```text
-Task
-  ├── Builder Result
-  │     └── Review
-  │           └── Decision
-  │                 └── Commit
-  └── Incident
-        └── Recovery Note
-```
-
-Initial scope:
-
-- Current task graph
-- Latest completed task graph
-- Filter by entity type
-- Inspect node summary
+- 오늘 이벤트 기본 표시
+- Show more / Show less
+- 상대 시간과 정확한 timestamp tooltip
+- source label
+- event type badge
 
 ## GitHub
 
-Purpose: read-only repository status.
+목적: 향후 GitHub 연동 위치를 확보합니다.
 
-```text
-GitHub integration not configured yet.
+현재는 read-only placeholder입니다.
 
-Future fields:
+향후 표시 예정:
+
 - repo
 - branch
 - latest commit
 - recent PRs
 - CI status
-- linked task
-```
 
-Do not call GitHub API until explicitly implemented.
+GitHub API 호출은 명시 구현 전까지 하지 않습니다.
 
 ## Settings
 
-Purpose: configuration clarity without exposing secrets.
+목적: 로컬 설정과 보안 원칙을 안내합니다.
 
-```text
-Frontend URL: http://localhost:5173
-Backend URL: http://localhost:4000
-Supabase: configured / unknown
-ARCHIVEOS_PROJECT_PATH: configured / missing
-CODEX_IMPLEMENTER_PID: configured / missing
-CODEX_REVIEWER_PID: configured / missing
+표시 항목:
 
-Security:
-- service role key backend-only
-- frontend uses publishable key only
-- commands are recording-only
-- local diagnostics are allowlisted
-- no arbitrary shell execution
-```
+- frontend URL
+- backend URL
+- Supabase configured/unknown
+- `ARCHIVEOS_PROJECT_PATH`
+- `CODEX_IMPLEMENTER_PID`
+- `CODEX_REVIEWER_PID`
+- runtime source 설명
+- service role key backend-only 원칙
+- commands are recording-only 원칙
+- local actions are allowlisted 원칙
 
-## Visual Priority
+비밀값은 표시하지 않습니다.
 
-Most prominent:
+## DeepStake3D 표시 방식
 
-- system active or idle
-- active task
-- current worker
-- latest verdict
-- blocker or stale warning
+DeepStake3D는 별도 게임 프로젝트이므로 ArchiveOS UI에서는 다음처럼 표시합니다.
 
-Less prominent:
+- Dashboard: 최신 작업과 verdict 요약
+- Operators: 구현자/리뷰어/루프 감지 상태
+- Timeline: 빌더 결과, 리뷰 결과, PM 결정 이벤트
+- Decisions: milestone 승인/보류/반려 기록
 
-- raw JSON
-- long filenames
-- placeholders
-- historical logs older than today
-
-## Animation Policy
-
-Use animation only when it communicates live state:
-
-- live loop dot pulse
-- active handoff edge
-- worker active pulse
-
-Do not animate placeholders, historical events, or inactive edges.
-
+Unity 실행 화면이나 게임 에디터 제어는 ArchiveOS UI에서 하지 않습니다.

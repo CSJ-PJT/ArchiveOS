@@ -1,294 +1,92 @@
-# Agent Mesh Data Model
+# Agent Mesh 데이터 모델
 
-## Purpose
+## 목적
 
-The mesh model should extend the current linear pipeline without replacing it.
+Agent Mesh는 즉시 복잡한 자동 실행 구조를 만들기 위한 것이 아닙니다. 먼저 에이전트, 메시지, 이벤트, 결정의 관계를 기록하고 PM이 이해할 수 있게 보여주기 위한 모델입니다.
 
-Current default flow:
+현재 선형 파이프라인은 유지합니다.
 
 ```text
 Inbox -> Implementer -> Reviewer -> Decision
 ```
 
-Future mesh flow:
+Mesh는 이 위에 읽기 전용 관계 레이어로 추가합니다.
+
+## 기본 에이전트 역할
+
+| 역할 | 책임 | 현재 필요성 | 권장 단계 |
+| --- | --- | --- | --- |
+| Implementer | 작업 구현, 결과 작성 | 필수 | Phase 1 |
+| Reviewer | 구현 결과 검토, 승인/반려 판단 | 필수 | Phase 1 |
+| Loop | 큐 이동과 반복 흐름 관리 | 필수 | Phase 1 |
+| PM | 우선순위, 승인, 반려, 방향 결정 | 필수 | Phase 2 |
+| Architect | 구조 설계와 큰 방향 검토 | 선택 | Phase 3 |
+| Historian | 결정과 변경 이력 정리 | 선택 | Phase 3 |
+| Incident | 장애와 stale 상태 분석 | 선택 | Phase 3 |
+| UX | 사용자 경험과 화면 검토 | 선택 | Phase 4 |
+| GitHub Sync | PR, CI, commit 상태 읽기 | 선택 | Phase 3 |
+
+## 상태값
+
+에이전트 상태는 사람이 이해할 수 있어야 합니다.
+
+- `idle`: 대기 중
+- `working`: 구현 또는 처리 중
+- `reviewing`: 리뷰 중
+- `waiting`: 입력 또는 다음 작업 대기
+- `failed`: 실패 또는 연결 불가
+
+## 메시지 모델
+
+향후 `agent_messages` 테이블을 둘 수 있습니다.
 
 ```text
-Coordinator/PM
-  -> selects participants
-  -> records messages
-  -> tracks events
-  -> links outcomes to tasks, reviews, decisions, and commits
+id
+from_agent_id
+to_agent_id
+task_id
+message_type
+content
+source
+created_at
 ```
 
-The first implementation should be data-first and read-only in the UI. Execution control can remain outside ArchiveOS.
-
-## Agent Roles
-
-| Role | Responsibility | Typical Inputs | Typical Outputs | UI Surface |
-| --- | --- | --- | --- | --- |
-| Implementer | Builds requested changes | Task, design note, review feedback | Builder result, patch summary | Operators, Mesh, Dashboard |
-| Reviewer | Reviews implementation quality and safety | Builder result, diff, tests | Verdict, issues, approve/reject recommendation | Operators, Decisions, Timeline |
-| Loop | Moves queue items through the pipeline | Inbox, processing, outbox | Runtime state, queue movement | Operators, Dashboard |
-| Architect | Defines system boundaries and technical direction | Product goal, constraints, incidents | Architecture note, implementation plan | Mesh, Knowledge |
-| Historian | Preserves decisions and lessons | Reviews, decisions, incidents | Markdown memory, linked records | Knowledge, Obsidian |
-| Incident | Investigates failures, stale work, limits | Warnings, failed jobs, stuck processing | Incident report, recovery recommendation | Dashboard, Timeline |
-| PM | Human or AI coordinator for priority and approval | Business goals, queue state, verdicts | Priorities, approvals, rejections, reassignments | Dashboard, Decisions |
-| UX | Reviews usability and product clarity | Screenshots, UI state, user feedback | UX review, improvement proposal | Mesh, Knowledge |
-| GitHub Sync | Mirrors repository status | Branch, commits, PRs, CI | Read-only GitHub status events | GitHub, Timeline |
-
-## Agent Status Values
-
-Recommended normalized statuses:
-
-| Status | Meaning |
-| --- | --- |
-| idle | Agent is available but not working |
-| working | Agent is actively producing output |
-| reviewing | Agent is evaluating work |
-| waiting | Agent is blocked on another actor or input |
-| blocked | Agent cannot proceed without intervention |
-| error | Agent or source reported a failure |
-| offline | Agent is not detected |
-
-Existing statuses can be mapped into this set without breaking the MVP.
-
-## Conceptual Tables
-
-These are proposed models, not immediate migrations.
-
-### agents
-
-Stores logical agent identity.
-
-Fields:
-
-- id
-- name
-- role
-- status
-- runtime_source
-- pid_hint
-- current_task_id
-- last_seen_at
-- metadata
-- created_at
-- updated_at
-
-### agent_capabilities
-
-Describes what an agent is allowed or expected to do.
-
-Fields:
-
-- id
-- agent_id
-- capability
-- description
-- is_enabled
-- created_at
-
-Example capabilities:
-
-- code_change
-- review
-- architecture_plan
-- decision_archive
-- incident_triage
-- github_readonly_sync
-
-### tasks
-
-Extends current task queue into mesh participation.
-
-Fields:
-
-- id
-- title
-- description
-- priority
-- status
-- active_stage
-- owner_agent_id
-- coordinator_agent_id
-- created_at
-- updated_at
-
-### task_participants
-
-Tracks which agents are involved in a task.
-
-Fields:
-
-- id
-- task_id
-- agent_id
-- role_in_task
-- status
-- joined_at
-- left_at
-
-Example role_in_task values:
-
-- owner
-- implementer
-- reviewer
-- architect
-- historian
-- observer
-- coordinator
-
-### agent_messages
-
-Records direct or mediated communication between agents.
-
-Fields:
-
-- id
-- task_id
-- from_agent_id
-- to_agent_id
-- message_type
-- content
-- status
-- source
-- created_at
-
-Recommended message_type values:
-
-- request
-- response
-- clarification
-- review_feedback
-- decision_notice
-- incident_notice
-- handoff
-
-### agent_events
-
-Records state transitions and operational facts.
-
-Fields:
-
-- id
-- task_id
-- agent_id
-- event_type
-- title
-- description
-- severity
-- source
-- related_artifact_id
-- created_at
-
-Recommended event_type values:
-
-- queue_changed
-- agent_started
-- agent_finished
-- builder_result
-- reviewer_verdict
-- pm_approval
-- pm_rejection
-- priority_changed
-- task_reassigned
-- warning_detected
-- incident_opened
-- incident_resolved
-
-### decisions
-
-Promotes PM and reviewer decisions into first-class records.
-
-Fields:
-
-- id
-- task_id
-- decision_type
-- title
-- rationale
-- decided_by_agent_id
-- decided_by_human
-- source
-- created_at
-
-Recommended decision_type values:
-
-- approve
-- reject
-- defer
-- reassign
-- change_priority
-- change_scope
-- accept_risk
-
-### artifacts
-
-Represents files, result JSON, reviews, screenshots, commits, or exported notes.
-
-Fields:
-
-- id
-- task_id
-- artifact_type
-- title
-- uri
-- summary
-- source
-- created_at
-
-Artifact types:
-
-- builder_result
-- reviewer_result
-- screenshot
-- commit
-- markdown_note
-- incident_report
-- architecture_note
-
-### entity_links
-
-Generic relationship table for the Knowledge Graph MVP.
-
-Fields:
-
-- id
-- from_entity_type
-- from_entity_id
-- to_entity_type
-- to_entity_id
-- relationship_type
-- source
-- created_at
-
-Example relationships:
-
-- task produced builder_result
-- review evaluated builder_result
-- decision approved review
-- commit implements task
-- incident blocks task
-- architecture_note guides task
-
-## Mesh Compatibility With Current Pipeline
-
-The current pipeline maps cleanly into the mesh:
-
-| Current Concept | Mesh Equivalent |
-| --- | --- |
-| Inbox file | task + queue_changed event |
-| Processing file | task status + active participant |
-| Implementer PID | agent runtime metadata |
-| Outbox result | artifact + builder_result event |
-| Reviewer output | artifact + reviewer_verdict event |
-| PM decision | decision + pm_approval or pm_rejection event |
-
-## Data Integrity Rules
-
-- Every runtime-derived event needs a source label.
-- Seed data should be hidden or marked as demo.
-- A message is not an instruction unless a future execution system explicitly consumes it.
-- Recording a command is not the same as executing a command.
-- PM approval and rejection are records only until execution control is explicitly designed.
-- Service role writes remain backend-only.
-
+메시지는 실행 명령이 아니라 운영 기록입니다.
+
+## 이벤트 모델
+
+```text
+id
+event_type
+source
+agent_id
+task_id
+title
+description
+status
+created_at
+```
+
+source 예시:
+
+- `mcp`
+- `supabase`
+- `backend`
+- `github`
+- `manual_pm`
+
+## DeepStake3D 적용 예시
+
+DeepStake3D 건설 시스템 작업에서는 다음 이벤트가 유효합니다.
+
+- Implementer가 ModularConstructionPrototype 변경 완료
+- Reviewer가 persistence regression 여부 검토
+- PM이 milestone approve 또는 hold 기록
+- Historian이 settlement validation 결과를 장기 기록으로 export
+
+## 도입 원칙
+
+- Mesh는 먼저 시각화와 기록으로만 도입합니다.
+- 에이전트 간 직접 실행 통신은 나중 단계입니다.
+- PM이 추적할 수 없는 자동화 경로는 만들지 않습니다.
+- 모든 이벤트에는 source와 timestamp가 있어야 합니다.
