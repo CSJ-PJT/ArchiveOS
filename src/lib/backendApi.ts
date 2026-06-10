@@ -166,7 +166,14 @@ export async function getRecentRuntimeEvents() {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${backendUrl}${path}`, init);
+  let response: Response;
+  try {
+    response = await fetch(`${backendUrl}${path}`, init);
+  } catch {
+    throw new Error(
+      `Backend is unreachable at ${backendUrl}. Start the ArchiveOS backend and refresh the dashboard.`,
+    );
+  }
 
   if (!response.ok) {
     const message = await readErrorMessage(response);
