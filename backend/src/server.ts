@@ -12,6 +12,7 @@ const port = Number(process.env.PORT ?? 4000);
 const allowedOrigins = new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+  ...parseCsvEnv(process.env.CORS_ALLOWED_ORIGINS),
 ]);
 
 const logTypes = new Set(["summary", "decision", "error", "review"]);
@@ -34,6 +35,14 @@ const seedCommandRunIds = [
   "20000000-0000-4000-8000-000000000001",
   "20000000-0000-4000-8000-000000000002",
 ];
+
+function parseCsvEnv(value: string | undefined) {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 app.use(
   cors({

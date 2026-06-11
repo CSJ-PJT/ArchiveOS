@@ -29,6 +29,7 @@ npm run dev
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 PORT=4000
+CORS_ALLOWED_ORIGINS=
 ARCHIVEOS_PROJECT_PATH=
 CODEX_IMPLEMENTER_PID=
 CODEX_REVIEWER_PID=
@@ -41,6 +42,8 @@ MCP_QUEUE_PATH=
 `ARCHIVEOS_PROJECT_PATH`는 allowlisted local action을 실행할 ArchiveOS 저장소 루트를 가리킵니다.
 
 `CODEX_IMPLEMENTER_PID`, `CODEX_REVIEWER_PID`는 수동으로 켠 Codex 터미널을 읽기 전용으로 감지하기 위한 로컬 힌트입니다. 비밀값은 아니지만 세션별 값이므로 `.env`에만 둡니다.
+
+`CORS_ALLOWED_ORIGINS`는 휴대폰 원격 확인용 ngrok 프론트엔드 origin을 쉼표로 추가할 때 사용합니다. 예: `https://your-frontend-ngrok-url`
 
 ## 로컬 액션 보안
 
