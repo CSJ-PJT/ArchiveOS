@@ -1,7 +1,13 @@
 import type { CommandRun } from "../types/database";
 import type { Agent, Task, WorkLog } from "../types/database";
 
-const backendUrl = (import.meta.env.VITE_BACKEND_URL as string | undefined) ?? "http://localhost:4000";
+const configuredBackendUrlFromEnv = ((import.meta.env.VITE_BACKEND_URL as string | undefined) ?? "").trim();
+const isBrowser = typeof window !== "undefined";
+const isRemoteHttps = isBrowser && window.location.protocol === "https:";
+const configuredBackendIsLocalhost = /^(http:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?/i.test(configuredBackendUrlFromEnv);
+const backendUrl = isRemoteHttps && configuredBackendIsLocalhost ? "" : configuredBackendUrlFromEnv;
+
+export const configuredBackendUrl = backendUrl || (isBrowser ? window.location.origin : "");
 
 type ApiEnvelope<T> = {
   data: T;

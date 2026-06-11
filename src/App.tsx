@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  configuredBackendUrl,
   createCommandRun,
   getDashboardData,
   getBackendHealth,
@@ -49,6 +50,7 @@ type PipelineStage = {
 type PipelineConnectorState = "idle" | "current" | "success";
 
 type ConsistencyStatus = "matched" | "missing" | "stale" | "unknown" | "error";
+type RemoteAccessStatus = "online" | "offline" | "not configured";
 
 const taskStatuses: TaskStatus[] = ["todo", "in_progress", "review", "done", "failed"];
 const statusLabels: Record<TaskStatus, string> = {
@@ -109,6 +111,12 @@ const consistencyStatusStyles: Record<ConsistencyStatus, string> = {
   stale: "bg-amber-500/15 text-amber-200 ring-amber-400/25",
   unknown: "bg-violet-500/15 text-violet-200 ring-violet-400/25",
   error: "bg-rose-500/15 text-rose-200 ring-rose-400/25",
+};
+
+const remoteAccessStatusStyles: Record<RemoteAccessStatus, string> = {
+  online: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25",
+  offline: "bg-rose-500/15 text-rose-200 ring-rose-400/25",
+  "not configured": "bg-slate-500/15 text-slate-200 ring-slate-400/20",
 };
 
 const quickActions = [
@@ -205,8 +213,8 @@ function App() {
 
   return (
     <main className="min-h-screen bg-[#07090d] text-slate-100">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-6 sm:px-8 lg:px-10">
-        <header className="flex flex-col gap-5 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-3 py-4 sm:gap-8 sm:px-8 sm:py-6 lg:px-10">
+        <header className="flex flex-col gap-5 border-b border-white/10 pb-5 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="flex items-center gap-3">
               <img
@@ -218,7 +226,7 @@ function App() {
                 <p className="text-sm font-medium uppercase tracking-[0.18em] text-cyan-300">
                   Agent operations
                 </p>
-                <h1 className="mt-1 text-4xl font-semibold tracking-normal text-white">ArchiveOS</h1>
+                <h1 className="mt-1 text-3xl font-semibold tracking-normal text-white sm:text-4xl">ArchiveOS</h1>
               </div>
             </div>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
@@ -435,13 +443,13 @@ function OperationsNav({
   ];
 
   return (
-    <nav className="flex flex-wrap gap-2 rounded-md border border-white/10 bg-white/[0.03] p-2">
+    <nav className="flex gap-2 overflow-x-auto rounded-md border border-white/10 bg-white/[0.03] p-2 sm:flex-wrap">
       {items.map((item) => {
         const active = view === item.id;
         return (
           <button
             key={item.id}
-            className={`inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium transition ${
+            className={`inline-flex shrink-0 items-center gap-2 rounded px-3 py-2 text-sm font-medium transition ${
               active ? "bg-cyan-400 text-slate-950" : "text-slate-300 hover:bg-white/10"
             }`}
             onClick={() => setView(item.id)}
@@ -499,13 +507,14 @@ function DashboardView({
         onRecorded={refreshRuntimeEvents}
         showNowWorking={false}
       />
-      <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
 
       {focusMode ? null : (
         <>
           <Panel title="Pipeline Warnings">
             <PipelineWarnings runtimeStatus={runtimeStatus} />
           </Panel>
+
+          <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
 
           <div className="grid gap-5 xl:grid-cols-2">
             <Panel title="Latest Builder Result">
@@ -541,16 +550,16 @@ function DashboardView({
             </Panel>
           </div>
 
-          <Panel title="Recent Timeline Preview">
-            <TimelinePreview events={runtimeEvents} />
-          </Panel>
-
           <Panel title="Screenshot Freshness" muted>
             <EmptyState
               title="No screenshot freshness signal yet"
               detail="This placeholder will summarize proof screenshot freshness when that runtime source exists."
               muted
             />
+          </Panel>
+
+          <Panel title="Recent Timeline Preview">
+            <TimelinePreview events={runtimeEvents} />
           </Panel>
         </>
       )}
@@ -672,7 +681,7 @@ function GitHubView({ runtimeStatus }: { runtimeStatus: LocalRuntimeStatus | nul
           title="GitHub integration not configured yet"
           detail="This panel is intentionally read-only and does not call the GitHub API yet."
         />
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <RuntimeMetric label="Repo" value="CSJ-PJT/ArchiveOS" copyable />
           <RuntimeMetric label="Branch" value="main" />
           <RuntimeMetric label="Latest commit" value="not connected" />
@@ -697,13 +706,42 @@ function SettingsView({
   runtimeStatus: LocalRuntimeStatus | null;
 }) {
   const supabaseConfigured = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+  const currentFrontendUrl = typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:5173";
+  const remoteFrontendUrl = (import.meta.env.VITE_REMOTE_FRONTEND_URL as string | undefined) ?? currentFrontendUrl;
+  const remoteBackendUrl = (import.meta.env.VITE_REMOTE_BACKEND_URL as string | undefined) ?? configuredBackendUrl;
+  const frontendIsRemote = /^https:\/\//.test(remoteFrontendUrl) && !remoteFrontendUrl.includes("127.0.0.1") && !remoteFrontendUrl.includes("localhost");
+  const backendIsRemote = /^https:\/\//.test(remoteBackendUrl) && !remoteBackendUrl.includes("127.0.0.1") && !remoteBackendUrl.includes("localhost");
 
   return (
     <div className="grid gap-5">
+      <Panel title="Remote Access">
+        <div className="grid gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Mobile visibility via ngrok or HTTPS tunnel</p>
+            <p className="mt-1 text-sm leading-6 text-slate-400">
+              Use these URLs on Galaxy Fold, Android Chrome, or iPhone Safari. This section is visibility-only and does not start ngrok or expose execution controls.
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <RemoteAccessCard
+              label="Frontend URL"
+              value={remoteFrontendUrl}
+              status={currentFrontendUrl ? "online" : "offline"}
+              detail={frontendIsRemote ? "Remote HTTPS frontend URL is configured." : "Local URL shown. Set VITE_REMOTE_FRONTEND_URL to display the ngrok frontend URL."}
+            />
+            <RemoteAccessCard
+              label="Backend URL"
+              value={remoteBackendUrl}
+              status={backendReachability === "matched" ? "online" : "offline"}
+              detail={backendIsRemote ? "Remote HTTPS backend URL is configured." : "Local backend URL shown. Set VITE_REMOTE_BACKEND_URL if the phone must call the backend through ngrok."}
+            />
+          </div>
+        </div>
+      </Panel>
       <Panel title="Runtime Configuration">
         <div className="grid gap-3 md:grid-cols-2">
           <RuntimeMetric label="Frontend URL" value="http://127.0.0.1:5173" copyable />
-          <RuntimeMetric label="Backend URL" value={(import.meta.env.VITE_BACKEND_URL as string | undefined) ?? "http://localhost:4000"} copyable />
+          <RuntimeMetric label="Backend URL" value={configuredBackendUrl} copyable />
           <RuntimeMetric label="Supabase" value={supabaseConfigured ? "configured via frontend env" : "unknown / env missing"} />
           <RuntimeMetric label="ARCHIVEOS_PROJECT_PATH" value="backend env, optional local path override" />
           <RuntimeMetric label="CODEX_IMPLEMENTER_PID" value="backend/runtime env hint; do not expose secrets" />
@@ -1509,8 +1547,8 @@ function ProcessCard({
   process: LocalRuntimeStatus["processes"]["implementer"];
   interpretation: string;
 }) {
-  return (
-    <Panel title={title}>
+  const content = (
+    <>
       <SourceLabel label="backend-derived process detection" />
       <div className="mt-3 grid gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1526,7 +1564,24 @@ function ProcessCard({
         <RuntimeMetric label="Command" value={process?.commandLine ?? "not detected"} copyable />
         <p className="rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-300">{interpretation}</p>
       </div>
-    </Panel>
+    </>
+  );
+
+  return (
+    <>
+      <details className="rounded-md border border-white/10 bg-white/[0.03] p-4 md:hidden">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-white">
+          <span>{title}</span>
+          <StatusBadge className={process ? commandStatusStyles.running : consistencyStatusStyles.missing}>
+            {process ? "detected" : "not detected"}
+          </StatusBadge>
+        </summary>
+        <div className="mt-4">{content}</div>
+      </details>
+      <div className="hidden md:block">
+        <Panel title={title}>{content}</Panel>
+      </div>
+    </>
   );
 }
 
@@ -1573,6 +1628,31 @@ function ConsistencyMini({ label, status }: { label: string; status: Consistency
         <p className="text-sm font-medium text-slate-200">{label}</p>
         <StatusBadge className={consistencyStatusStyles[status]}>{status}</StatusBadge>
       </div>
+    </div>
+  );
+}
+
+function RemoteAccessCard({
+  label,
+  value,
+  status,
+  detail,
+}: {
+  label: string;
+  value: string;
+  status: RemoteAccessStatus;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-md border border-white/10 bg-black/20 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{label}</p>
+          <CompactValue value={value} className="mt-2 text-sm font-medium text-white" copyable />
+        </div>
+        <StatusBadge className={remoteAccessStatusStyles[status]}>{status}</StatusBadge>
+      </div>
+      <p className="mt-3 text-xs leading-5 text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -2148,7 +2228,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className={`rounded-md border p-5 ${muted ? "border-white/5 bg-[#0a0d12]" : "border-white/10 bg-[#0d1117]"} ${className}`}>
+    <section className={`rounded-md border p-4 sm:p-5 ${muted ? "border-white/5 bg-[#0a0d12]" : "border-white/10 bg-[#0d1117]"} ${className}`}>
       <h2 className="mb-4 text-lg font-semibold text-white">{title}</h2>
       {children}
     </section>

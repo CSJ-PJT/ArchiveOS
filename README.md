@@ -142,6 +142,32 @@ npm run dev
 npm run build
 ```
 
+## 모바일 원격 접속
+
+휴대폰에서 ArchiveOS를 확인하려면 ngrok 같은 HTTPS 터널로 프론트엔드와 백엔드를 각각 노출합니다.
+
+프론트엔드 `.env.local` 예시:
+
+```bash
+VITE_BACKEND_URL=https://your-backend-ngrok-url
+VITE_REMOTE_FRONTEND_URL=https://your-frontend-ngrok-url
+VITE_REMOTE_BACKEND_URL=https://your-backend-ngrok-url
+```
+
+백엔드 `.env` 예시:
+
+```bash
+CORS_ALLOWED_ORIGINS=https://your-frontend-ngrok-url
+```
+
+Settings 탭의 Remote Access 섹션은 현재 프론트엔드 URL, 백엔드 URL, online/offline 상태를 표시합니다. 이 기능은 모바일 가시화용이며 ngrok 시작, MCP 실행, Codex 제어, 임의 명령 실행을 하지 않습니다.
+
+지원 대상으로 보는 화면:
+
+- Galaxy Fold
+- Android Chrome
+- iPhone Safari
+
 ## 백엔드 API
 
 `backend/` 서비스는 서버 측 쓰기와 향후 통합을 위한 기반입니다. 현재 프론트엔드는 Supabase 읽기를 유지하며, 백엔드가 UI 표시를 완전히 대체하지는 않습니다.
