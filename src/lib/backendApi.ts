@@ -1,4 +1,4 @@
-import type { CommandRun } from "../types/database";
+import type { BatchRun, CommandRun } from "../types/database";
 import type { Agent, Task, WorkLog } from "../types/database";
 
 const configuredBackendUrlFromEnv = ((import.meta.env.VITE_BACKEND_URL as string | undefined) ?? "").trim();
@@ -107,12 +107,19 @@ export type LocalRuntimeStatus = {
 
 export type RuntimeEvent = {
   id: string;
-  type: "queue" | "builder" | "reviewer" | "command" | "decision" | "warning";
+  type: "queue" | "builder" | "reviewer" | "command" | "decision" | "warning" | "batch";
   title: string;
   description: string;
   status: "info" | "success" | "warning" | "error";
   source: "mcp" | "supabase" | "backend";
   created_at: string;
+};
+
+export type LatestBatchStatus = {
+  nightly_review: BatchRun | null;
+  daily_report: BatchRun | null;
+  discord_webhook_configured: boolean;
+  holiday_years: number[];
 };
 
 export async function getBackendHealth() {
@@ -168,6 +175,16 @@ export async function getLocalRuntimeStatus() {
 
 export async function getRecentRuntimeEvents() {
   const response = await request<ApiEnvelope<RuntimeEvent[]>>("/api/runtime/events/recent");
+  return response.data;
+}
+
+export async function getRecentBatchRuns() {
+  const response = await request<ApiEnvelope<BatchRun[]>>("/api/batches/recent");
+  return response.data;
+}
+
+export async function getLatestBatchStatus() {
+  const response = await request<ApiEnvelope<LatestBatchStatus>>("/api/batches/latest");
   return response.data;
 }
 

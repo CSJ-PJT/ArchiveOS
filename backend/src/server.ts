@@ -3,6 +3,9 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import cors from "cors";
 import express from "express";
+import { runDailyReportBatch } from "./batches/dailyReport.js";
+import { runNightlyReviewBatch } from "./batches/nightlyReview.js";
+import { getLatestBatchRuns, getRecentBatchRuns } from "./batches/store.js";
 import { findProject, projects } from "./config/projects.js";
 import { getLocalRuntimeStatus } from "./lib/localRuntime.js";
 import { supabaseAdmin } from "./lib/supabaseAdmin.js";
@@ -242,6 +245,40 @@ app.get("/api/runtime/events/recent", async (_request, response) => {
   }
 });
 
+// Local/admin/testing endpoint only. This records a read-only batch summary and does not trigger agent execution.
+app.post("/api/batches/nightly-review/run", async (_request, response) => {
+  const result = await runNightlyReviewBatch();
+  response.json({ data: result });
+});
+
+// Local/admin/testing endpoint only. This may send Discord only when the Korea business-day rule passes.
+app.post("/api/batches/daily-report/run", async (_request, response) => {
+  const result = await runDailyReportBatch();
+  response.json({ data: result });
+});
+
+app.get("/api/batches/recent", async (_request, response) => {
+  try {
+    response.json({ data: await getRecentBatchRuns() });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch recent batch runs." });
+  }
+});
+
+app.get("/api/batches/latest", async (_request, response) => {
+  try {
+    response.json({
+      data: {
+        ...(await getLatestBatchRuns()),
+        discord_webhook_configured: Boolean(process.env.DISCORD_WEBHOOK_URL?.trim()),
+        holiday_years: [2026],
+      },
+    });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch latest batch status." });
+  }
+});
+
 app.use(
   (
     error: Error,
@@ -298,7 +335,7 @@ type LocalActionResult = {
 
 type RuntimeEvent = {
   id: string;
-  type: "queue" | "builder" | "reviewer" | "command" | "decision" | "warning";
+  type: "queue" | "builder" | "reviewer" | "command" | "decision" | "warning" | "batch";
   title: string;
   description: string;
   status: "info" | "success" | "warning" | "error";
@@ -354,7 +391,7 @@ function validateWorkLogBody(body: unknown): ValidationResult {
 
 async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
   const checkedAt = new Date().toISOString();
-  const [runtime, commandsResult, decisionsResult] = await Promise.all([
+  const [runtime, commandsResult, decisionsResult, batchRuns] = await Promise.all([
     getLocalRuntimeStatus(),
     supabaseAdmin
       .from("command_runs")
@@ -369,6 +406,7 @@ async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
       .not("id", "in", `(${seedWorkLogIds.join(",")})`)
       .order("created_at", { ascending: false })
       .limit(5),
+    getRecentBatchRuns(5).catch(() => []),
   ]);
 
   const events: RuntimeEvent[] = [];
@@ -458,6 +496,18 @@ async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
       status: "info",
       source: "supabase",
       created_at: decision.created_at,
+    });
+  }
+
+  for (const batch of batchRuns) {
+    events.push({
+      id: `batch-${batch.id}`,
+      type: "batch",
+      title: batch.batch_type === "nightly_review" ? "Nightly review batch" : "Daily report batch",
+      description: summarizeEventDescription(batch.summary),
+      status: batch.status === "failed" ? "error" : batch.status === "skipped" ? "warning" : "success",
+      source: "backend",
+      created_at: batch.created_at,
     });
   }
 
