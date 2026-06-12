@@ -4,6 +4,7 @@ import {
   createCommandRun,
   getDashboardData,
   getBackendHealth,
+  getHistorianStatus,
   getLatestBatchStatus,
   getLatestDailyReport,
   getLocalActionProjects,
@@ -16,6 +17,7 @@ import {
   type LocalActionResult,
   type LocalRuntimeStatus,
   type LatestBatchStatus,
+  type HistorianStatus,
   type RuntimeEvent,
 } from "./lib/backendApi";
 import type {
@@ -37,7 +39,7 @@ type DashboardData = {
   decisions: WorkLog[];
 };
 
-type AppView = "dashboard" | "decisions" | "operators" | "timeline" | "github" | "settings";
+type AppView = "dashboard" | "decisions" | "operators" | "timeline" | "knowledge" | "github" | "settings";
 
 type PipelineStage = {
   id: string;
@@ -289,6 +291,8 @@ function OperationsLayout({
   const [batchStatus, setBatchStatus] = useState<LatestBatchStatus | null>(null);
   const [latestDailyReport, setLatestDailyReport] = useState<DailyReport | null>(null);
   const [batchStatusError, setBatchStatusError] = useState<string | null>(null);
+  const [historianStatus, setHistorianStatus] = useState<HistorianStatus | null>(null);
+  const [historianError, setHistorianError] = useState<string | null>(null);
   const [focusMode, setFocusMode] = useState(false);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
 
@@ -297,11 +301,13 @@ function OperationsLayout({
     refreshRuntimeEvents();
     refreshConsistency();
     refreshBatchStatus();
+    refreshHistorianStatus();
     const timer = window.setInterval(() => {
       refreshRuntime({ silent: true });
       refreshRuntimeEvents({ silent: true });
       refreshConsistency({ silent: true });
       refreshBatchStatus({ silent: true });
+      refreshHistorianStatus({ silent: true });
     }, 5000);
 
     return () => window.clearInterval(timer);
@@ -380,6 +386,18 @@ function OperationsLayout({
     }
   }
 
+  async function refreshHistorianStatus(options: { silent?: boolean } = {}) {
+    if (!options.silent) {
+      setHistorianError(null);
+    }
+
+    try {
+      setHistorianStatus(await getHistorianStatus());
+    } catch (error) {
+      setHistorianError(error instanceof Error ? error.message : "Historian status is not reachable.");
+    }
+  }
+
   const warningCount = getPipelineWarningMessages(runtimeStatus).length;
   const operatorActive = Boolean(runtimeStatus?.queue.processing || runtimeStatus?.processes.implementer || runtimeStatus?.processes.reviewer || runtimeStatus?.processes.reviewer_bridge);
 
@@ -443,6 +461,10 @@ function OperationsLayout({
         />
       ) : null}
 
+      {view === "knowledge" ? (
+        <KnowledgeView historianStatus={historianStatus} error={historianError} />
+      ) : null}
+
       {view === "github" ? <GitHubView runtimeStatus={runtimeStatus} /> : null}
 
       {view === "settings" ? (
@@ -452,6 +474,8 @@ function OperationsLayout({
           runtimeStatus={runtimeStatus}
           batchStatus={batchStatus}
           latestDailyReport={latestDailyReport}
+          historianStatus={historianStatus}
+          historianError={historianError}
           batchStatusError={batchStatusError}
         />
       ) : null}
@@ -477,6 +501,7 @@ function OperationsNav({
     { id: "decisions", label: "Decisions" },
     { id: "operators", label: "Operators" },
     { id: "timeline", label: "Timeline" },
+    { id: "knowledge", label: "Knowledge" },
     { id: "github", label: "GitHub" },
     { id: "settings", label: "Settings" },
   ];
@@ -691,7 +716,7 @@ function DailyReportStatusCard({
               {getOperationStatusLabel(latestDailyReport.status)}
             </StatusBadge>
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <RuntimeMetric label="Discord sent" value={latestDailyReport.discord_sent ? "yes" : "no"} />
             <RuntimeMetric label="Decisions" value={String(latestDailyReport.decisions_count)} />
             <RuntimeMetric label="Commands" value={String(latestDailyReport.commands_count)} />
@@ -699,10 +724,23 @@ function DailyReportStatusCard({
               label="Dashboard link"
               value={batchStatus?.archiveos_public_url_configured ? "configured" : "not configured"}
             />
+            <RuntimeMetric
+              label="Historian export"
+              value={latestDailyReport.historian_exported ? "exported" : "not exported"}
+            />
           </div>
           <p className="mt-3 text-sm leading-6 text-slate-300">{latestDailyReport.status_reason}</p>
           {latestDailyReport.discord_skipped_reason ? (
             <p className="mt-2 text-xs leading-5 text-amber-200">Discord skip/failure reason: {latestDailyReport.discord_skipped_reason}</p>
+          ) : null}
+          {latestDailyReport.historian_note_path ? (
+            <CompactValue
+              value={latestDailyReport.historian_note_path}
+              className="mt-2 text-xs text-emerald-200"
+              copyable
+            />
+          ) : latestDailyReport.historian_export_reason ? (
+            <p className="mt-2 text-xs leading-5 text-slate-500">Historian: {latestDailyReport.historian_export_reason}</p>
           ) : null}
         </div>
       ) : (
@@ -830,6 +868,82 @@ function TimelineView({
   return <EventTimeline events={events} error={error} isRefreshing={isRefreshing} refresh={refresh} />;
 }
 
+function KnowledgeView({
+  historianStatus,
+  error,
+}: {
+  historianStatus: HistorianStatus | null;
+  error: string | null;
+}) {
+  const memoryTypes = ["Daily Reports", "Decisions", "Incidents", "Architecture", "Batches"];
+
+  return (
+    <div className="grid gap-5">
+      <Panel title="Historian Status">
+        {error ? (
+          <EmptyState title="Historian status unavailable" detail={error} />
+        ) : (
+          <div className="grid gap-4">
+            <SourceLabel label="backend/local-only Obsidian Markdown export" />
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <RuntimeMetric
+                label="Configured"
+                value={historianStatus?.configured ? "yes" : "no"}
+              />
+              <RuntimeMetric
+                label="Enabled"
+                value={historianStatus?.enabled ? "yes" : "no"}
+              />
+              <RuntimeMetric
+                label="Last export"
+                value={historianStatus?.lastExport?.status ?? "none"}
+              />
+              <RuntimeMetric
+                label="Last note"
+                value={historianStatus?.lastExport?.notePath ?? "none"}
+                copyable={Boolean(historianStatus?.lastExport?.notePath)}
+              />
+            </div>
+            {historianStatus?.lastExport?.reason ? (
+              <p className="rounded border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+                {historianStatus.lastExport.reason}
+              </p>
+            ) : null}
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="Memory Types">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {memoryTypes.map((type) => (
+            <div key={type} className="rounded-md border border-white/10 bg-black/20 p-4">
+              <p className="text-sm font-semibold text-white">{type}</p>
+              <p className="mt-2 text-xs leading-5 text-slate-500">Markdown export target</p>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel title="Runtime vs Long-term Memory">
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-md border border-cyan-300/20 bg-cyan-300/[0.04] p-4">
+            <p className="text-sm font-semibold text-cyan-100">ArchiveOS</p>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Live operations, queue visibility, runtime status, reports, and PM dashboard monitoring.
+            </p>
+          </div>
+          <div className="rounded-md border border-emerald-300/20 bg-emerald-300/[0.04] p-4">
+            <p className="text-sm font-semibold text-emerald-100">Obsidian Vault</p>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Long-term memory for decisions, incidents, daily reports, architecture notes, and batch records.
+            </p>
+          </div>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
 function GitHubView({ runtimeStatus }: { runtimeStatus: LocalRuntimeStatus | null }) {
   return (
     <Panel title="GitHub">
@@ -859,6 +973,8 @@ function SettingsView({
   runtimeStatus,
   batchStatus,
   latestDailyReport,
+  historianStatus,
+  historianError,
   batchStatusError,
 }: {
   backendReachability: ConsistencyStatus;
@@ -866,6 +982,8 @@ function SettingsView({
   runtimeStatus: LocalRuntimeStatus | null;
   batchStatus: LatestBatchStatus | null;
   latestDailyReport: DailyReport | null;
+  historianStatus: HistorianStatus | null;
+  historianError: string | null;
   batchStatusError: string | null;
 }) {
   const supabaseConfigured = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
@@ -955,6 +1073,37 @@ function SettingsView({
           </div>
           <p className="text-sm leading-6 text-slate-400">
             Nightly Review and Daily Report batches are backend/local-worker controlled. The UI is read-only and does not expose scheduling, webhook values, or execution controls.
+          </p>
+        </div>
+      </Panel>
+      <Panel title="Knowledge Vault">
+        <div className="grid gap-4">
+          {historianError ? (
+            <p className="rounded border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+              {historianError}
+            </p>
+          ) : null}
+          <div className="grid gap-3 md:grid-cols-2">
+            <RuntimeMetric
+              label="Obsidian export"
+              value={historianStatus?.configured ? "configured: yes" : "configured: no"}
+            />
+            <RuntimeMetric
+              label="Last note"
+              value={historianStatus?.lastExport?.notePath ?? "none"}
+              copyable={Boolean(historianStatus?.lastExport?.notePath)}
+            />
+            <RuntimeMetric
+              label="Env variable"
+              value="ARCHIVEOS_OBSIDIAN_VAULT_PATH"
+            />
+            <RuntimeMetric
+              label="Path exposure"
+              value="absolute path hidden"
+            />
+          </div>
+          <p className="text-sm leading-6 text-slate-400">
+            Historian exports Markdown files from backend/local-worker batches only. The frontend never receives the absolute vault path and does not browse or edit local files.
           </p>
         </div>
       </Panel>

@@ -221,3 +221,30 @@ npm run batch:daily-report
 - `GET /api/runtime/snapshots/recent`
 
 Discord Daily Report는 Asia/Seoul 기준 월요일-금요일 중 `src/batches/koreanHolidays.ts`에 정의된 한국 공휴일과 대체공휴일을 제외한 업무일에만 전송됩니다. 로컬 공휴일 목록은 매년 갱신해야 합니다.
+
+## Historian Obsidian Export
+
+Historian은 backend/local-worker 전용 Markdown export 계층입니다. 아직 AI 실행 Agent, Obsidian plugin, bidirectional sync, graph database가 아닙니다.
+
+환경 변수:
+
+```bash
+ARCHIVEOS_OBSIDIAN_VAULT_PATH=
+```
+
+설정되지 않으면 export는 disabled/skipped로 기록되고 서버 시작이나 Discord 전송을 막지 않습니다. 설정된 경우 배치 실행 후 다음 위치에 Markdown note를 생성합니다.
+
+- `Reports/daily-report-YYYY-MM-DD.md`
+- `Batches/nightly_review-YYYY-MM-DD.md`
+- 향후 수동/자동 연결 대상: `Decisions/`, `Incidents/`, `Architecture/`
+
+보안 원칙:
+
+- 절대 vault path는 frontend에 반환하지 않습니다.
+- metadata에는 상대 note path만 저장합니다.
+- 파일명은 sanitize합니다.
+- resolved path가 configured vault 밖으로 나가면 export를 거부합니다.
+
+Historian 상태 API:
+
+- `GET /api/historian/status`

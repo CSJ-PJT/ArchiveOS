@@ -313,3 +313,42 @@ Backend-only 환경 변수:
 DISCORD_WEBHOOK_URL=
 ARCHIVEOS_PUBLIC_URL=
 ```
+
+## Historian Obsidian Markdown Export
+
+Historian은 아직 AI 실행 Agent가 아닙니다. 현재 버전의 Historian은 ArchiveOS 운영 기억을 로컬 Obsidian vault용 Markdown 파일로 export하는 backend/local-only 기능입니다.
+
+역할 분리:
+
+- ArchiveOS: 현재 runtime 상태, queue, decisions, batch, PM dashboard
+- Obsidian vault: 장기 기억, 운영 보고서, 결정 기록, incident, architecture note
+
+Backend-only 환경 변수:
+
+```bash
+ARCHIVEOS_OBSIDIAN_VAULT_PATH=
+```
+
+설정되지 않으면 Historian은 disabled 상태가 되며 서버 시작과 배치 실행은 실패하지 않습니다. frontend에는 configured yes/no와 마지막 export 상대 경로만 표시하고, 절대 vault path는 노출하지 않습니다.
+
+Markdown export 대상 폴더:
+
+- `Daily/`
+- `Decisions/`
+- `Incidents/`
+- `Architecture/`
+- `Reports/`
+- `Batches/`
+
+현재 자동 연결:
+
+- Daily Report Batch 완료 후 `Reports/daily-report-YYYY-MM-DD.md` export
+- Nightly Review Batch 완료 후 `Batches/nightly_review-YYYY-MM-DD.md` export
+
+명시적 제한:
+
+- Obsidian bidirectional sync 없음
+- Obsidian plugin 없음
+- graph database 없음
+- UI file browser/edit 없음
+- OpenAI API, Codex 직접 제어, MCP 실행 제어 없음

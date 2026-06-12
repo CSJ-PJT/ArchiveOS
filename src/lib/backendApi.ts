@@ -124,6 +124,18 @@ export type LatestBatchStatus = {
   holiday_years: number[];
 };
 
+export type HistorianStatus = {
+  configured: boolean;
+  enabled: boolean;
+  lastExport: {
+    type: string;
+    status: "success" | "skipped" | "failed";
+    notePath: string | null;
+    createdAt: string;
+    reason: string | null;
+  } | null;
+};
+
 export async function getBackendHealth() {
   return request<HealthResponse>("/health");
 }
@@ -202,6 +214,11 @@ export async function getRecentDailyReports() {
 
 export async function getRecentRuntimeSnapshots() {
   const response = await request<ApiEnvelope<RuntimeSnapshot[]>>("/api/runtime/snapshots/recent");
+  return response.data;
+}
+
+export async function getHistorianStatus() {
+  const response = await request<ApiEnvelope<HistorianStatus>>("/api/historian/status");
   return response.data;
 }
 

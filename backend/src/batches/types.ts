@@ -98,6 +98,7 @@ export type RuntimeSnapshotRow = {
 };
 
 export type BatchResult = {
+  id?: string;
   batch_type: BatchType;
   status: BatchStatus;
   target_date: string;

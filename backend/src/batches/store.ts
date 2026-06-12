@@ -35,6 +35,7 @@ export async function recordBatchRun(input: {
 
   const row = data as BatchRun;
   return {
+    id: row.id,
     batch_type: row.batch_type,
     status: row.status,
     target_date: row.target_date,
@@ -88,6 +89,17 @@ export async function getLatestBatchRun(batchType: BatchType, targetDate?: strin
   return ((data ?? [])[0] ?? null) as BatchRun | null;
 }
 
+export async function updateBatchRunMetadata(id: string, metadata: Record<string, unknown>) {
+  const { error } = await supabaseAdmin
+    .from("batch_runs")
+    .update({ metadata })
+    .eq("id", id);
+
+  if (error) {
+    throw new Error(`Failed to update batch run metadata: ${error.message}`);
+  }
+}
+
 export async function recordDailyReport(report: DailyReportRecord) {
   const { data, error } = await supabaseAdmin
     .from("daily_reports")
@@ -100,6 +112,24 @@ export async function recordDailyReport(report: DailyReportRecord) {
   }
 
   return data as DailyReportRow;
+}
+
+export async function updateDailyReportHistorianStatus(
+  id: string,
+  input: {
+    historian_exported: boolean;
+    historian_note_path: string | null;
+    historian_export_reason: string | null;
+  },
+) {
+  const { error } = await supabaseAdmin
+    .from("daily_reports")
+    .update(input)
+    .eq("id", id);
+
+  if (error) {
+    throw new Error(`Failed to update daily report historian status: ${error.message}`);
+  }
 }
 
 export async function getLatestDailyReport() {
@@ -169,4 +199,55 @@ export async function getRecentRuntimeSnapshots(limit = 20) {
   }
 
   return (data ?? []) as RuntimeSnapshotRow[];
+}
+
+export async function recordHistorianExport(input: {
+  note_type: string;
+  status: "success" | "skipped" | "failed";
+  note_path: string | null;
+  reason: string | null;
+  source_id: string | null;
+}) {
+  const { data, error } = await supabaseAdmin
+    .from("historian_exports")
+    .insert(input)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to record historian export: ${error.message}`);
+  }
+
+  return data as {
+    id: string;
+    note_type: string;
+    status: "success" | "skipped" | "failed";
+    note_path: string | null;
+    reason: string | null;
+    source_id: string | null;
+    created_at: string;
+  };
+}
+
+export async function getLatestHistorianExport() {
+  const { data, error } = await supabaseAdmin
+    .from("historian_exports")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to fetch latest historian export: ${error.message}`);
+  }
+
+  return data as {
+    id: string;
+    note_type: string;
+    status: "success" | "skipped" | "failed";
+    note_path: string | null;
+    reason: string | null;
+    source_id: string | null;
+    created_at: string;
+  } | null;
 }

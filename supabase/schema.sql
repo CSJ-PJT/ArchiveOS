@@ -92,6 +92,9 @@ create table if not exists public.daily_reports (
   commands_count integer not null default 0,
   discord_sent boolean not null default false,
   discord_skipped_reason text,
+  historian_exported boolean not null default false,
+  historian_note_path text,
+  historian_export_reason text,
   report_text text not null,
   created_at timestamptz not null default now()
 );
@@ -111,6 +114,20 @@ create table if not exists public.runtime_snapshots (
   source text not null default 'backend'
 );
 
+create table if not exists public.historian_exports (
+  id uuid primary key default gen_random_uuid(),
+  note_type text not null,
+  status text not null check (status in ('success', 'skipped', 'failed')),
+  note_path text,
+  reason text,
+  source_id uuid,
+  created_at timestamptz not null default now()
+);
+
+alter table public.daily_reports add column if not exists historian_exported boolean not null default false;
+alter table public.daily_reports add column if not exists historian_note_path text;
+alter table public.daily_reports add column if not exists historian_export_reason text;
+
 create index if not exists tasks_status_idx on public.tasks(status);
 create index if not exists tasks_assigned_agent_id_idx on public.tasks(assigned_agent_id);
 create index if not exists work_logs_task_id_idx on public.work_logs(task_id);
@@ -123,6 +140,8 @@ create index if not exists batch_runs_target_date_idx on public.batch_runs(targe
 create index if not exists daily_reports_target_date_idx on public.daily_reports(target_date desc);
 create index if not exists daily_reports_created_at_idx on public.daily_reports(created_at desc);
 create index if not exists runtime_snapshots_captured_at_idx on public.runtime_snapshots(captured_at desc);
+create index if not exists historian_exports_created_at_idx on public.historian_exports(created_at desc);
+create index if not exists historian_exports_note_type_idx on public.historian_exports(note_type, created_at desc);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -159,6 +178,7 @@ alter table public.command_runs enable row level security;
 alter table public.batch_runs enable row level security;
 alter table public.daily_reports enable row level security;
 alter table public.runtime_snapshots enable row level security;
+alter table public.historian_exports enable row level security;
 
 drop policy if exists "Allow public read agents" on public.agents;
 create policy "Allow public read agents"
@@ -209,6 +229,13 @@ for select
 to anon, authenticated
 using (true);
 
+drop policy if exists "Allow public read historian exports" on public.historian_exports;
+create policy "Allow public read historian exports"
+on public.historian_exports
+for select
+to anon, authenticated
+using (true);
+
 grant usage on schema public to anon, authenticated;
 grant select on public.agents to anon, authenticated;
 grant select on public.tasks to anon, authenticated;
@@ -217,3 +244,4 @@ grant select on public.command_runs to anon, authenticated;
 grant select on public.batch_runs to anon, authenticated;
 grant select on public.daily_reports to anon, authenticated;
 grant select on public.runtime_snapshots to anon, authenticated;
+grant select on public.historian_exports to anon, authenticated;
