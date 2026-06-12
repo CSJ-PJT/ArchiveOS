@@ -373,6 +373,33 @@ GET /api/kpi/overview?range=30d
 
 데이터가 없거나 쿼리할 수 없는 지표는 null로 반환하고 `notes`에 이유를 남깁니다. KPI는 현재 통계 집계이며 LLM 분석, 예측, 자동 의사결정을 포함하지 않습니다.
 
+## Knowledge Graph Visualization API
+
+Knowledge Graph Visualization API는 `knowledge_nodes`와 `knowledge_edges`를 read-only graph payload로 반환합니다. 이 API는 ArchiveOS Knowledge 탭의 SVG/CSS 기반 그래프 시각화에 사용됩니다.
+
+Endpoint:
+
+```bash
+GET /api/knowledge/graph?limit=100
+```
+
+응답:
+
+- `nodes`: id, type, label, title, summary, source, externalRef, createdAt, metadata
+- `edges`: id, from, to, type, label, confidence, createdAt, metadata
+- `stats`: nodeCount, edgeCount, type counts
+
+정책:
+
+- default limit 100, max 300
+- 최근 node/edge 우선
+- 반환 node에 포함된 from/to를 가진 edge만 반환
+- 데이터가 없거나 쿼리 실패 시 빈 graph payload를 반환해 frontend 전체가 깨지지 않게 합니다.
+- Obsidian note는 relative path만 노출합니다.
+- local absolute vault path, webhook URL, secret 성격 metadata는 제거합니다.
+
+이 기능은 vector search, embeddings, graph database, Obsidian plugin, bidirectional sync가 아닙니다. 현재는 운영 기억 관계를 시각적으로 이해하기 위한 MVP입니다.
+
 제한:
 
 - OpenAI API 없음

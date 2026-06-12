@@ -479,3 +479,32 @@ GET /api/kpi/overview?range=today
 GET /api/kpi/overview?range=7d
 GET /api/kpi/overview?range=30d
 ```
+
+## Knowledge Graph Visualization MVP
+
+Knowledge Graph Visualization은 Supabase의 `knowledge_nodes`와 `knowledge_edges`를 read-only로 시각화합니다. Historian/Obsidian export, Daily/Nightly batch, Architect Review, Reviewer/Builder 결과가 어떤 관계로 연결되는지 PM이 한 화면에서 확인하기 위한 포트폴리오/운영 가시화 기능입니다.
+
+포함 기능:
+
+- Knowledge 탭의 `Knowledge Graph` 섹션
+- SVG/CSS 기반 경량 그래프
+- node type / edge type / limit / text filter
+- selected node detail panel
+- edge list fallback
+- 모바일에서는 그래프 영역 horizontal scroll
+
+Backend API:
+
+```bash
+GET /api/knowledge/graph?limit=100
+```
+
+제한:
+
+- vector search 없음
+- embeddings 없음
+- graph database 없음
+- Obsidian bidirectional sync 없음
+- OpenAI/LLM reasoning 없음
+- Codex/MCP/process 제어 없음
+- Obsidian vault 절대 경로와 secret 값 노출 없음

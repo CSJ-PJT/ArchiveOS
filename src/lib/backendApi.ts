@@ -175,6 +175,39 @@ export type RelatedKnowledgeGroup = {
   related: KnowledgeEdge[];
 };
 
+export type KnowledgeGraphNode = {
+  id: string;
+  type: string;
+  label: string;
+  title: string;
+  summary: string | null;
+  source: string | null;
+  externalRef: string | null;
+  createdAt: string;
+  metadata: Record<string, unknown>;
+};
+
+export type KnowledgeGraphEdge = {
+  id: string;
+  from: string;
+  to: string;
+  type: string;
+  label: string;
+  confidence: number | null;
+  createdAt: string;
+  metadata: Record<string, unknown>;
+};
+
+export type KnowledgeGraph = {
+  nodes: KnowledgeGraphNode[];
+  edges: KnowledgeGraphEdge[];
+  stats: {
+    nodeCount: number;
+    edgeCount: number;
+    types: Record<string, number>;
+  };
+};
+
 export type ArchitectureReview = {
   id: string;
   target_type: string;
@@ -412,6 +445,11 @@ export async function getRelatedKnowledge(input: { external_ref?: string | null;
   if (input.external_ref) params.set("external_ref", input.external_ref);
   if (input.node_type) params.set("node_type", input.node_type);
   const response = await request<ApiEnvelope<RelatedKnowledgeGroup[]>>(`/api/knowledge/related?${params}`);
+  return response.data;
+}
+
+export async function getKnowledgeGraph(limit = 100) {
+  const response = await request<ApiEnvelope<KnowledgeGraph>>(`/api/knowledge/graph?limit=${limit}`);
   return response.data;
 }
 

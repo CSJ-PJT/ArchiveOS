@@ -6,6 +6,7 @@ export { isHistorianConfigured } from "./obsidianVault.js";
 export {
   createKnowledgeEdge,
   getKnowledgeNode,
+  getKnowledgeGraph,
   getKnowledgeOverview,
   getRecentKnowledgeEdges,
   getRecentKnowledgeNodes,

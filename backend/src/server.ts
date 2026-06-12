@@ -21,6 +21,7 @@ import {
 import { findProject, projects } from "./config/projects.js";
 import {
   getKnowledgeNode,
+  getKnowledgeGraph,
   getKnowledgeOverview,
   getRecentKnowledgeNodes,
   getRelatedKnowledge,
@@ -386,6 +387,14 @@ app.get("/api/knowledge/related", async (request, response) => {
     });
   } catch {
     response.status(500).json({ error: "Failed to fetch related knowledge." });
+  }
+});
+
+app.get("/api/knowledge/graph", async (request, response) => {
+  try {
+    response.json({ data: await getKnowledgeGraph(readLimit(request.query.limit ?? "100")) });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch knowledge graph." });
   }
 });
 

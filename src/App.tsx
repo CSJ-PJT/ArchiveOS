@@ -5,6 +5,7 @@ import {
   getDashboardData,
   getBackendHealth,
   getHistorianStatus,
+  getKnowledgeGraph,
   getKnowledgeOverview,
   getKpiOverview,
   getRelatedKnowledge,
@@ -28,6 +29,9 @@ import {
   type HistorianStatus,
   type ArchitectureReview,
   type KnowledgeNode,
+  type KnowledgeGraph,
+  type KnowledgeGraphNode,
+  type KnowledgeGraphEdge,
   type KnowledgeOverview,
   type KpiOverview,
   type KpiRange,
@@ -534,6 +538,7 @@ function OperationsLayout({
           meshError={meshError}
           kpiOverview={kpiOverview}
           kpiError={kpiError}
+          knowledgeOverview={knowledgeOverview}
         />
       ) : null}
 
@@ -695,6 +700,7 @@ function DashboardView({
   meshError,
   kpiOverview,
   kpiError,
+  knowledgeOverview,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
   runtimeError: string | null;
@@ -711,6 +717,7 @@ function DashboardView({
   meshError: string | null;
   kpiOverview: KpiOverview | null;
   kpiError: string | null;
+  knowledgeOverview: KnowledgeOverview | null;
 }) {
   return (
     <div className="grid gap-5">
@@ -748,6 +755,10 @@ function DashboardView({
 
           <Panel title="KPI Summary">
             <KpiSummaryCard kpiOverview={kpiOverview} error={kpiError} />
+          </Panel>
+
+          <Panel title="Knowledge Graph Summary">
+            <KnowledgeGraphSummaryCard knowledgeOverview={knowledgeOverview} />
           </Panel>
 
           <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
@@ -1155,7 +1166,9 @@ function KnowledgeView({
 
       <KnowledgeSearchPanel />
 
-      <Panel title="Graph MVP">
+      <KnowledgeGraphPanel />
+
+      <Panel title="Graph MVP Edge Fallback">
         <p className="mb-4 text-sm leading-6 text-slate-400">
           Compact relationship list only. No force graph, embeddings, vector search, or graph database is enabled.
         </p>
@@ -1186,6 +1199,224 @@ function KnowledgeNodeList({ nodes }: { nodes: KnowledgeNode[] }) {
           ) : null}
         </article>
       ))}
+    </div>
+  );
+}
+
+function KnowledgeGraphPanel() {
+  const [graph, setGraph] = useState<KnowledgeGraph | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [limit, setLimit] = useState(100);
+  const [nodeType, setNodeType] = useState("all");
+  const [edgeType, setEdgeType] = useState("all");
+  const [query, setQuery] = useState("");
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadGraph() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const nextGraph = await getKnowledgeGraph(limit);
+        if (!cancelled) {
+          setGraph(nextGraph);
+          setSelectedNodeId((current) =>
+            current && nextGraph.nodes.some((node) => node.id === current) ? current : nextGraph.nodes[0]?.id ?? null,
+          );
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setGraph(null);
+          setError(loadError instanceof Error ? loadError.message : "Knowledge Graph API를 불러오지 못했습니다.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadGraph();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [limit]);
+
+  const nodeTypes = useMemo(() => ["all", ...Object.keys(graph?.stats.types ?? {}).sort()], [graph]);
+  const edgeTypes = useMemo(() => ["all", ...Array.from(new Set((graph?.edges ?? []).map((edge) => edge.type))).sort()], [graph]);
+  const filtered = useMemo(() => filterKnowledgeGraph(graph, { nodeType, edgeType, query }), [graph, nodeType, edgeType, query]);
+  const selectedNode = filtered.nodes.find((node) => node.id === selectedNodeId) ?? filtered.nodes[0] ?? null;
+  const selectedEdges = selectedNode ? filtered.edges.filter((edge) => edge.from === selectedNode.id || edge.to === selectedNode.id) : [];
+  const topTypes = Object.entries(graph?.stats.types ?? {})
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 4);
+
+  return (
+    <Panel title="Knowledge Graph">
+      <div className="grid gap-5">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <RuntimeMetric label="Nodes" value={String(graph?.stats.nodeCount ?? 0)} />
+          <RuntimeMetric label="Edges" value={String(graph?.stats.edgeCount ?? 0)} />
+          <RuntimeMetric label="Visible nodes" value={String(filtered.nodes.length)} />
+          <RuntimeMetric label="Top types" value={topTypes.map(([type, count]) => `${type} ${count}`).join(", ") || "none"} />
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-4">
+          <select className="min-h-11 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none" onChange={(event) => setNodeType(event.target.value)} value={nodeType}>
+            {nodeTypes.map((type) => <option key={type} value={type}>{type === "all" ? "All node types" : type}</option>)}
+          </select>
+          <select className="min-h-11 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none" onChange={(event) => setEdgeType(event.target.value)} value={edgeType}>
+            {edgeTypes.map((type) => <option key={type} value={type}>{type === "all" ? "All edge types" : type}</option>)}
+          </select>
+          <select className="min-h-11 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none" onChange={(event) => setLimit(Number(event.target.value))} value={limit}>
+            {[50, 100, 200].map((value) => <option key={value} value={value}>Limit {value}</option>)}
+          </select>
+          <input
+            className="min-h-11 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search label, title, external ref"
+            value={query}
+          />
+        </div>
+
+        {error ? (
+          <EmptyState title="Knowledge Graph API를 불러오지 못했습니다." detail={error} />
+        ) : loading ? (
+          <EmptyState title="Loading graph" detail="Reading knowledge_nodes and knowledge_edges." muted />
+        ) : !filtered.nodes.length ? (
+          <EmptyState
+            title="아직 Knowledge Graph 데이터가 충분하지 않습니다."
+            detail="Daily Report, Nightly Review, Architect Review, Historian Export가 실행되면 노드와 엣지가 생성됩니다."
+            muted
+          />
+        ) : (
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(18rem,0.7fr)]">
+            <div className="overflow-x-auto rounded-md border border-white/10 bg-[#070d14] p-3">
+              <KnowledgeGraphSvg graph={filtered} selectedNodeId={selectedNode?.id ?? null} onSelectNode={setSelectedNodeId} />
+            </div>
+            <KnowledgeGraphNodeDetail node={selectedNode} edges={selectedEdges} nodes={filtered.nodes} />
+          </div>
+        )}
+
+        <KnowledgeGraphEdgeList edges={filtered.edges} nodes={filtered.nodes} />
+      </div>
+    </Panel>
+  );
+}
+
+function KnowledgeGraphSvg({
+  graph,
+  selectedNodeId,
+  onSelectNode,
+}: {
+  graph: Pick<KnowledgeGraph, "nodes" | "edges">;
+  selectedNodeId: string | null;
+  onSelectNode: (id: string) => void;
+}) {
+  const width = 920;
+  const height = 560;
+  const positions = useMemo(() => layoutGraphNodes(graph.nodes, width, height), [graph.nodes]);
+
+  return (
+    <svg className="min-w-[56rem] max-w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Knowledge Graph visualization">
+      <defs>
+        <marker id="kg-arrow" markerHeight="8" markerWidth="8" orient="auto" refX="8" refY="4">
+          <path d="M0,0 L8,4 L0,8 Z" fill="rgba(148,163,184,0.75)" />
+        </marker>
+      </defs>
+      <rect width={width} height={height} rx="10" fill="rgba(2,6,23,0.55)" />
+      {graph.edges.map((edge) => {
+        const from = positions.get(edge.from);
+        const to = positions.get(edge.to);
+        if (!from || !to) return null;
+        return (
+          <line key={edge.id} markerEnd="url(#kg-arrow)" stroke={getKnowledgeEdgeColor(edge.type)} strokeOpacity="0.58" strokeWidth={edge.type === "reviewed_by" || edge.type === "exported_to" ? 2.2 : 1.3} x1={from.x} x2={to.x} y1={from.y} y2={to.y}>
+            <title>{edge.type}: {edge.label}</title>
+          </line>
+        );
+      })}
+      {graph.nodes.map((node) => {
+        const position = positions.get(node.id);
+        if (!position) return null;
+        const selected = node.id === selectedNodeId;
+        return (
+          <g key={node.id} className="cursor-pointer" onClick={() => onSelectNode(node.id)} role="button" tabIndex={0}>
+            <circle cx={position.x} cy={position.y} fill={getKnowledgeNodeColor(node.type)} opacity={selected ? 1 : 0.86} r={selected ? 28 : 23} stroke={selected ? "white" : "rgba(255,255,255,0.35)"} strokeWidth={selected ? 3 : 1} />
+            <text fill="white" fontSize="11" fontWeight="700" textAnchor="middle" x={position.x} y={position.y - 34}>{node.type}</text>
+            <text fill="rgba(226,232,240,0.92)" fontSize="12" textAnchor="middle" x={position.x} y={position.y + 43}>{truncateGraphLabel(node.label, 18)}</text>
+            <title>{node.title}</title>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function KnowledgeGraphNodeDetail({ node, edges, nodes }: { node: KnowledgeGraphNode | null; edges: KnowledgeGraphEdge[]; nodes: KnowledgeGraphNode[] }) {
+  if (!node) return <EmptyState title="No selected node" detail="Select a node to inspect graph context." muted />;
+
+  return (
+    <aside className="rounded-md border border-white/10 bg-black/20 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge className="bg-cyan-500/15 text-cyan-200 ring-cyan-400/25">{node.type}</StatusBadge>
+        <span className="rounded bg-white/[0.04] px-2 py-1 text-xs text-slate-400">{node.source ?? "unknown"}</span>
+      </div>
+      <h3 className="mt-3 text-base font-semibold text-white" title={node.title}>{node.title}</h3>
+      <p className="mt-2 text-xs text-slate-500" title={formatExactDate(node.createdAt)}>{formatRelativeTime(node.createdAt)}</p>
+      {node.externalRef ? <CompactValue value={node.externalRef} className="mt-3 text-xs text-slate-500" copyable /> : null}
+      <p className="mt-3 max-h-32 overflow-y-auto text-sm leading-6 text-slate-300">{node.summary ?? "No summary."}</p>
+      <div className="mt-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Related edges</p>
+        <div className="mt-2 grid gap-2">
+          {edges.length ? edges.slice(0, 8).map((edge) => {
+            const otherId = edge.from === node.id ? edge.to : edge.from;
+            const other = nodes.find((item) => item.id === otherId);
+            return (
+              <div key={edge.id} className="rounded border border-white/10 bg-white/[0.03] p-2 text-xs">
+                <StatusBadge className="bg-violet-500/15 text-violet-200 ring-violet-400/25">{edge.type}</StatusBadge>
+                <p className="mt-2 truncate text-slate-300" title={other?.title ?? otherId}>{other?.label ?? otherId}</p>
+                <p className="mt-1 truncate text-slate-500" title={readEdgeReason(edge)}>{readEdgeReason(edge)}</p>
+              </div>
+            );
+          }) : <p className="text-sm text-slate-500">No related edges in current filters.</p>}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function KnowledgeGraphEdgeList({ edges, nodes }: { edges: KnowledgeGraphEdge[]; nodes: KnowledgeGraphNode[] }) {
+  if (!edges.length) return <EmptyState title="No visible edges" detail="Adjust filters or run batches that create knowledge relationships." muted />;
+
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+
+  return (
+    <div className="overflow-x-auto rounded-md border border-white/10 bg-black/20">
+      <table className="w-full min-w-[44rem] text-left text-sm">
+        <thead className="text-xs uppercase tracking-[0.14em] text-slate-500">
+          <tr>
+            <th className="px-3 py-2">From</th>
+            <th className="px-3 py-2">Edge</th>
+            <th className="px-3 py-2">To</th>
+            <th className="px-3 py-2">Reason</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/10">
+          {edges.slice(0, 20).map((edge) => (
+            <tr key={edge.id}>
+              <td className="max-w-[14rem] truncate px-3 py-2 text-slate-300" title={nodeMap.get(edge.from)?.title ?? edge.from}>{nodeMap.get(edge.from)?.label ?? edge.from}</td>
+              <td className="px-3 py-2"><StatusBadge className="bg-violet-500/15 text-violet-200 ring-violet-400/25">{edge.type}</StatusBadge></td>
+              <td className="max-w-[14rem] truncate px-3 py-2 text-slate-300" title={nodeMap.get(edge.to)?.title ?? edge.to}>{nodeMap.get(edge.to)?.label ?? edge.to}</td>
+              <td className="max-w-[16rem] truncate px-3 py-2 text-slate-500" title={readEdgeReason(edge)}>{readEdgeReason(edge)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -1547,6 +1778,20 @@ function KpiSummaryCard({ kpiOverview, error }: { kpiOverview: KpiOverview | nul
       <RuntimeMetric label="Knowledge nodes" value={formatKpiValue(kpiOverview.knowledge.nodesCreatedInRange)} />
       <RuntimeMetric label="Warnings" value={formatKpiValue(kpiOverview.runtime.warningCount)} />
       <RuntimeMetric label="Runtime status" value={kpiOverview.runtime.latestStatus} />
+    </div>
+  );
+}
+
+function KnowledgeGraphSummaryCard({ knowledgeOverview }: { knowledgeOverview: KnowledgeOverview | null }) {
+  const latestNodeType = knowledgeOverview?.latestNodes[0]?.node_type ?? "none";
+  const latestEdgeType = knowledgeOverview?.latestEdges[0]?.edge_type ?? "none";
+
+  return (
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <RuntimeMetric label="Nodes" value={String(knowledgeOverview?.totalNodes ?? 0)} />
+      <RuntimeMetric label="Edges" value={String(knowledgeOverview?.totalEdges ?? 0)} />
+      <RuntimeMetric label="Latest node type" value={latestNodeType} />
+      <RuntimeMetric label="Latest edge type" value={latestEdgeType} />
     </div>
   );
 }
@@ -3772,6 +4017,119 @@ function getMeshStatusStyle(status: MeshAgent["status"]) {
 
 function findMeshAgent(meshOverview: MeshOverview, id: string) {
   return meshOverview.agents.find((agent) => agent.id === id) ?? null;
+}
+
+function filterKnowledgeGraph(
+  graph: KnowledgeGraph | null,
+  filters: { nodeType: string; edgeType: string; query: string },
+): KnowledgeGraph {
+  if (!graph) {
+    return {
+      nodes: [],
+      edges: [],
+      stats: { nodeCount: 0, edgeCount: 0, types: {} },
+    };
+  }
+
+  const cleanQuery = filters.query.trim().toLowerCase();
+  const nodes = graph.nodes.filter((node) => {
+    const typeMatch = filters.nodeType === "all" || node.type === filters.nodeType;
+    const queryMatch =
+      !cleanQuery ||
+      [node.label, node.title, node.externalRef ?? "", node.summary ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(cleanQuery);
+    return typeMatch && queryMatch;
+  });
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const edges = graph.edges.filter((edge) => {
+    const typeMatch = filters.edgeType === "all" || edge.type === filters.edgeType;
+    return typeMatch && nodeIds.has(edge.from) && nodeIds.has(edge.to);
+  });
+
+  return {
+    nodes,
+    edges,
+    stats: {
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      types: nodes.reduce<Record<string, number>>((acc, node) => {
+        acc[node.type] = (acc[node.type] ?? 0) + 1;
+        return acc;
+      }, {}),
+    },
+  };
+}
+
+function layoutGraphNodes(nodes: KnowledgeGraphNode[], width: number, height: number) {
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const radiusX = width * 0.36;
+  const radiusY = height * 0.34;
+  const groups = groupGraphNodes(nodes);
+  const positions = new Map<string, { x: number; y: number }>();
+  const typeCount = groups.length || 1;
+
+  groups.forEach(([type, group], typeIndex) => {
+    const typeAngle = (Math.PI * 2 * typeIndex) / typeCount - Math.PI / 2;
+    const groupCenterX = centerX + Math.cos(typeAngle) * radiusX * 0.55;
+    const groupCenterY = centerY + Math.sin(typeAngle) * radiusY * 0.55;
+    const localRadius = Math.max(34, Math.min(84, 22 + group.length * 5));
+
+    group.forEach((node, nodeIndex) => {
+      const angle = group.length === 1 ? typeAngle : (Math.PI * 2 * nodeIndex) / group.length + typeAngle;
+      positions.set(node.id, {
+        x: clampGraphPosition(groupCenterX + Math.cos(angle) * localRadius, 70, width - 70),
+        y: clampGraphPosition(groupCenterY + Math.sin(angle) * localRadius, 70, height - 70),
+      });
+    });
+  });
+
+  return positions;
+}
+
+function groupGraphNodes(nodes: KnowledgeGraphNode[]) {
+  const byType = nodes.reduce<Record<string, KnowledgeGraphNode[]>>((acc, node) => {
+    acc[node.type] = acc[node.type] ?? [];
+    acc[node.type].push(node);
+    return acc;
+  }, {});
+
+  return Object.entries(byType).sort(([left], [right]) => left.localeCompare(right));
+}
+
+function clampGraphPosition(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getKnowledgeNodeColor(type: string) {
+  const colors: Record<string, string> = {
+    decision: "#22c55e",
+    incident: "#f97316",
+    daily_report: "#38bdf8",
+    nightly_review: "#0ea5e9",
+    architecture_review: "#a855f7",
+    obsidian_note: "#8b5cf6",
+    builder_result: "#06b6d4",
+    reviewer_result: "#f59e0b",
+    command: "#64748b",
+    task: "#14b8a6",
+  };
+
+  return colors[type] ?? "#94a3b8";
+}
+
+function getKnowledgeEdgeColor(type: string) {
+  if (type === "exported_to") return "rgba(139,92,246,0.9)";
+  if (type === "reviewed_by" || type === "reviewed_architecture_of") return "rgba(245,158,11,0.9)";
+  if (type === "mentioned_in") return "rgba(56,189,248,0.82)";
+  if (type === "references_memory") return "rgba(168,85,247,0.8)";
+  return "rgba(148,163,184,0.72)";
+}
+
+function truncateGraphLabel(value: string, maxLength: number) {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
 }
 
 function formatKpiValue(value: number | null) {
