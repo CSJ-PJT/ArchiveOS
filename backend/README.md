@@ -339,6 +339,40 @@ GET /api/mesh/overview
 - UI 실행 제어가 아닙니다.
 - secret, webhook URL, Obsidian vault 절대 경로를 반환하지 않습니다.
 
+## KPI Overview
+
+KPI Overview는 기존 ArchiveOS 기록에서 계산되는 read-only analytics API입니다. 별도 실행 제어, Codex 제어, MCP 실행, OpenAI API 호출을 하지 않습니다.
+
+Endpoint:
+
+```bash
+GET /api/kpi/overview?range=today
+GET /api/kpi/overview?range=7d
+GET /api/kpi/overview?range=30d
+```
+
+계산 출처:
+
+- `daily_reports`
+- `batch_runs`
+- `runtime_snapshots`
+- `command_runs`
+- `work_logs`
+- `architecture_reviews`
+- `knowledge_nodes`
+- `knowledge_edges`
+- `historian_exports`
+- current runtime status
+
+지표 정의:
+
+- `approvalRate = approve / (approve + reject + stop) * 100`
+- `graphDensity = knowledge_edges / knowledge_nodes`
+- `warningCount = daily report warnings + runtime snapshot warnings + Architect warning/blocked rows`
+- `loopDetectedRate`는 runtime snapshot의 operator summary에서 loop 감지 여부가 있는 경우에만 계산합니다.
+
+데이터가 없거나 쿼리할 수 없는 지표는 null로 반환하고 `notes`에 이유를 남깁니다. KPI는 현재 통계 집계이며 LLM 분석, 예측, 자동 의사결정을 포함하지 않습니다.
+
 제한:
 
 - OpenAI API 없음
