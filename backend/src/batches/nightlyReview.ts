@@ -1,7 +1,7 @@
 import { getLocalRuntimeStatus, type LocalRuntimeStatus } from "../lib/localRuntime.js";
 import { supabaseAdmin } from "../lib/supabaseAdmin.js";
 import { addDaysToDateString, getSeoulDateString } from "./businessDays.js";
-import { exportBatchReportToObsidian } from "../historian/index.js";
+import { exportBatchReportToObsidian, linkNightlyReviewExport } from "../historian/index.js";
 import type { ExportResult } from "../historian/index.js";
 import { recordBatchRun, recordHistorianExport, recordRuntimeSnapshot, updateBatchRunMetadata } from "./store.js";
 import type { BatchResult, NightlyReviewSummary, OperationStatus, OperatorSummary } from "./types.js";
@@ -67,6 +67,13 @@ export async function runNightlyReviewBatch(options: NightlyReviewOptions = {}):
     reason: historianResult.success ? null : historianResult.reason ?? null,
     source_id: persisted.id ?? null,
   }).catch(() => undefined);
+
+  await linkNightlyReviewExport(persisted, summary, historianResult).catch((error) => {
+    persisted.metadata = {
+      ...persisted.metadata,
+      knowledge_graph_error: error instanceof Error ? error.message : "Unknown knowledge graph link error.",
+    };
+  });
 
   return persisted;
 }

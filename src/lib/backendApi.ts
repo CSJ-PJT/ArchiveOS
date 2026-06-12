@@ -136,6 +136,45 @@ export type HistorianStatus = {
   } | null;
 };
 
+export type KnowledgeNode = {
+  id: string;
+  node_type: string;
+  title: string;
+  summary: string | null;
+  source: string | null;
+  external_ref: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type KnowledgeEdge = {
+  id: string;
+  from_node_id: string;
+  to_node_id: string;
+  edge_type: string;
+  confidence: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  from_node?: KnowledgeNode;
+  to_node?: KnowledgeNode;
+};
+
+export type KnowledgeOverview = {
+  totalNodes: number;
+  totalEdges: number;
+  countsByType: Record<string, number>;
+  latestNodes: KnowledgeNode[];
+  latestEdges: KnowledgeEdge[];
+};
+
+export type RelatedKnowledgeGroup = {
+  node: KnowledgeNode;
+  outgoing: KnowledgeEdge[];
+  incoming: KnowledgeEdge[];
+  related: KnowledgeEdge[];
+};
+
 export async function getBackendHealth() {
   return request<HealthResponse>("/health");
 }
@@ -219,6 +258,31 @@ export async function getRecentRuntimeSnapshots() {
 
 export async function getHistorianStatus() {
   const response = await request<ApiEnvelope<HistorianStatus>>("/api/historian/status");
+  return response.data;
+}
+
+export async function getKnowledgeOverview() {
+  const response = await request<ApiEnvelope<KnowledgeOverview>>("/api/knowledge/overview");
+  return response.data;
+}
+
+export async function getRecentKnowledgeNodes(limit = 20) {
+  const response = await request<ApiEnvelope<KnowledgeNode[]>>(`/api/knowledge/recent?limit=${limit}`);
+  return response.data;
+}
+
+export async function searchKnowledgeNodes(query: string, limit = 20) {
+  const response = await request<ApiEnvelope<KnowledgeNode[]>>(
+    `/api/knowledge/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+  );
+  return response.data;
+}
+
+export async function getRelatedKnowledge(input: { external_ref?: string | null; node_type?: string | null }) {
+  const params = new URLSearchParams();
+  if (input.external_ref) params.set("external_ref", input.external_ref);
+  if (input.node_type) params.set("node_type", input.node_type);
+  const response = await request<ApiEnvelope<RelatedKnowledgeGroup[]>>(`/api/knowledge/related?${params}`);
   return response.data;
 }
 
