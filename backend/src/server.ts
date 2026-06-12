@@ -62,6 +62,57 @@ const seedCommandRunIds = [
   "20000000-0000-4000-8000-000000000002",
 ];
 
+type HealthServiceKey =
+  | "backend"
+  | "runtime"
+  | "knowledge"
+  | "mesh"
+  | "kpi"
+  | "architect"
+  | "dailyReport";
+
+type EndpointRegistration = {
+  method: "GET" | "POST";
+  path: string;
+  service: HealthServiceKey;
+  description: string;
+};
+
+const endpointRegistry: EndpointRegistration[] = [
+  { method: "GET", path: "/health", service: "backend", description: "Legacy backend liveness check." },
+  { method: "GET", path: "/api/health", service: "backend", description: "ArchiveOS service health summary." },
+  { method: "GET", path: "/api/health/endpoints", service: "backend", description: "Registered endpoint coverage." },
+  { method: "GET", path: "/api/dashboard", service: "dailyReport", description: "Supabase dashboard data." },
+  { method: "GET", path: "/api/work-logs/recent", service: "dailyReport", description: "Recent work logs." },
+  { method: "POST", path: "/api/work-logs", service: "dailyReport", description: "Recording-only work log write." },
+  { method: "GET", path: "/api/commands/recent", service: "dailyReport", description: "Recent recorded commands." },
+  { method: "POST", path: "/api/commands", service: "dailyReport", description: "Recording-only command write." },
+  { method: "GET", path: "/api/local-actions/projects", service: "backend", description: "Allowlisted local project registry." },
+  { method: "POST", path: "/api/local-actions/run", service: "backend", description: "Allowlisted diagnostics endpoint." },
+  { method: "GET", path: "/api/local-runtime/status", service: "runtime", description: "Local MCP runtime status." },
+  { method: "GET", path: "/api/runtime/events/recent", service: "runtime", description: "Derived runtime events." },
+  { method: "GET", path: "/api/batches/recent", service: "dailyReport", description: "Recent batch runs." },
+  { method: "GET", path: "/api/batches/latest", service: "dailyReport", description: "Latest nightly/daily batch state." },
+  { method: "POST", path: "/api/batches/nightly-review/run", service: "dailyReport", description: "Manual nightly batch trigger." },
+  { method: "POST", path: "/api/batches/daily-report/run", service: "dailyReport", description: "Manual daily report trigger." },
+  { method: "GET", path: "/api/reports/daily/latest", service: "dailyReport", description: "Latest daily report." },
+  { method: "GET", path: "/api/reports/daily/recent", service: "dailyReport", description: "Recent daily reports." },
+  { method: "GET", path: "/api/runtime/snapshots/recent", service: "runtime", description: "Recent runtime snapshots." },
+  { method: "GET", path: "/api/historian/status", service: "knowledge", description: "Historian export status." },
+  { method: "GET", path: "/api/knowledge/overview", service: "knowledge", description: "Knowledge Graph overview." },
+  { method: "GET", path: "/api/knowledge/recent", service: "knowledge", description: "Recent knowledge nodes." },
+  { method: "GET", path: "/api/knowledge/search", service: "knowledge", description: "Knowledge text search." },
+  { method: "GET", path: "/api/knowledge/related", service: "knowledge", description: "Related knowledge lookup." },
+  { method: "GET", path: "/api/knowledge/graph", service: "knowledge", description: "Knowledge Graph visualization data." },
+  { method: "GET", path: "/api/knowledge/node/:id", service: "knowledge", description: "Knowledge node detail." },
+  { method: "POST", path: "/api/architect/review", service: "architect", description: "Rule-based Architect review recorder." },
+  { method: "GET", path: "/api/architect/reviews/recent", service: "architect", description: "Recent Architect reviews." },
+  { method: "GET", path: "/api/architect/reviews/latest", service: "architect", description: "Latest Architect review." },
+  { method: "GET", path: "/api/mesh/overview", service: "mesh", description: "Agent Mesh overview." },
+  { method: "GET", path: "/api/kpi/overview", service: "kpi", description: "KPI overview." },
+  { method: "GET", path: "/api/platform/readiness", service: "backend", description: "Portfolio readiness score." },
+];
+
 function parseCsvEnv(value: string | undefined) {
   if (!value) return [];
   return value
@@ -89,6 +140,29 @@ app.get("/health", (_request, response) => {
     status: "ok",
     service: "archiveos-backend",
   });
+});
+
+app.get("/api/health", async (_request, response) => {
+  const services = await getServiceHealth();
+  response.json({
+    status: "ok",
+    services: {
+      runtime: services.runtime,
+      knowledge: services.knowledge,
+      mesh: services.mesh,
+      kpi: services.kpi,
+      architect: services.architect,
+      dailyReport: services.dailyReport,
+    },
+  });
+});
+
+app.get("/api/health/endpoints", async (_request, response) => {
+  response.json(await getEndpointHealthSnapshot());
+});
+
+app.get("/api/platform/readiness", async (_request, response) => {
+  response.json({ data: await getPlatformReadiness() });
 });
 
 app.get("/api/work-logs/recent", async (_request, response) => {
@@ -619,6 +693,160 @@ function readRequiredString(value: unknown, name: string): { ok: true; value: st
 function readLimit(value: unknown) {
   const numeric = typeof value === "string" ? Number(value) : 20;
   return Number.isFinite(numeric) ? Math.min(Math.max(Math.floor(numeric), 1), 100) : 20;
+}
+
+async function getServiceHealth() {
+  const checks = await Promise.allSettled([
+    getLocalRuntimeStatus(),
+    getKnowledgeOverview(),
+    getAgentMeshOverview(),
+    getKpiOverview("7d"),
+    getLatestArchitectureReview(),
+    getLatestDailyReport(),
+  ]);
+
+  return {
+    backend: true,
+    runtime: checks[0].status === "fulfilled",
+    knowledge: checks[1].status === "fulfilled",
+    mesh: checks[2].status === "fulfilled",
+    kpi: checks[3].status === "fulfilled",
+    architect: checks[4].status === "fulfilled",
+    dailyReport: checks[5].status === "fulfilled",
+  } satisfies Record<HealthServiceKey, boolean>;
+}
+
+async function getEndpointHealthSnapshot() {
+  const checkedAt = new Date().toISOString();
+  const services = await getServiceHealth();
+  const endpoints = endpointRegistry.map((endpoint) => {
+    const online = services[endpoint.service];
+    return {
+      ...endpoint,
+      status: online ? "online" : "failed",
+      message: online
+        ? "Registered and service dependency check passed."
+        : `${endpoint.service} dependency check failed.`,
+    };
+  });
+  const failed = endpoints.filter((endpoint) => endpoint.status === "failed").length;
+
+  return {
+    status: failed > 0 ? "warning" : "ok",
+    checkedAt,
+    endpoints,
+    summary: {
+      total: endpoints.length,
+      online: endpoints.length - failed,
+      failed,
+      missing: 0,
+    },
+  };
+}
+
+async function getPlatformReadiness() {
+  const [endpointHealth, knowledge, mesh, latestArchitect, latestDailyReport, kpi] = await Promise.all([
+    getEndpointHealthSnapshot(),
+    getKnowledgeOverview().catch(() => null),
+    getAgentMeshOverview().catch(() => null),
+    getLatestArchitectureReview().catch(() => null),
+    getLatestDailyReport().catch(() => null),
+    getKpiOverview("7d").catch(() => null),
+  ]);
+
+  const notes: string[] = [];
+  const issues: string[] = [];
+  const endpointCoverage = Math.round(
+    (endpointHealth.summary.online / Math.max(endpointHealth.summary.total, 1)) * 100,
+  );
+
+  if (endpointHealth.summary.failed > 0) {
+    issues.push(`${endpointHealth.summary.failed} registered endpoint groups have failed dependencies.`);
+  }
+
+  const dashboardCoverage = averageScore([
+    endpointHealth.endpoints.some((endpoint) => endpoint.path === "/api/local-runtime/status" && endpoint.status === "online") ? 100 : 0,
+    latestDailyReport ? 100 : 70,
+    mesh ? 100 : 0,
+    kpi ? 100 : 0,
+    knowledge ? 100 : 0,
+  ]);
+
+  if (!latestDailyReport) {
+    notes.push("No stored daily report exists yet; dashboard uses an empty state.");
+  }
+
+  const knowledgeCoverage = knowledge
+    ? Math.min(100, (knowledge.totalNodes > 0 ? 45 : 0) + (knowledge.totalEdges > 0 ? 45 : 0) + (knowledge.latestNodes.length > 0 ? 10 : 0))
+    : 0;
+
+  if (!knowledge || knowledge.totalNodes === 0) {
+    issues.push("Knowledge Graph has no nodes yet.");
+  }
+
+  const meshCoverage = mesh
+    ? Math.min(
+        100,
+        (mesh.agents.length >= 6 ? 45 : mesh.agents.length > 0 ? 30 : 0) +
+          (mesh.links.length > 0 ? 35 : 0) +
+          (mesh.recentInteractions.length > 0 ? 20 : 10),
+      )
+    : 0;
+
+  if (!mesh) {
+    issues.push("Agent Mesh overview is unavailable.");
+  }
+
+  const architectCoverage = latestArchitect ? 100 : endpointHealth.endpoints.some(
+    (endpoint) => endpoint.service === "architect" && endpoint.status === "online",
+  )
+    ? 65
+    : 0;
+
+  if (!latestArchitect) {
+    notes.push("Architect endpoint is registered, but no architecture review has been recorded yet.");
+  }
+
+  const score = Math.round(
+    endpointCoverage * 0.35 +
+      dashboardCoverage * 0.2 +
+      knowledgeCoverage * 0.15 +
+      meshCoverage * 0.15 +
+      architectCoverage * 0.15,
+  );
+
+  if (kpi?.notes.length) {
+    notes.push(...kpi.notes.slice(0, 3));
+  }
+
+  return {
+    score,
+    grade: scoreToGrade(score),
+    generatedAt: new Date().toISOString(),
+    coverage: {
+      endpoint: endpointCoverage,
+      dashboard: dashboardCoverage,
+      knowledge: knowledgeCoverage,
+      mesh: meshCoverage,
+      architect: architectCoverage,
+    },
+    issues,
+    notes,
+  };
+}
+
+function averageScore(values: number[]) {
+  if (!values.length) return 0;
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+function scoreToGrade(score: number) {
+  if (score >= 95) return "A+";
+  if (score >= 90) return "A";
+  if (score >= 85) return "B+";
+  if (score >= 80) return "B";
+  if (score >= 70) return "C";
+  return "Needs work";
 }
 
 async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
