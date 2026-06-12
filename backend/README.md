@@ -307,6 +307,38 @@ npm run architect:review-demo
 
 데모 입력은 정적이며, Dashboard에 process control button을 추가하려는 요구를 검토해 read-only 경계 위험을 기록합니다.
 
+## Agent Mesh Overview
+
+Agent Mesh Overview는 backend에서 파생한 read-only 관계 요약입니다. 실행 제어를 제공하지 않으며, Codex/MCP/OpenAI/shell을 호출하지 않습니다.
+
+Endpoint:
+
+```bash
+GET /api/mesh/overview
+```
+
+응답은 다음 데이터를 포함합니다.
+
+- `agents`: Implementer, Reviewer, Architect, Historian, MCP Loop, Reviewer Bridge 상태
+- `links`: 역할 간 관계와 Knowledge Graph에서 파생된 보수적 관계
+- `recentInteractions`: 최근 runtime/knowledge_graph interaction
+- `health`: mesh 전체 상태와 요약
+
+데이터 출처:
+
+- local runtime status
+- latest architecture review
+- latest Historian export
+- latest Knowledge Graph edges
+- latest Daily Report warnings
+
+제한:
+
+- Agent 간 자율 메시징이 아닙니다.
+- process start/stop 기능이 아닙니다.
+- UI 실행 제어가 아닙니다.
+- secret, webhook URL, Obsidian vault 절대 경로를 반환하지 않습니다.
+
 제한:
 
 - OpenAI API 없음
