@@ -10,7 +10,8 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "batch:nightly-review": "tsx src/batches/runBatch.ts nightly-review",
-    "batch:daily-report": "tsx src/batches/runBatch.ts daily-report"
+    "batch:daily-report": "tsx src/batches/runBatch.ts daily-report",
+    "architect:review-demo": "tsx src/architect/runArchitectDemo.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.86.0",

@@ -124,6 +124,18 @@ create table if not exists public.historian_exports (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.architecture_reviews (
+  id uuid primary key default gen_random_uuid(),
+  target_type text not null,
+  target_ref text not null,
+  status text not null check (status in ('pending', 'reviewed', 'warning', 'blocked')),
+  summary text,
+  findings jsonb not null default '[]'::jsonb,
+  recommendations jsonb not null default '[]'::jsonb,
+  related_nodes jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.knowledge_nodes (
   id uuid primary key default gen_random_uuid(),
   node_type text not null check (
@@ -138,7 +150,8 @@ create table if not exists public.knowledge_nodes (
       'batch_run',
       'command',
       'obsidian_note',
-      'architecture_note'
+      'architecture_note',
+      'architecture_review'
     )
   ),
   title text not null,
@@ -166,7 +179,11 @@ create table if not exists public.knowledge_edges (
       'resolved_by',
       'mentioned_in',
       'follows',
-      'blocks'
+      'blocks',
+      'reviewed_architecture_of',
+      'recommends',
+      'conflicts_with',
+      'references_memory'
     )
   ),
   confidence numeric not null default 1,
@@ -178,6 +195,46 @@ create table if not exists public.knowledge_edges (
 alter table public.daily_reports add column if not exists historian_exported boolean not null default false;
 alter table public.daily_reports add column if not exists historian_note_path text;
 alter table public.daily_reports add column if not exists historian_export_reason text;
+
+alter table public.knowledge_nodes drop constraint if exists knowledge_nodes_node_type_check;
+alter table public.knowledge_nodes add constraint knowledge_nodes_node_type_check
+check (
+  node_type in (
+    'task',
+    'builder_result',
+    'reviewer_result',
+    'decision',
+    'incident',
+    'daily_report',
+    'nightly_review',
+    'batch_run',
+    'command',
+    'obsidian_note',
+    'architecture_note',
+    'architecture_review'
+  )
+);
+
+alter table public.knowledge_edges drop constraint if exists knowledge_edges_edge_type_check;
+alter table public.knowledge_edges add constraint knowledge_edges_edge_type_check
+check (
+  edge_type in (
+    'relates_to',
+    'produced',
+    'reviewed_by',
+    'decided_by',
+    'exported_to',
+    'caused_by',
+    'resolved_by',
+    'mentioned_in',
+    'follows',
+    'blocks',
+    'reviewed_architecture_of',
+    'recommends',
+    'conflicts_with',
+    'references_memory'
+  )
+);
 
 create index if not exists tasks_status_idx on public.tasks(status);
 create index if not exists tasks_assigned_agent_id_idx on public.tasks(assigned_agent_id);
@@ -193,6 +250,9 @@ create index if not exists daily_reports_created_at_idx on public.daily_reports(
 create index if not exists runtime_snapshots_captured_at_idx on public.runtime_snapshots(captured_at desc);
 create index if not exists historian_exports_created_at_idx on public.historian_exports(created_at desc);
 create index if not exists historian_exports_note_type_idx on public.historian_exports(note_type, created_at desc);
+create index if not exists architecture_reviews_created_at_idx on public.architecture_reviews(created_at desc);
+create index if not exists architecture_reviews_target_ref_idx on public.architecture_reviews(target_ref);
+create index if not exists architecture_reviews_status_idx on public.architecture_reviews(status);
 create index if not exists knowledge_nodes_node_type_idx on public.knowledge_nodes(node_type);
 create index if not exists knowledge_nodes_external_ref_idx on public.knowledge_nodes(external_ref);
 create index if not exists knowledge_nodes_created_at_idx on public.knowledge_nodes(created_at desc);
@@ -243,6 +303,7 @@ alter table public.batch_runs enable row level security;
 alter table public.daily_reports enable row level security;
 alter table public.runtime_snapshots enable row level security;
 alter table public.historian_exports enable row level security;
+alter table public.architecture_reviews enable row level security;
 alter table public.knowledge_nodes enable row level security;
 alter table public.knowledge_edges enable row level security;
 
@@ -302,6 +363,13 @@ for select
 to anon, authenticated
 using (true);
 
+drop policy if exists "Allow public read architecture reviews" on public.architecture_reviews;
+create policy "Allow public read architecture reviews"
+on public.architecture_reviews
+for select
+to anon, authenticated
+using (true);
+
 drop policy if exists "Allow public read knowledge nodes" on public.knowledge_nodes;
 create policy "Allow public read knowledge nodes"
 on public.knowledge_nodes
@@ -325,5 +393,6 @@ grant select on public.batch_runs to anon, authenticated;
 grant select on public.daily_reports to anon, authenticated;
 grant select on public.runtime_snapshots to anon, authenticated;
 grant select on public.historian_exports to anon, authenticated;
+grant select on public.architecture_reviews to anon, authenticated;
 grant select on public.knowledge_nodes to anon, authenticated;
 grant select on public.knowledge_edges to anon, authenticated;

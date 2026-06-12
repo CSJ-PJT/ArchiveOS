@@ -9,8 +9,10 @@ import {
   getRelatedKnowledge,
   getLatestBatchStatus,
   getLatestDailyReport,
+  getLatestArchitectureReview,
   getLocalActionProjects,
   getLocalRuntimeStatus,
+  getRecentArchitectureReviews,
   getRecentCommands,
   getRecentKnowledgeNodes,
   getRecentRuntimeEvents,
@@ -22,6 +24,7 @@ import {
   type LocalRuntimeStatus,
   type LatestBatchStatus,
   type HistorianStatus,
+  type ArchitectureReview,
   type KnowledgeNode,
   type KnowledgeOverview,
   type RelatedKnowledgeGroup,
@@ -137,6 +140,13 @@ const operationStatusStyles: Record<DailyReport["status"], string> = {
   normal: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25",
   warning: "bg-amber-500/15 text-amber-200 ring-amber-400/25",
   problem: "bg-rose-500/15 text-rose-200 ring-rose-400/25",
+};
+
+const architectStatusStyles: Record<ArchitectureReview["status"], string> = {
+  pending: "bg-slate-500/15 text-slate-200 ring-slate-400/20",
+  reviewed: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25",
+  warning: "bg-amber-500/15 text-amber-200 ring-amber-400/25",
+  blocked: "bg-rose-500/15 text-rose-200 ring-rose-400/25",
 };
 
 const quickActions = [
@@ -303,6 +313,9 @@ function OperationsLayout({
   const [knowledgeOverview, setKnowledgeOverview] = useState<KnowledgeOverview | null>(null);
   const [recentKnowledgeNodes, setRecentKnowledgeNodes] = useState<KnowledgeNode[]>([]);
   const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
+  const [latestArchitectureReview, setLatestArchitectureReview] = useState<ArchitectureReview | null>(null);
+  const [recentArchitectureReviews, setRecentArchitectureReviews] = useState<ArchitectureReview[]>([]);
+  const [architectureReviewError, setArchitectureReviewError] = useState<string | null>(null);
   const [focusMode, setFocusMode] = useState(false);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
 
@@ -313,6 +326,7 @@ function OperationsLayout({
     refreshBatchStatus();
     refreshHistorianStatus();
     refreshKnowledge();
+    refreshArchitectureReviews();
     const timer = window.setInterval(() => {
       refreshRuntime({ silent: true });
       refreshRuntimeEvents({ silent: true });
@@ -320,6 +334,7 @@ function OperationsLayout({
       refreshBatchStatus({ silent: true });
       refreshHistorianStatus({ silent: true });
       refreshKnowledge({ silent: true });
+      refreshArchitectureReviews({ silent: true });
     }, 5000);
 
     return () => window.clearInterval(timer);
@@ -427,6 +442,23 @@ function OperationsLayout({
     }
   }
 
+  async function refreshArchitectureReviews(options: { silent?: boolean } = {}) {
+    if (!options.silent) {
+      setArchitectureReviewError(null);
+    }
+
+    try {
+      const [latest, recent] = await Promise.all([
+        getLatestArchitectureReview(),
+        getRecentArchitectureReviews(8),
+      ]);
+      setLatestArchitectureReview(latest);
+      setRecentArchitectureReviews(recent);
+    } catch (error) {
+      setArchitectureReviewError(error instanceof Error ? error.message : "Architect reviews are not reachable.");
+    }
+  }
+
   const warningCount = getPipelineWarningMessages(runtimeStatus).length;
   const operatorActive = Boolean(runtimeStatus?.queue.processing || runtimeStatus?.processes.implementer || runtimeStatus?.processes.reviewer || runtimeStatus?.processes.reviewer_bridge);
 
@@ -457,6 +489,7 @@ function OperationsLayout({
           batchStatus={batchStatus}
           latestDailyReport={latestDailyReport}
           batchStatusError={batchStatusError}
+          latestArchitectureReview={latestArchitectureReview}
         />
       ) : null}
 
@@ -464,6 +497,7 @@ function OperationsLayout({
         <DecisionsView
           decisions={data.decisions}
           runtimeStatus={runtimeStatus}
+          latestArchitectureReview={latestArchitectureReview}
           onRecorded={refreshRuntimeEvents}
         />
       ) : null}
@@ -477,6 +511,8 @@ function OperationsLayout({
           backendReachability={backendReachability}
           commandRunsReachability={commandRunsReachability}
           consistencyError={consistencyError}
+          latestArchitectureReview={latestArchitectureReview}
+          architectureReviewError={architectureReviewError}
           onRecorded={refreshRuntimeEvents}
         />
       ) : null}
@@ -497,6 +533,7 @@ function OperationsLayout({
           knowledgeOverview={knowledgeOverview}
           recentNodes={recentKnowledgeNodes}
           knowledgeError={knowledgeError}
+          recentArchitectureReviews={recentArchitectureReviews}
         />
       ) : null}
 
@@ -589,6 +626,7 @@ function DashboardView({
   batchStatus,
   latestDailyReport,
   batchStatusError,
+  latestArchitectureReview,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
   runtimeError: string | null;
@@ -600,10 +638,15 @@ function DashboardView({
   batchStatus: LatestBatchStatus | null;
   latestDailyReport: DailyReport | null;
   batchStatusError: string | null;
+  latestArchitectureReview: ArchitectureReview | null;
 }) {
   return (
     <div className="grid gap-5">
-      <TopStatusStrip runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
+      <TopStatusStrip
+        runtimeStatus={runtimeStatus}
+        runtimeError={runtimeError}
+        latestArchitectureReview={latestArchitectureReview}
+      />
       <RuntimeSummary
         runtimeStatus={runtimeStatus}
         runtimeError={runtimeError}
@@ -689,10 +732,12 @@ function DashboardView({
 function DecisionsView({
   decisions,
   runtimeStatus,
+  latestArchitectureReview,
   onRecorded,
 }: {
   decisions: WorkLog[];
   runtimeStatus: LocalRuntimeStatus | null;
+  latestArchitectureReview: ArchitectureReview | null;
   onRecorded: (options?: { silent?: boolean }) => void;
 }) {
   const targetTask =
@@ -717,6 +762,7 @@ function DecisionsView({
           <div className="grid gap-3">
             <ApprovalRecorder targetTask={targetTask} onRecorded={onRecorded} />
             <RelatedKnowledgeMini externalRef={targetTask} />
+            <RelatedArchitectReviewMini review={latestArchitectureReview} targetRef={targetTask} />
           </div>
         </div>
       </Panel>
@@ -856,6 +902,8 @@ function OperatorsView({
   backendReachability,
   commandRunsReachability,
   consistencyError,
+  latestArchitectureReview,
+  architectureReviewError,
   onRecorded,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
@@ -865,6 +913,8 @@ function OperatorsView({
   backendReachability: ConsistencyStatus;
   commandRunsReachability: ConsistencyStatus;
   consistencyError: string | null;
+  latestArchitectureReview: ArchitectureReview | null;
+  architectureReviewError: string | null;
   onRecorded: (options?: { silent?: boolean }) => void;
 }) {
   return (
@@ -884,6 +934,10 @@ function OperatorsView({
         <ProcessCard title="MCP Loop" process={runtimeStatus?.processes.loop ?? null} interpretation={getLoopInterpretation(runtimeStatus)} />
         <ProcessCard title="Reviewer Bridge" process={runtimeStatus?.processes.reviewer_bridge ?? null} interpretation={getBridgeInterpretation(runtimeStatus)} />
       </div>
+
+      <Panel title="Architect">
+        <ArchitectStatusCard review={latestArchitectureReview} error={architectureReviewError} />
+      </Panel>
 
       <QueueDetailsPanel runtimeStatus={runtimeStatus} taskCounts={taskCounts} />
 
@@ -919,12 +973,14 @@ function KnowledgeView({
   knowledgeOverview,
   recentNodes,
   knowledgeError,
+  recentArchitectureReviews,
 }: {
   historianStatus: HistorianStatus | null;
   historianError: string | null;
   knowledgeOverview: KnowledgeOverview | null;
   recentNodes: KnowledgeNode[];
   knowledgeError: string | null;
+  recentArchitectureReviews: ArchitectureReview[];
 }) {
   const memoryTypes = [
     { label: "Decisions", type: "decision" },
@@ -934,6 +990,7 @@ function KnowledgeView({
     { label: "Builder Results", type: "builder_result" },
     { label: "Reviewer Results", type: "reviewer_result" },
     { label: "Obsidian Notes", type: "obsidian_note" },
+    { label: "Architecture Reviews", type: "architecture_review" },
   ];
 
   return (
@@ -984,7 +1041,7 @@ function KnowledgeView({
       </Panel>
 
       <Panel title="Memory Types">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {memoryTypes.map((item) => (
             <div key={item.type} className="rounded-md border border-white/10 bg-black/20 p-4">
               <p className="text-sm font-semibold text-white">{item.label}</p>
@@ -999,6 +1056,10 @@ function KnowledgeView({
 
       <Panel title="Recent Memory">
         <KnowledgeNodeList nodes={recentNodes} />
+      </Panel>
+
+      <Panel title="Architecture Reviews">
+        <ArchitectureReviewList reviews={recentArchitectureReviews} />
       </Panel>
 
       <KnowledgeSearchPanel />
@@ -1218,6 +1279,133 @@ function RelatedKnowledgeMini({ externalRef }: { externalRef: string | null }) {
       ) : (
         <p className="mt-2 text-sm text-slate-500">No related memory yet</p>
       )}
+    </div>
+  );
+}
+
+function RelatedArchitectReviewMini({
+  review,
+  targetRef,
+}: {
+  review: ArchitectureReview | null;
+  targetRef: string | null;
+}) {
+  const directlyRelated = review && targetRef ? review.target_ref === targetRef : false;
+
+  if (!review) {
+    return (
+      <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Related Architect Review</p>
+        <p className="mt-2 text-sm text-slate-500">No architecture review yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Related Architect Review</p>
+        <StatusBadge className={getArchitectStatusStyle(review.status)}>{review.status}</StatusBadge>
+      </div>
+      <p className="mt-2 text-sm text-slate-300">
+        {directlyRelated ? "This runtime target has an architecture review." : "Latest architecture review shown for context."}
+      </p>
+      <CompactValue value={review.target_ref} className="mt-2 text-xs text-slate-500" copyable />
+      <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-400" title={review.summary ?? ""}>
+        {review.summary ?? "No review summary."}
+      </p>
+    </div>
+  );
+}
+
+function ArchitectStatusCard({
+  review,
+  error,
+}: {
+  review: ArchitectureReview | null;
+  error: string | null;
+}) {
+  if (error) {
+    return <EmptyState title="Architect unavailable" detail={error} />;
+  }
+
+  if (!review) {
+    return (
+      <div className="grid gap-3">
+        <SourceLabel label="backend-derived, rule-based, non-executing planning role" />
+        <EmptyState
+          title="Architect available, no review yet"
+          detail="Run a manual architecture review from the backend to record design/scope/security findings."
+          muted
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-4">
+      <SourceLabel label="backend-derived + knowledge graph linked. Read-only visibility." />
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <RuntimeMetric label="State" value={getArchitectStatusLabel(review)} />
+        <RuntimeMetric label="Findings" value={String(review.findings.length)} />
+        <RuntimeMetric label="Recommendations" value={String(review.recommendations.length)} />
+        <RuntimeMetric label="Target" value={review.target_type} />
+        <RuntimeMetric label="Last reviewed" value={formatRelativeTime(review.created_at)} />
+      </div>
+      <div className="rounded-md border border-white/10 bg-black/20 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white">Latest architecture review</p>
+            <CompactValue value={review.target_ref} className="mt-2 text-xs text-slate-500" copyable />
+          </div>
+          <StatusBadge className={getArchitectStatusStyle(review.status)}>{review.status}</StatusBadge>
+        </div>
+        <p className="mt-3 text-sm leading-6 text-slate-300">{review.summary ?? "No summary."}</p>
+        {review.findings.length ? (
+          <div className="mt-4 grid gap-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Findings</p>
+            {review.findings.slice(0, 4).map((finding, index) => (
+              <div key={`${finding.rule ?? finding.ruleId ?? "finding"}-${index}`} className="rounded border border-white/10 bg-white/[0.03] p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge className={getArchitectStatusStyle(finding.severity === "blocked" ? "blocked" : finding.severity === "warning" ? "warning" : "reviewed")}>
+                    {finding.severity ?? "info"}
+                  </StatusBadge>
+                  <p className="text-sm font-medium text-white">{finding.title ?? finding.rule ?? finding.ruleId ?? "Finding"}</p>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-400">{finding.detail ?? finding.message ?? "No detail."}</p>
+                {finding.evidence ? <p className="mt-2 text-[0.68rem] text-slate-600">Evidence: {finding.evidence}</p> : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ArchitectureReviewList({ reviews }: { reviews: ArchitectureReview[] }) {
+  if (!reviews.length) {
+    return <EmptyState title="No architecture reviews yet" detail="Architect review nodes will appear after the backend demo or manual review endpoint records one." muted />;
+  }
+
+  return (
+    <div className="grid gap-3">
+      {reviews.map((review) => (
+        <article key={review.id} className="rounded-md border border-white/10 bg-black/20 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge className={getArchitectStatusStyle(review.status)}>{review.status}</StatusBadge>
+              <span className="rounded bg-black/20 px-2 py-1 text-xs text-slate-400">{review.target_type}</span>
+              <span className="text-xs text-slate-500" title={formatExactDate(review.created_at)}>{formatRelativeTime(review.created_at)}</span>
+            </div>
+            <span className="text-xs text-slate-500">{review.findings.length} findings</span>
+          </div>
+          <CompactValue value={review.target_ref} className="mt-3 text-xs text-slate-500" copyable />
+          <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-300" title={review.summary ?? ""}>
+            {review.summary ?? "No summary."}
+          </p>
+        </article>
+      ))}
     </div>
   );
 }
@@ -1512,9 +1700,11 @@ function FloatingRuntimeControls({
 function TopStatusStrip({
   runtimeStatus,
   runtimeError,
+  latestArchitectureReview,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
   runtimeError: string | null;
+  latestArchitectureReview: ArchitectureReview | null;
 }) {
   const bottleneck = getPipelineBottleneck(runtimeStatus);
   const worker = getCurrentWorkerSummary(runtimeStatus);
@@ -1539,11 +1729,17 @@ function TopStatusStrip({
         </div>
         <StatusBadge className={systemClass}>{runtimeError ? "offline" : runtimeStatus?.status ?? "loading"}</StatusBadge>
       </div>
-      <div className="grid gap-2 md:grid-cols-5">
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
         <StatusTile label="System state" value={runtimeError ? "runtime error" : runtimeStatus?.status ?? "loading"} strong />
         <StatusTile label="Active task" value={runtimeStatus?.active_task ?? "none"} strong copyable />
         <StatusTile label="Current worker" value={worker.label} detail={worker.detail} />
         <StatusTile label="Latest verdict" value={latestVerdict} />
+        <StatusTile
+          label="Architect"
+          value={getArchitectStatusLabel(latestArchitectureReview)}
+          detail={latestArchitectureReview?.summary ?? "No architecture review yet"}
+          warning={latestArchitectureReview?.status === "warning" || latestArchitectureReview?.status === "blocked"}
+        />
         <StatusTile label="Bottleneck / warning" value={bottleneck.label} detail={blocked} warning={bottleneck.severity !== "clear"} />
       </div>
     </section>
@@ -3044,6 +3240,16 @@ function getBatchStatusStyle(status: string) {
   if (status === "skipped") return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
   if (status === "failed") return commandStatusStyles.failed;
   return commandStatusStyles.pending;
+}
+
+function getArchitectStatusStyle(status: ArchitectureReview["status"]) {
+  return architectStatusStyles[status] ?? architectStatusStyles.pending;
+}
+
+function getArchitectStatusLabel(review: ArchitectureReview | null) {
+  if (!review) return "no review";
+  if (review.status === "reviewed") return "clear";
+  return review.status;
 }
 
 function getOperationStatusLabel(status: DailyReport["status"]) {

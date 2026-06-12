@@ -14,7 +14,8 @@ export type KnowledgeNodeType =
   | "batch_run"
   | "command"
   | "obsidian_note"
-  | "architecture_note";
+  | "architecture_note"
+  | "architecture_review";
 
 export type KnowledgeEdgeType =
   | "relates_to"
@@ -26,7 +27,11 @@ export type KnowledgeEdgeType =
   | "resolved_by"
   | "mentioned_in"
   | "follows"
-  | "blocks";
+  | "blocks"
+  | "reviewed_architecture_of"
+  | "recommends"
+  | "conflicts_with"
+  | "references_memory";
 
 export type KnowledgeNode = {
   id: string;

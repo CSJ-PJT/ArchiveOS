@@ -273,6 +273,40 @@ API:
 - `GET /api/knowledge/search?q=`
 - `GET /api/knowledge/related?external_ref=`
 
+## Architect Agent MVP
+
+Architect는 backend 내부의 비실행 설계 검토 계층입니다. 이 MVP는 LLM을 호출하지 않고, Codex/MCP/shell을 제어하지 않으며, 외부 자동화도 실행하지 않습니다. 입력된 task/decision/result/report 설명을 deterministic rule로 검사한 뒤 Supabase에 기록합니다.
+
+저장 테이블:
+
+- `architecture_reviews`
+- `knowledge_nodes`의 `node_type = architecture_review`
+- `knowledge_edges`의 `reviewed_architecture_of`, `references_memory` 등 보수적 관계
+
+검사 규칙:
+
+- Dashboard는 read-only PM overview로 유지해야 합니다.
+- 임의 shell, direct MCP execution, Codex control은 차단 위험으로 봅니다.
+- Historian/Knowledge MVP에서는 embeddings, vector search, graph database, bidirectional Obsidian sync를 범위 밖으로 봅니다.
+- service role key, Discord webhook URL, Obsidian vault path는 frontend에 노출되면 안 됩니다.
+- Dashboard / Operators / Timeline / Settings를 한 작업에서 과도하게 섞으면 분해를 권장합니다.
+- batch/report/runtime/backend/frontend 작업에는 `npm run build`, backend typecheck, backend build 검증을 요구합니다.
+
+API:
+
+- `POST /api/architect/review`  
+  local/admin/manual-test 용도입니다. 외부 명령을 실행하지 않고 Architecture Review만 기록합니다.
+- `GET /api/architect/reviews/recent`
+- `GET /api/architect/reviews/latest`
+
+Demo:
+
+```bash
+npm run architect:review-demo
+```
+
+데모 입력은 정적이며, Dashboard에 process control button을 추가하려는 요구를 검토해 read-only 경계 위험을 기록합니다.
+
 제한:
 
 - OpenAI API 없음

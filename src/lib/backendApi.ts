@@ -175,6 +175,32 @@ export type RelatedKnowledgeGroup = {
   related: KnowledgeEdge[];
 };
 
+export type ArchitectureReview = {
+  id: string;
+  target_type: string;
+  target_ref: string;
+  status: "pending" | "reviewed" | "warning" | "blocked";
+  summary: string | null;
+  findings: Array<{
+    rule?: string;
+    ruleId?: string;
+    severity?: "info" | "warning" | "blocked";
+    message?: string;
+    title?: string;
+    evidence?: string;
+    detail?: string;
+  }>;
+  recommendations: Array<{
+    rule?: string;
+    message?: string;
+    title?: string;
+    detail?: string;
+    priority?: "low" | "medium" | "high";
+  }>;
+  related_nodes: KnowledgeNode[];
+  created_at: string;
+};
+
 export async function getBackendHealth() {
   return request<HealthResponse>("/health");
 }
@@ -283,6 +309,16 @@ export async function getRelatedKnowledge(input: { external_ref?: string | null;
   if (input.external_ref) params.set("external_ref", input.external_ref);
   if (input.node_type) params.set("node_type", input.node_type);
   const response = await request<ApiEnvelope<RelatedKnowledgeGroup[]>>(`/api/knowledge/related?${params}`);
+  return response.data;
+}
+
+export async function getLatestArchitectureReview() {
+  const response = await request<ApiEnvelope<ArchitectureReview | null>>("/api/architect/reviews/latest");
+  return response.data;
+}
+
+export async function getRecentArchitectureReviews(limit = 10) {
+  const response = await request<ApiEnvelope<ArchitectureReview[]>>(`/api/architect/reviews/recent?limit=${limit}`);
   return response.data;
 }
 
