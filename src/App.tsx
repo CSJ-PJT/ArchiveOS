@@ -4,10 +4,13 @@ import {
   createCommandRun,
   getDashboardData,
   getBackendHealth,
+  getEndpointHealth,
   getHistorianStatus,
   getKnowledgeGraph,
   getKnowledgeOverview,
   getKpiOverview,
+  getPlatformHealth,
+  getPlatformReadiness,
   getRelatedKnowledge,
   getLatestBatchStatus,
   getLatestDailyReport,
@@ -38,7 +41,10 @@ import {
   type MeshAgent,
   type MeshLink,
   type MeshOverview,
+  type EndpointHealth,
   type RelatedKnowledgeGroup,
+  type PlatformHealth,
+  type PlatformReadiness,
   type RuntimeEvent,
 } from "./lib/backendApi";
 import type {
@@ -332,6 +338,10 @@ function OperationsLayout({
   const [kpiOverview, setKpiOverview] = useState<KpiOverview | null>(null);
   const [kpiRange, setKpiRange] = useState<KpiRange>("7d");
   const [kpiError, setKpiError] = useState<string | null>(null);
+  const [platformHealth, setPlatformHealth] = useState<PlatformHealth | null>(null);
+  const [endpointHealth, setEndpointHealth] = useState<EndpointHealth | null>(null);
+  const [platformReadiness, setPlatformReadiness] = useState<PlatformReadiness | null>(null);
+  const [platformHealthError, setPlatformHealthError] = useState<string | null>(null);
   const [focusMode, setFocusMode] = useState(false);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
 
@@ -345,6 +355,7 @@ function OperationsLayout({
     refreshArchitectureReviews();
     refreshMesh();
     refreshKpi({ range: kpiRange });
+    refreshPlatformHealth();
     const timer = window.setInterval(() => {
       refreshRuntime({ silent: true });
       refreshRuntimeEvents({ silent: true });
@@ -355,6 +366,7 @@ function OperationsLayout({
       refreshArchitectureReviews({ silent: true });
       refreshMesh({ silent: true });
       refreshKpi({ silent: true, range: kpiRange });
+      refreshPlatformHealth({ silent: true });
     }, 5000);
 
     return () => window.clearInterval(timer);
@@ -503,6 +515,25 @@ function OperationsLayout({
     }
   }
 
+  async function refreshPlatformHealth(options: { silent?: boolean } = {}) {
+    if (!options.silent) {
+      setPlatformHealthError(null);
+    }
+
+    try {
+      const [health, endpoints, readiness] = await Promise.all([
+        getPlatformHealth(),
+        getEndpointHealth(),
+        getPlatformReadiness(),
+      ]);
+      setPlatformHealth(health);
+      setEndpointHealth(endpoints);
+      setPlatformReadiness(readiness);
+    } catch (error) {
+      setPlatformHealthError(error instanceof Error ? error.message : "Platform health is not reachable.");
+    }
+  }
+
   const warningCount = getPipelineWarningMessages(runtimeStatus).length;
   const operatorActive = Boolean(runtimeStatus?.queue.processing || runtimeStatus?.processes.implementer || runtimeStatus?.processes.reviewer || runtimeStatus?.processes.reviewer_bridge);
 
@@ -539,6 +570,10 @@ function OperationsLayout({
           kpiOverview={kpiOverview}
           kpiError={kpiError}
           knowledgeOverview={knowledgeOverview}
+          platformHealth={platformHealth}
+          endpointHealth={endpointHealth}
+          platformReadiness={platformReadiness}
+          platformHealthError={platformHealthError}
         />
       ) : null}
 
@@ -701,6 +736,10 @@ function DashboardView({
   kpiOverview,
   kpiError,
   knowledgeOverview,
+  platformHealth,
+  endpointHealth,
+  platformReadiness,
+  platformHealthError,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
   runtimeError: string | null;
@@ -718,6 +757,10 @@ function DashboardView({
   kpiOverview: KpiOverview | null;
   kpiError: string | null;
   knowledgeOverview: KnowledgeOverview | null;
+  platformHealth: PlatformHealth | null;
+  endpointHealth: EndpointHealth | null;
+  platformReadiness: PlatformReadiness | null;
+  platformHealthError: string | null;
 }) {
   return (
     <div className="grid gap-5">
@@ -740,6 +783,20 @@ function DashboardView({
           <Panel title="Pipeline Warnings">
             <PipelineWarnings runtimeStatus={runtimeStatus} />
           </Panel>
+
+          <div className="grid gap-5 xl:grid-cols-2">
+            <Panel title="System Health">
+              <SystemHealthCard
+                platformHealth={platformHealth}
+                endpointHealth={endpointHealth}
+                error={platformHealthError}
+              />
+            </Panel>
+
+            <Panel title="ArchiveOS Readiness Score">
+              <ReadinessScoreCard readiness={platformReadiness} error={platformHealthError} />
+            </Panel>
+          </div>
 
           <Panel title="Daily Report Status">
             <DailyReportStatusCard
@@ -881,7 +938,13 @@ function DailyReportStatusCard({
   const dailyReason = readBatchReason(daily);
 
   if (error) {
-    return <EmptyState title="Batch status unavailable" detail={error} />;
+    return (
+      <EmptyState
+        title="No daily report data available yet"
+        detail="Daily Report endpoints are not returning usable data. Check System Health for endpoint-level status."
+        muted
+      />
+    );
   }
 
   return (
@@ -946,6 +1009,121 @@ function DailyReportStatusCard({
           extra={dailyReason ? `Skip/failure reason: ${dailyReason}` : undefined}
         />
       </div>
+    </div>
+  );
+}
+
+function SystemHealthCard({
+  platformHealth,
+  endpointHealth,
+  error,
+}: {
+  platformHealth: PlatformHealth | null;
+  endpointHealth: EndpointHealth | null;
+  error: string | null;
+}) {
+  if (error) {
+    return (
+      <EmptyState
+        title="System health check unavailable"
+        detail="The backend health center could not be reached. Confirm the backend is restarted with the latest build."
+      />
+    );
+  }
+
+  if (!endpointHealth) {
+    return <EmptyState title="System health loading" detail="Checking registered ArchiveOS endpoints." muted />;
+  }
+
+  const failedEndpoints = endpointHealth.endpoints.filter((endpoint) => endpoint.status === "failed");
+  const missingEndpoints = endpointHealth.endpoints.filter((endpoint) => endpoint.status === "missing");
+  const failedServices = platformHealth
+    ? Object.entries(platformHealth.services).filter(([, online]) => !online).map(([service]) => service)
+    : [];
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <RuntimeMetric label="Online endpoints" value={String(endpointHealth.summary.online)} />
+        <RuntimeMetric label="Failed endpoints" value={String(endpointHealth.summary.failed)} />
+        <RuntimeMetric label="Missing endpoints" value={String(endpointHealth.summary.missing)} />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge className={endpointHealth.summary.failed ? "bg-amber-500/15 text-amber-200 ring-amber-400/25" : "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25"}>
+          {endpointHealth.summary.failed ? "warning" : "healthy"}
+        </StatusBadge>
+        <span className="text-xs text-slate-500" title={formatExactDate(endpointHealth.checkedAt)}>
+          Last check {formatRelativeTime(endpointHealth.checkedAt)}
+        </span>
+      </div>
+      {failedServices.length ? (
+        <div className="rounded-md border border-amber-400/25 bg-amber-500/10 p-3 text-sm text-amber-100">
+          Failed services: {failedServices.join(", ")}
+        </div>
+      ) : null}
+      {failedEndpoints.length || missingEndpoints.length ? (
+        <div className="grid gap-2">
+          {[...failedEndpoints, ...missingEndpoints].slice(0, 5).map((endpoint) => (
+            <div key={`${endpoint.method}-${endpoint.path}`} className="flex items-center justify-between gap-3 rounded border border-white/10 bg-black/20 px-3 py-2 text-xs">
+              <span className="truncate text-slate-300" title={`${endpoint.method} ${endpoint.path}`}>
+                {endpoint.method} {endpoint.path}
+              </span>
+              <StatusBadge className="bg-rose-500/15 text-rose-200 ring-rose-400/25">{endpoint.status}</StatusBadge>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ReadinessScoreCard({
+  readiness,
+  error,
+}: {
+  readiness: PlatformReadiness | null;
+  error: string | null;
+}) {
+  if (error) {
+    return (
+      <EmptyState
+        title="Readiness score unavailable"
+        detail="ArchiveOS can still run, but the readiness endpoint needs the latest backend."
+        muted
+      />
+    );
+  }
+
+  if (!readiness) {
+    return <EmptyState title="Readiness score loading" detail="Calculating endpoint, dashboard, knowledge, mesh, and architect coverage." muted />;
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-4xl font-semibold text-white">{readiness.score}</p>
+          <p className="mt-1 text-sm text-slate-400">Portfolio readiness score</p>
+        </div>
+        <StatusBadge className={readiness.score >= 85 ? "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25" : readiness.score >= 70 ? "bg-amber-500/15 text-amber-200 ring-amber-400/25" : "bg-rose-500/15 text-rose-200 ring-rose-400/25"}>
+          {readiness.grade}
+        </StatusBadge>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-5">
+        {Object.entries(readiness.coverage).map(([label, value]) => (
+          <RuntimeMetric key={label} label={label} value={`${value}%`} />
+        ))}
+      </div>
+      {readiness.issues.length ? (
+        <div className="rounded-md border border-amber-400/25 bg-amber-500/10 p-3 text-sm text-amber-100">
+          {readiness.issues.slice(0, 2).join(" ")}
+        </div>
+      ) : (
+        <p className="text-sm text-emerald-200">No hard readiness blockers detected.</p>
+      )}
+      <p className="text-xs text-slate-500" title={formatExactDate(readiness.generatedAt)}>
+        Generated {formatRelativeTime(readiness.generatedAt)}
+      </p>
     </div>
   );
 }
@@ -1734,7 +1912,13 @@ function ArchitectureReviewList({ reviews }: { reviews: ArchitectureReview[] }) 
 
 function MeshSummaryCard({ meshOverview, error }: { meshOverview: MeshOverview | null; error: string | null }) {
   if (error) {
-    return <EmptyState title="Mesh summary unavailable" detail={error} />;
+    return (
+      <EmptyState
+        title="No mesh data available yet"
+        detail="Agent Mesh data will appear after the backend mesh endpoint is available and runtime/knowledge sources respond."
+        muted
+      />
+    );
   }
 
   if (!meshOverview) {
@@ -1765,7 +1949,13 @@ function MeshSummaryCard({ meshOverview, error }: { meshOverview: MeshOverview |
 
 function KpiSummaryCard({ kpiOverview, error }: { kpiOverview: KpiOverview | null; error: string | null }) {
   if (error) {
-    return <EmptyState title="KPI summary unavailable" detail={error} />;
+    return (
+      <EmptyState
+        title="Insufficient historical data"
+        detail="KPI metrics will appear after the backend KPI endpoint is available and operational history exists."
+        muted
+      />
+    );
   }
 
   if (!kpiOverview) {

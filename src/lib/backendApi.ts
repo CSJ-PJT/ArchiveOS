@@ -25,6 +25,54 @@ type HealthResponse = {
   service: "archiveos-backend";
 };
 
+export type PlatformHealth = {
+  status: "ok";
+  services: {
+    runtime: boolean;
+    knowledge: boolean;
+    mesh: boolean;
+    kpi: boolean;
+    architect: boolean;
+    dailyReport: boolean;
+  };
+};
+
+export type EndpointHealthStatus = "online" | "failed" | "missing";
+
+export type EndpointHealth = {
+  status: "ok" | "warning";
+  checkedAt: string;
+  endpoints: Array<{
+    method: "GET" | "POST";
+    path: string;
+    service: string;
+    description: string;
+    status: EndpointHealthStatus;
+    message: string;
+  }>;
+  summary: {
+    total: number;
+    online: number;
+    failed: number;
+    missing: number;
+  };
+};
+
+export type PlatformReadiness = {
+  score: number;
+  grade: string;
+  generatedAt: string;
+  coverage: {
+    endpoint: number;
+    dashboard: number;
+    knowledge: number;
+    mesh: number;
+    architect: number;
+  };
+  issues: string[];
+  notes: string[];
+};
+
 export type LocalAction =
   | "git_status"
   | "git_branch"
@@ -339,6 +387,19 @@ export type KpiOverview = {
 
 export async function getBackendHealth() {
   return request<HealthResponse>("/health");
+}
+
+export async function getPlatformHealth() {
+  return request<PlatformHealth>("/api/health");
+}
+
+export async function getEndpointHealth() {
+  return request<EndpointHealth>("/api/health/endpoints");
+}
+
+export async function getPlatformReadiness() {
+  const response = await request<ApiEnvelope<PlatformReadiness>>("/api/platform/readiness");
+  return response.data;
 }
 
 export async function getDashboardData() {
