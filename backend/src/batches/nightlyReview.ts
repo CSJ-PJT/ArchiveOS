@@ -1,7 +1,9 @@
 import { getLocalRuntimeStatus, type LocalRuntimeStatus } from "../lib/localRuntime.js";
 import { supabaseAdmin } from "../lib/supabaseAdmin.js";
 import { addDaysToDateString, getSeoulDateString } from "./businessDays.js";
-import { recordBatchRun, recordRuntimeSnapshot } from "./store.js";
+import { exportBatchReportToObsidian } from "../historian/index.js";
+import type { ExportResult } from "../historian/index.js";
+import { recordBatchRun, recordHistorianExport, recordRuntimeSnapshot, updateBatchRunMetadata } from "./store.js";
 import type { BatchResult, NightlyReviewSummary, OperationStatus, OperatorSummary } from "./types.js";
 
 type NightlyReviewOptions = {
@@ -38,6 +40,33 @@ export async function runNightlyReviewBatch(options: NightlyReviewOptions = {}):
       runtime_snapshot_error: error instanceof Error ? error.message : "Unknown runtime snapshot persistence error.",
     };
   }
+
+  const historianResult: ExportResult = await exportBatchReportToObsidian(persisted, summary).catch((error): ExportResult => ({
+    enabled: true,
+    success: false,
+    reason: error instanceof Error ? error.message : "Unknown Historian export error.",
+  }));
+  const historianMetadata = {
+    historian_exported: historianResult.success,
+    historian_note_path: historianResult.notePath ?? null,
+    historian_export_reason: historianResult.success ? null : historianResult.reason ?? "Historian export skipped.",
+  };
+  persisted.metadata = {
+    ...persisted.metadata,
+    ...historianMetadata,
+  };
+
+  if (persisted.id) {
+    await updateBatchRunMetadata(persisted.id, persisted.metadata).catch(() => undefined);
+  }
+
+  await recordHistorianExport({
+    note_type: "batch_report",
+    status: historianResult.success ? "success" : historianResult.enabled ? "failed" : "skipped",
+    note_path: historianResult.notePath ?? null,
+    reason: historianResult.success ? null : historianResult.reason ?? null,
+    source_id: persisted.id ?? null,
+  }).catch(() => undefined);
 
   return persisted;
 }

@@ -1,7 +1,15 @@
 import { addDaysToDateString, getSeoulDateString, isKoreanBusinessDay } from "./businessDays.js";
 import { sendDiscordMessage } from "./discord.js";
+import { exportDailyReportToObsidian } from "../historian/index.js";
+import type { ExportResult } from "../historian/index.js";
 import { buildNightlyReviewSummary } from "./nightlyReview.js";
-import { getLatestBatchRun, recordBatchRun, recordDailyReport } from "./store.js";
+import {
+  getLatestBatchRun,
+  recordBatchRun,
+  recordDailyReport,
+  recordHistorianExport,
+  updateDailyReportHistorianStatus,
+} from "./store.js";
 import type { BatchResult, DailyReportRecord, NightlyReviewSummary } from "./types.js";
 
 type DailyReportOptions = {
@@ -209,9 +217,29 @@ async function persistDailyAndBatch(
 
   try {
     const dailyReport = await recordDailyReport(report);
+    const historianResult: ExportResult = await exportDailyReportToObsidian(dailyReport).catch((error): ExportResult => ({
+      enabled: true,
+      success: false,
+      reason: error instanceof Error ? error.message : "Unknown Historian export error.",
+    }));
+    await updateDailyReportHistorianStatus(dailyReport.id, {
+      historian_exported: historianResult.success,
+      historian_note_path: historianResult.notePath ?? null,
+      historian_export_reason: historianResult.success ? null : historianResult.reason ?? "Historian export skipped.",
+    }).catch(() => undefined);
+    await recordHistorianExport({
+      note_type: "daily_report",
+      status: historianResult.success ? "success" : historianResult.enabled ? "failed" : "skipped",
+      note_path: historianResult.notePath ?? null,
+      reason: historianResult.success ? null : historianResult.reason ?? null,
+      source_id: dailyReport.id,
+    }).catch(() => undefined);
     persisted.metadata = {
       ...persisted.metadata,
       daily_report_id: dailyReport.id,
+      historian_exported: historianResult.success,
+      historian_note_path: historianResult.notePath ?? null,
+      historian_export_reason: historianResult.success ? null : historianResult.reason ?? null,
     };
   } catch (error) {
     persisted.metadata = {

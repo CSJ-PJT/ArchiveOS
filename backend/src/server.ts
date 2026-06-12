@@ -8,11 +8,13 @@ import { runNightlyReviewBatch } from "./batches/nightlyReview.js";
 import {
   getLatestBatchRuns,
   getLatestDailyReport,
+  getLatestHistorianExport,
   getRecentBatchRuns,
   getRecentDailyReports,
   getRecentRuntimeSnapshots,
 } from "./batches/store.js";
 import { findProject, projects } from "./config/projects.js";
+import { isHistorianConfigured } from "./historian/index.js";
 import { getLocalRuntimeStatus } from "./lib/localRuntime.js";
 import { supabaseAdmin } from "./lib/supabaseAdmin.js";
 
@@ -307,6 +309,30 @@ app.get("/api/runtime/snapshots/recent", async (_request, response) => {
     response.json({ data: await getRecentRuntimeSnapshots() });
   } catch {
     response.status(500).json({ error: "Failed to fetch recent runtime snapshots." });
+  }
+});
+
+app.get("/api/historian/status", async (_request, response) => {
+  try {
+    const configured = isHistorianConfigured();
+    const lastExport = await getLatestHistorianExport().catch(() => null);
+    response.json({
+      data: {
+        configured,
+        enabled: configured,
+        lastExport: lastExport
+          ? {
+              type: lastExport.note_type,
+              status: lastExport.status,
+              notePath: lastExport.note_path,
+              createdAt: lastExport.created_at,
+              reason: lastExport.reason,
+            }
+          : null,
+      },
+    });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch Historian status." });
   }
 });
 
