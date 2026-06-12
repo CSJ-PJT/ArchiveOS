@@ -28,6 +28,7 @@ import {
   searchKnowledge,
 } from "./historian/index.js";
 import { getLocalRuntimeStatus } from "./lib/localRuntime.js";
+import { getKpiOverview, normalizeRange } from "./kpi/index.js";
 import { getAgentMeshOverview } from "./mesh/index.js";
 import { supabaseAdmin } from "./lib/supabaseAdmin.js";
 
@@ -433,6 +434,14 @@ app.get("/api/mesh/overview", async (_request, response) => {
     response.json({ data: await getAgentMeshOverview() });
   } catch {
     response.status(500).json({ error: "Failed to fetch agent mesh overview." });
+  }
+});
+
+app.get("/api/kpi/overview", async (request, response) => {
+  try {
+    response.json({ data: await getKpiOverview(normalizeRange(request.query.range)) });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch KPI overview." });
   }
 });
 

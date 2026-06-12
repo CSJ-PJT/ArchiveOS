@@ -438,3 +438,44 @@ GET /api/mesh/overview
 ```
 
 Mesh View의 목적은 PM이 "누가 어떤 역할을 하고 있고, 어떤 기억/검토/결과가 연결되어 있는지"를 빠르게 보는 것입니다. 향후 실제 multi-agent coordination이나 agent message bus를 붙일 수 있지만, 현재 MVP는 metadata-only visibility layer입니다.
+
+## KPI Dashboard MVP
+
+KPI Dashboard는 ArchiveOS 운영 상태를 정량화하는 read-only analytics 화면입니다. OpenAI API, MCP 실행, Codex 직접 제어, shell 실행, process start/stop 기능을 추가하지 않습니다.
+
+지원 범위:
+
+- `today`
+- `7d`
+- `30d`
+
+데이터 출처:
+
+- `daily_reports`
+- `batch_runs`
+- `runtime_snapshots`
+- `command_runs`
+- `work_logs`
+- `architecture_reviews`
+- `knowledge_nodes`
+- `knowledge_edges`
+- `historian_exports`
+- current runtime status
+
+주요 지표:
+
+- Productivity: completed tasks, completed reviews, recorded decisions, recorded commands, sent daily reports, completed nightly reviews
+- Quality: approval rate, approve/reject/stop count, Architect warning/blocked count
+- Runtime: latest queue state, warning count, loop detected rate
+- Knowledge: total nodes/edges, nodes/edges created in range, Obsidian exports, graph density
+- Trends: daily reports, decisions, knowledge nodes, warnings
+
+데이터가 부족하거나 해당 source가 없으면 값을 조작하지 않고 `insufficient data` 또는 `null` 성격의 note로 표시합니다. KPI는 현재 규칙 기반 집계이며 LLM 분석이나 예측 모델은 포함하지 않습니다.
+
+API:
+
+```bash
+GET /api/kpi/overview?range=today
+GET /api/kpi/overview?range=7d
+GET /api/kpi/overview?range=30d
+```

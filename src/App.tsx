@@ -6,6 +6,7 @@ import {
   getBackendHealth,
   getHistorianStatus,
   getKnowledgeOverview,
+  getKpiOverview,
   getRelatedKnowledge,
   getLatestBatchStatus,
   getLatestDailyReport,
@@ -28,6 +29,8 @@ import {
   type ArchitectureReview,
   type KnowledgeNode,
   type KnowledgeOverview,
+  type KpiOverview,
+  type KpiRange,
   type MeshAgent,
   type MeshLink,
   type MeshOverview,
@@ -53,7 +56,7 @@ type DashboardData = {
   decisions: WorkLog[];
 };
 
-type AppView = "dashboard" | "decisions" | "operators" | "timeline" | "github" | "knowledge" | "mesh" | "settings";
+type AppView = "dashboard" | "decisions" | "operators" | "timeline" | "github" | "knowledge" | "mesh" | "kpi" | "settings";
 
 type PipelineStage = {
   id: string;
@@ -322,6 +325,9 @@ function OperationsLayout({
   const [architectureReviewError, setArchitectureReviewError] = useState<string | null>(null);
   const [meshOverview, setMeshOverview] = useState<MeshOverview | null>(null);
   const [meshError, setMeshError] = useState<string | null>(null);
+  const [kpiOverview, setKpiOverview] = useState<KpiOverview | null>(null);
+  const [kpiRange, setKpiRange] = useState<KpiRange>("7d");
+  const [kpiError, setKpiError] = useState<string | null>(null);
   const [focusMode, setFocusMode] = useState(false);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
 
@@ -334,6 +340,7 @@ function OperationsLayout({
     refreshKnowledge();
     refreshArchitectureReviews();
     refreshMesh();
+    refreshKpi({ range: kpiRange });
     const timer = window.setInterval(() => {
       refreshRuntime({ silent: true });
       refreshRuntimeEvents({ silent: true });
@@ -343,10 +350,11 @@ function OperationsLayout({
       refreshKnowledge({ silent: true });
       refreshArchitectureReviews({ silent: true });
       refreshMesh({ silent: true });
+      refreshKpi({ silent: true, range: kpiRange });
     }, 5000);
 
     return () => window.clearInterval(timer);
-  }, []);
+  }, [kpiRange]);
 
   async function refreshRuntime(options: { silent?: boolean } = {}) {
     if (!options.silent) {
@@ -479,6 +487,18 @@ function OperationsLayout({
     }
   }
 
+  async function refreshKpi(options: { silent?: boolean; range?: KpiRange } = {}) {
+    if (!options.silent) {
+      setKpiError(null);
+    }
+
+    try {
+      setKpiOverview(await getKpiOverview(options.range ?? kpiRange));
+    } catch (error) {
+      setKpiError(error instanceof Error ? error.message : "KPI overview is not reachable.");
+    }
+  }
+
   const warningCount = getPipelineWarningMessages(runtimeStatus).length;
   const operatorActive = Boolean(runtimeStatus?.queue.processing || runtimeStatus?.processes.implementer || runtimeStatus?.processes.reviewer || runtimeStatus?.processes.reviewer_bridge);
 
@@ -512,6 +532,8 @@ function OperationsLayout({
           latestArchitectureReview={latestArchitectureReview}
           meshOverview={meshOverview}
           meshError={meshError}
+          kpiOverview={kpiOverview}
+          kpiError={kpiError}
         />
       ) : null}
 
@@ -570,6 +592,15 @@ function OperationsLayout({
         />
       ) : null}
 
+      {view === "kpi" ? (
+        <KpiView
+          kpiOverview={kpiOverview}
+          range={kpiRange}
+          error={kpiError}
+          onRangeChange={setKpiRange}
+        />
+      ) : null}
+
       {view === "settings" ? (
         <SettingsView
           backendReachability={backendReachability}
@@ -607,6 +638,7 @@ function OperationsNav({
     { id: "github", label: "GitHub" },
     { id: "knowledge", label: "Knowledge" },
     { id: "mesh", label: "Mesh" },
+    { id: "kpi", label: "KPI" },
     { id: "settings", label: "Settings" },
   ];
 
@@ -661,6 +693,8 @@ function DashboardView({
   latestArchitectureReview,
   meshOverview,
   meshError,
+  kpiOverview,
+  kpiError,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
   runtimeError: string | null;
@@ -675,6 +709,8 @@ function DashboardView({
   latestArchitectureReview: ArchitectureReview | null;
   meshOverview: MeshOverview | null;
   meshError: string | null;
+  kpiOverview: KpiOverview | null;
+  kpiError: string | null;
 }) {
   return (
     <div className="grid gap-5">
@@ -708,6 +744,10 @@ function DashboardView({
 
           <Panel title="Agent Mesh Summary">
             <MeshSummaryCard meshOverview={meshOverview} error={meshError} />
+          </Panel>
+
+          <Panel title="KPI Summary">
+            <KpiSummaryCard kpiOverview={kpiOverview} error={kpiError} />
           </Panel>
 
           <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
@@ -1488,6 +1528,193 @@ function MeshSummaryCard({ meshOverview, error }: { meshOverview: MeshOverview |
         label="Architect / Historian"
         value={`${findMeshAgent(meshOverview, "architect")?.status ?? "unknown"} / ${findMeshAgent(meshOverview, "historian")?.status ?? "unknown"}`}
       />
+    </div>
+  );
+}
+
+function KpiSummaryCard({ kpiOverview, error }: { kpiOverview: KpiOverview | null; error: string | null }) {
+  if (error) {
+    return <EmptyState title="KPI summary unavailable" detail={error} />;
+  }
+
+  if (!kpiOverview) {
+    return <EmptyState title="KPI summary loading" detail="Computing read-only operational metrics." muted />;
+  }
+
+  return (
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <RuntimeMetric label="7d approval rate" value={formatKpiPercent(kpiOverview.quality.approvalRate)} />
+      <RuntimeMetric label="Knowledge nodes" value={formatKpiValue(kpiOverview.knowledge.nodesCreatedInRange)} />
+      <RuntimeMetric label="Warnings" value={formatKpiValue(kpiOverview.runtime.warningCount)} />
+      <RuntimeMetric label="Runtime status" value={kpiOverview.runtime.latestStatus} />
+    </div>
+  );
+}
+
+function KpiView({
+  kpiOverview,
+  range,
+  error,
+  onRangeChange,
+}: {
+  kpiOverview: KpiOverview | null;
+  range: KpiRange;
+  error: string | null;
+  onRangeChange: (range: KpiRange) => void;
+}) {
+  if (error) {
+    return (
+      <Panel title="KPI Dashboard">
+        <EmptyState title="KPI unavailable" detail={error} />
+      </Panel>
+    );
+  }
+
+  if (!kpiOverview) {
+    return (
+      <Panel title="KPI Dashboard">
+        <EmptyState title="Loading KPI" detail="Computing read-only analytics from existing ArchiveOS records." muted />
+      </Panel>
+    );
+  }
+
+  return (
+    <div className="grid gap-5">
+      <Panel title="KPI Header">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <SourceLabel label="read-only analytics from Supabase history + current runtime status" />
+            <p className="mt-3 text-sm text-slate-400">
+              Generated {formatRelativeTime(kpiOverview.generatedAt)} / {formatExactDate(kpiOverview.generatedAt)}
+            </p>
+          </div>
+          <div className="inline-flex rounded-md border border-white/10 bg-black/20 p-1">
+            {(["today", "7d", "30d"] as KpiRange[]).map((item) => (
+              <button
+                key={item}
+                className={`rounded px-3 py-2 text-sm font-medium transition ${
+                  range === item ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:bg-white/10"
+                }`}
+                onClick={() => onRangeChange(item)}
+                type="button"
+              >
+                {item === "today" ? "Today" : item === "7d" ? "7 days" : "30 days"}
+              </button>
+            ))}
+          </div>
+        </div>
+        {kpiOverview.notes.length ? (
+          <div className="mt-4 rounded-md border border-amber-400/30 bg-amber-500/10 p-3">
+            <p className="text-sm font-semibold text-amber-100">Data quality notes</p>
+            <ul className="mt-2 grid gap-1 text-sm leading-6 text-amber-100/85">
+              {kpiOverview.notes.map((note) => <li key={note}>- {note}</li>)}
+            </ul>
+          </div>
+        ) : null}
+      </Panel>
+
+      <KpiMetricSection
+        title="Productivity"
+        metrics={[
+          ["Tasks completed", kpiOverview.productivity.tasksCompleted],
+          ["Reviews completed", kpiOverview.productivity.reviewsCompleted],
+          ["Decisions recorded", kpiOverview.productivity.decisionsRecorded],
+          ["Commands recorded", kpiOverview.productivity.commandsRecorded],
+          ["Daily reports sent", kpiOverview.productivity.dailyReportsSent],
+          ["Nightly reviews completed", kpiOverview.productivity.nightlyReviewsCompleted],
+        ]}
+      />
+
+      <KpiMetricSection
+        title="Quality"
+        metrics={[
+          ["Approval rate", formatKpiPercent(kpiOverview.quality.approvalRate)],
+          ["Approve count", kpiOverview.quality.reviewApproveCount],
+          ["Reject count", kpiOverview.quality.reviewRejectCount],
+          ["Stop count", kpiOverview.quality.reviewStopCount],
+          ["Architect warnings", kpiOverview.quality.architectWarningCount],
+          ["Architect blocked", kpiOverview.quality.architectBlockedCount],
+        ]}
+      />
+
+      <KpiMetricSection
+        title="Runtime Health"
+        metrics={[
+          ["Latest queue", `${formatKpiValue(kpiOverview.runtime.latestInbox)} / ${formatKpiValue(kpiOverview.runtime.latestProcessing)} / ${formatKpiValue(kpiOverview.runtime.latestOutbox)} / ${formatKpiValue(kpiOverview.runtime.latestReviews)}`],
+          ["Latest status", kpiOverview.runtime.latestStatus],
+          ["Warning count", kpiOverview.runtime.warningCount],
+          ["Loop detected rate", formatKpiPercent(kpiOverview.runtime.loopDetectedRate)],
+          ["Current processing", kpiOverview.runtime.latestProcessing],
+        ]}
+      />
+
+      <KpiMetricSection
+        title="Knowledge Growth"
+        metrics={[
+          ["Total nodes", kpiOverview.knowledge.totalNodes],
+          ["Total edges", kpiOverview.knowledge.totalEdges],
+          ["Nodes in range", kpiOverview.knowledge.nodesCreatedInRange],
+          ["Edges in range", kpiOverview.knowledge.edgesCreatedInRange],
+          ["Obsidian exports", kpiOverview.knowledge.obsidianExports],
+          ["Graph density", kpiOverview.knowledge.graphDensity],
+        ]}
+      />
+
+      <Panel title="Trends">
+        <div className="grid gap-4 xl:grid-cols-2">
+          <TrendMiniBars title="Daily reports" points={kpiOverview.trends.dailyReports} />
+          <TrendMiniBars title="Decisions" points={kpiOverview.trends.decisions} />
+          <TrendMiniBars title="Knowledge nodes" points={kpiOverview.trends.knowledgeNodes} />
+          <TrendMiniBars title="Warnings" points={kpiOverview.trends.warnings} />
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function KpiMetricSection({
+  title,
+  metrics,
+}: {
+  title: string;
+  metrics: Array<[string, string | number | null]>;
+}) {
+  return (
+    <Panel title={title}>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        {metrics.map(([label, value]) => (
+          <RuntimeMetric key={label} label={label} value={formatKpiMetric(value)} />
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function TrendMiniBars({ title, points }: { title: string; points: KpiOverview["trends"]["dailyReports"] }) {
+  const max = Math.max(1, ...points.map((point) => point.count));
+
+  return (
+    <div className="rounded-md border border-white/10 bg-black/20 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-white">{title}</p>
+        <span className="text-xs text-slate-500">{points.length ? `${points.length} days` : "insufficient data"}</span>
+      </div>
+      <div className="mt-4 grid gap-2">
+        {points.length ? points.map((point) => (
+          <div key={`${title}-${point.date}`} className="grid grid-cols-[5.5rem_1fr_2rem] items-center gap-2 text-xs">
+            <span className="text-slate-500">{point.date}</span>
+            <div className="h-2 rounded-full bg-white/[0.06]">
+              <div
+                className="h-2 rounded-full bg-cyan-300"
+                style={{ width: `${Math.max(6, (point.count / max) * 100)}%` }}
+              />
+            </div>
+            <span className="text-right text-slate-300">{point.count}</span>
+          </div>
+        )) : (
+          <p className="text-sm text-slate-500">No trend data in this range.</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -3545,6 +3772,19 @@ function getMeshStatusStyle(status: MeshAgent["status"]) {
 
 function findMeshAgent(meshOverview: MeshOverview, id: string) {
   return meshOverview.agents.find((agent) => agent.id === id) ?? null;
+}
+
+function formatKpiValue(value: number | null) {
+  return value === null ? "insufficient data" : String(value);
+}
+
+function formatKpiPercent(value: number | null) {
+  return value === null ? "insufficient data" : `${value}%`;
+}
+
+function formatKpiMetric(value: string | number | null) {
+  if (typeof value === "string") return value;
+  return formatKpiValue(value);
 }
 
 function getOperationStatusLabel(status: DailyReport["status"]) {
