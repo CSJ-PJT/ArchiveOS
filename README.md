@@ -418,3 +418,23 @@ npm run architect:review-demo
 ```
 
 이 데모는 `Add process control buttons to Dashboard`라는 안전한 정적 입력을 기록하고, Dashboard read-only 원칙 위반을 warning/blocked 성격의 Architecture Review로 남깁니다.
+
+## Agent Mesh View MVP
+
+Agent Mesh View는 ArchiveOS 역할들이 서로 어떤 관계로 운영되는지 보여주는 read-only 가시화 화면입니다. 이것은 Agent 간 자율 대화, MCP 실행, Codex 직접 제어, 프로세스 start/stop 기능이 아닙니다.
+
+Mesh 탭은 다음 정보를 backend에서 파생해 표시합니다.
+
+- Implementer, Reviewer, Architect, Historian, MCP Loop, Reviewer Bridge 상태
+- Human PM을 중심으로 한 역할 관계
+- builder result -> reviewer result, daily report -> Obsidian note, architecture review -> related memory 같은 Knowledge Graph 기반 관계
+- 최근 interaction과 link source
+- Mesh health, active agents, warning count
+
+API:
+
+```bash
+GET /api/mesh/overview
+```
+
+Mesh View의 목적은 PM이 "누가 어떤 역할을 하고 있고, 어떤 기억/검토/결과가 연결되어 있는지"를 빠르게 보는 것입니다. 향후 실제 multi-agent coordination이나 agent message bus를 붙일 수 있지만, 현재 MVP는 metadata-only visibility layer입니다.

@@ -28,6 +28,7 @@ import {
   searchKnowledge,
 } from "./historian/index.js";
 import { getLocalRuntimeStatus } from "./lib/localRuntime.js";
+import { getAgentMeshOverview } from "./mesh/index.js";
 import { supabaseAdmin } from "./lib/supabaseAdmin.js";
 
 const app = express();
@@ -424,6 +425,14 @@ app.get("/api/architect/reviews/latest", async (_request, response) => {
     response.json({ data: await getLatestArchitectureReview() });
   } catch {
     response.status(500).json({ error: "Failed to fetch latest architecture review." });
+  }
+});
+
+app.get("/api/mesh/overview", async (_request, response) => {
+  try {
+    response.json({ data: await getAgentMeshOverview() });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch agent mesh overview." });
   }
 });
 

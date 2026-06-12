@@ -7,6 +7,7 @@ export {
   createKnowledgeEdge,
   getKnowledgeNode,
   getKnowledgeOverview,
+  getRecentKnowledgeEdges,
   getRecentKnowledgeNodes,
   getRelatedKnowledge,
   linkBuilderReviewerResult,

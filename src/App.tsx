@@ -12,6 +12,7 @@ import {
   getLatestArchitectureReview,
   getLocalActionProjects,
   getLocalRuntimeStatus,
+  getMeshOverview,
   getRecentArchitectureReviews,
   getRecentCommands,
   getRecentKnowledgeNodes,
@@ -27,6 +28,9 @@ import {
   type ArchitectureReview,
   type KnowledgeNode,
   type KnowledgeOverview,
+  type MeshAgent,
+  type MeshLink,
+  type MeshOverview,
   type RelatedKnowledgeGroup,
   type RuntimeEvent,
 } from "./lib/backendApi";
@@ -49,7 +53,7 @@ type DashboardData = {
   decisions: WorkLog[];
 };
 
-type AppView = "dashboard" | "decisions" | "operators" | "timeline" | "knowledge" | "github" | "settings";
+type AppView = "dashboard" | "decisions" | "operators" | "timeline" | "github" | "knowledge" | "mesh" | "settings";
 
 type PipelineStage = {
   id: string;
@@ -316,6 +320,8 @@ function OperationsLayout({
   const [latestArchitectureReview, setLatestArchitectureReview] = useState<ArchitectureReview | null>(null);
   const [recentArchitectureReviews, setRecentArchitectureReviews] = useState<ArchitectureReview[]>([]);
   const [architectureReviewError, setArchitectureReviewError] = useState<string | null>(null);
+  const [meshOverview, setMeshOverview] = useState<MeshOverview | null>(null);
+  const [meshError, setMeshError] = useState<string | null>(null);
   const [focusMode, setFocusMode] = useState(false);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
 
@@ -327,6 +333,7 @@ function OperationsLayout({
     refreshHistorianStatus();
     refreshKnowledge();
     refreshArchitectureReviews();
+    refreshMesh();
     const timer = window.setInterval(() => {
       refreshRuntime({ silent: true });
       refreshRuntimeEvents({ silent: true });
@@ -335,6 +342,7 @@ function OperationsLayout({
       refreshHistorianStatus({ silent: true });
       refreshKnowledge({ silent: true });
       refreshArchitectureReviews({ silent: true });
+      refreshMesh({ silent: true });
     }, 5000);
 
     return () => window.clearInterval(timer);
@@ -459,6 +467,18 @@ function OperationsLayout({
     }
   }
 
+  async function refreshMesh(options: { silent?: boolean } = {}) {
+    if (!options.silent) {
+      setMeshError(null);
+    }
+
+    try {
+      setMeshOverview(await getMeshOverview());
+    } catch (error) {
+      setMeshError(error instanceof Error ? error.message : "Agent mesh overview is not reachable.");
+    }
+  }
+
   const warningCount = getPipelineWarningMessages(runtimeStatus).length;
   const operatorActive = Boolean(runtimeStatus?.queue.processing || runtimeStatus?.processes.implementer || runtimeStatus?.processes.reviewer || runtimeStatus?.processes.reviewer_bridge);
 
@@ -490,6 +510,8 @@ function OperationsLayout({
           latestDailyReport={latestDailyReport}
           batchStatusError={batchStatusError}
           latestArchitectureReview={latestArchitectureReview}
+          meshOverview={meshOverview}
+          meshError={meshError}
         />
       ) : null}
 
@@ -513,6 +535,7 @@ function OperationsLayout({
           consistencyError={consistencyError}
           latestArchitectureReview={latestArchitectureReview}
           architectureReviewError={architectureReviewError}
+          onOpenMesh={() => setView("mesh")}
           onRecorded={refreshRuntimeEvents}
         />
       ) : null}
@@ -526,6 +549,8 @@ function OperationsLayout({
         />
       ) : null}
 
+      {view === "github" ? <GitHubView runtimeStatus={runtimeStatus} /> : null}
+
       {view === "knowledge" ? (
         <KnowledgeView
           historianStatus={historianStatus}
@@ -537,7 +562,13 @@ function OperationsLayout({
         />
       ) : null}
 
-      {view === "github" ? <GitHubView runtimeStatus={runtimeStatus} /> : null}
+      {view === "mesh" ? (
+        <MeshView
+          meshOverview={meshOverview}
+          error={meshError}
+          knowledgeOverview={knowledgeOverview}
+        />
+      ) : null}
 
       {view === "settings" ? (
         <SettingsView
@@ -573,8 +604,9 @@ function OperationsNav({
     { id: "decisions", label: "Decisions" },
     { id: "operators", label: "Operators" },
     { id: "timeline", label: "Timeline" },
-    { id: "knowledge", label: "Knowledge" },
     { id: "github", label: "GitHub" },
+    { id: "knowledge", label: "Knowledge" },
+    { id: "mesh", label: "Mesh" },
     { id: "settings", label: "Settings" },
   ];
 
@@ -627,6 +659,8 @@ function DashboardView({
   latestDailyReport,
   batchStatusError,
   latestArchitectureReview,
+  meshOverview,
+  meshError,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
   runtimeError: string | null;
@@ -639,6 +673,8 @@ function DashboardView({
   latestDailyReport: DailyReport | null;
   batchStatusError: string | null;
   latestArchitectureReview: ArchitectureReview | null;
+  meshOverview: MeshOverview | null;
+  meshError: string | null;
 }) {
   return (
     <div className="grid gap-5">
@@ -668,6 +704,10 @@ function DashboardView({
               latestDailyReport={latestDailyReport}
               error={batchStatusError}
             />
+          </Panel>
+
+          <Panel title="Agent Mesh Summary">
+            <MeshSummaryCard meshOverview={meshOverview} error={meshError} />
           </Panel>
 
           <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
@@ -904,6 +944,7 @@ function OperatorsView({
   consistencyError,
   latestArchitectureReview,
   architectureReviewError,
+  onOpenMesh,
   onRecorded,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
@@ -915,12 +956,22 @@ function OperatorsView({
   consistencyError: string | null;
   latestArchitectureReview: ArchitectureReview | null;
   architectureReviewError: string | null;
+  onOpenMesh: () => void;
   onRecorded: (options?: { silent?: boolean }) => void;
 }) {
   return (
     <div className="grid gap-5">
       <Panel title="Operators">
-        <SourceLabel label="live MCP + backend-derived process detection" />
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <SourceLabel label="live MCP + backend-derived process detection" />
+          <button
+            className="rounded border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-300/15"
+            onClick={onOpenMesh}
+            type="button"
+          >
+            Open Mesh View
+          </button>
+        </div>
         {runtimeError ? (
           <EmptyState title="Operator runtime unavailable" detail={runtimeError} />
         ) : runtimeStatus ? (
@@ -1404,6 +1455,226 @@ function ArchitectureReviewList({ reviews }: { reviews: ArchitectureReview[] }) 
           <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-300" title={review.summary ?? ""}>
             {review.summary ?? "No summary."}
           </p>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function MeshSummaryCard({ meshOverview, error }: { meshOverview: MeshOverview | null; error: string | null }) {
+  if (error) {
+    return <EmptyState title="Mesh summary unavailable" detail={error} />;
+  }
+
+  if (!meshOverview) {
+    return <EmptyState title="Mesh summary loading" detail="Reading derived agent relationships from the backend." muted />;
+  }
+
+  const activeAgents = meshOverview.agents.filter((agent) =>
+    ["working", "detected", "enabled", "clear"].includes(agent.status),
+  ).length;
+  const warningCount = meshOverview.agents.filter((agent) =>
+    ["warning", "blocked", "no_review"].includes(agent.status),
+  ).length;
+  const latestInteraction = meshOverview.recentInteractions[0]?.time ?? null;
+
+  return (
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <RuntimeMetric label="Mesh health" value={meshOverview.health.status} />
+      <RuntimeMetric label="Agents active" value={String(activeAgents)} />
+      <RuntimeMetric label="Warnings" value={String(warningCount)} />
+      <RuntimeMetric label="Latest interaction" value={latestInteraction ? formatRelativeTime(latestInteraction) : "none"} />
+      <RuntimeMetric
+        label="Architect / Historian"
+        value={`${findMeshAgent(meshOverview, "architect")?.status ?? "unknown"} / ${findMeshAgent(meshOverview, "historian")?.status ?? "unknown"}`}
+      />
+    </div>
+  );
+}
+
+function MeshView({
+  meshOverview,
+  error,
+  knowledgeOverview,
+}: {
+  meshOverview: MeshOverview | null;
+  error: string | null;
+  knowledgeOverview: KnowledgeOverview | null;
+}) {
+  if (error) {
+    return (
+      <Panel title="Agent Mesh">
+        <EmptyState title="Agent mesh unavailable" detail={error} />
+      </Panel>
+    );
+  }
+
+  if (!meshOverview) {
+    return (
+      <Panel title="Agent Mesh">
+        <EmptyState title="Loading mesh" detail="Reading runtime, Architect, Historian, and Knowledge Graph state." muted />
+      </Panel>
+    );
+  }
+
+  const activeAgents = meshOverview.agents.filter((agent) =>
+    ["working", "detected", "enabled", "clear"].includes(agent.status),
+  ).length;
+  const warningCount = meshOverview.agents.filter((agent) =>
+    ["warning", "blocked", "no_review"].includes(agent.status),
+  ).length;
+  const latestInteraction = meshOverview.recentInteractions[0]?.time ?? null;
+
+  return (
+    <div className="grid gap-5">
+      <Panel title="Mesh Health">
+        <SourceLabel label="read-only derived view from runtime, Architect, Historian, and Knowledge Graph" />
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <RuntimeMetric label="Overall status" value={meshOverview.health.status} />
+          <RuntimeMetric label="Active agents" value={String(activeAgents)} />
+          <RuntimeMetric label="Warnings" value={String(warningCount)} />
+          <RuntimeMetric label="Latest interaction" value={latestInteraction ? formatRelativeTime(latestInteraction) : "none"} />
+        </div>
+        <p className="mt-4 rounded-md border border-white/10 bg-black/20 p-3 text-sm leading-6 text-slate-300">
+          {meshOverview.health.summary}
+        </p>
+      </Panel>
+
+      <Panel title="Agent Mesh Map">
+        <AgentMeshMap agents={meshOverview.agents} links={meshOverview.links} />
+      </Panel>
+
+      <Panel title="Relationship List">
+        <MeshRelationshipList links={meshOverview.links} />
+      </Panel>
+
+      <Panel title="Recent Interactions">
+        <MeshInteractionList interactions={meshOverview.recentInteractions} />
+      </Panel>
+
+      <Panel title="Related Knowledge">
+        <p className="mb-4 text-sm leading-6 text-slate-400">
+          Latest Knowledge Graph edges involving builder, reviewer, Architect, Historian, reports, and Obsidian notes.
+        </p>
+        <KnowledgeEdgeTable edges={knowledgeOverview?.latestEdges ?? []} />
+      </Panel>
+    </div>
+  );
+}
+
+function AgentMeshMap({ agents, links }: { agents: MeshAgent[]; links: MeshLink[] }) {
+  const pmAgent: MeshAgent = {
+    id: "human_pm",
+    label: "Human PM",
+    role: "Approval, direction, and priority judgement",
+    status: "detected",
+    source: "static",
+    summary: "Human operator remains the control point. Mesh is visibility-only.",
+    metadata: {},
+  };
+  const byId = new Map([...agents, pmAgent].map((agent) => [agent.id, agent]));
+  const slots = [
+    ["", "architect", ""],
+    ["historian", "human_pm", "reviewer"],
+    ["", "implementer", ""],
+    ["", "loop", ""],
+    ["", "bridge", ""],
+  ];
+
+  return (
+    <div className="grid gap-5">
+      <div className="grid gap-3 md:grid-cols-3">
+        {slots.flat().map((id, index) => (
+          id ? (
+            <MeshNode key={id} agent={byId.get(id) ?? pmAgent} active={links.some((link) => link.recent && (link.from === id || link.to === id))} />
+          ) : (
+            <div key={`empty-${index}`} className="hidden md:block" />
+          )
+        ))}
+      </div>
+      <div className="rounded-md border border-white/10 bg-black/20 p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Active / recent links</p>
+        <div className="mt-3 grid gap-2">
+          {links.filter((link) => link.recent).slice(0, 6).map((link) => (
+            <div key={`${link.from}-${link.to}-${link.type}`} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-cyan-200">{byId.get(link.from)?.label ?? link.from}</span>
+              <span className="h-px min-w-10 flex-1 bg-gradient-to-r from-cyan-300/70 to-emerald-300/40" />
+              <StatusBadge className="bg-cyan-500/15 text-cyan-200 ring-cyan-400/25">{link.type}</StatusBadge>
+              <span className="text-emerald-200">{byId.get(link.to)?.label ?? link.to}</span>
+            </div>
+          ))}
+          {!links.some((link) => link.recent) ? (
+            <p className="text-sm text-slate-500">No recent mesh link activity.</p>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MeshNode({ agent, active }: { agent: MeshAgent; active: boolean }) {
+  return (
+    <article className={`min-h-40 rounded-md border p-4 ${active ? "border-cyan-300/35 bg-cyan-300/[0.05]" : "border-white/10 bg-black/20"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{agent.source}</p>
+          <h3 className="mt-2 truncate text-base font-semibold text-white" title={agent.label}>{agent.label}</h3>
+        </div>
+        <span
+          className={`mt-1 h-3 w-3 rounded-full ${active ? "animate-pulse bg-cyan-300 shadow-[0_0_14px_rgba(103,232,249,0.75)]" : "bg-slate-600"}`}
+          title={active ? `${agent.label} has recent mesh activity` : `${agent.label} has no recent mesh activity`}
+        />
+      </div>
+      <StatusBadge className={`${getMeshStatusStyle(agent.status)} mt-3`}>{agent.status}</StatusBadge>
+      <p className="mt-3 text-sm leading-6 text-slate-300">{agent.role}</p>
+      <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500" title={agent.summary}>{agent.summary}</p>
+    </article>
+  );
+}
+
+function MeshRelationshipList({ links }: { links: MeshLink[] }) {
+  if (!links.length) {
+    return <EmptyState title="No mesh relationships" detail="No runtime or Knowledge Graph relationship was derived yet." muted />;
+  }
+
+  return (
+    <div className="grid gap-2">
+      {links.map((link) => (
+        <article key={`${link.from}-${link.to}-${link.type}-${link.source}`} className="rounded-md border border-white/10 bg-black/20 p-3">
+          <div className="grid gap-2 md:grid-cols-[1fr_auto_1fr_auto_auto] md:items-center">
+            <CompactValue value={link.from} className="text-sm font-medium text-cyan-100" />
+            <StatusBadge className="bg-violet-500/15 text-violet-200 ring-violet-400/25">{link.type}</StatusBadge>
+            <CompactValue value={link.to} className="text-sm font-medium text-emerald-100" />
+            <StatusBadge className={link.recent ? commandStatusStyles.running : commandStatusStyles.pending}>
+              {link.recent ? "recent" : "not recent"}
+            </StatusBadge>
+            <span className="rounded bg-white/[0.04] px-2 py-1 text-xs text-slate-400">{link.source}</span>
+          </div>
+          <p className="mt-2 text-xs text-slate-500" title={link.label}>{link.label}</p>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function MeshInteractionList({ interactions }: { interactions: MeshOverview["recentInteractions"] }) {
+  if (!interactions.length) {
+    return <EmptyState title="No recent mesh interactions" detail="Interactions appear after runtime or Knowledge Graph relationships are derived." muted />;
+  }
+
+  return (
+    <div className="grid gap-3">
+      {interactions.map((interaction, index) => (
+        <article key={`${interaction.time}-${interaction.from}-${interaction.to}-${index}`} className="rounded-md border border-white/10 bg-black/20 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-slate-500" title={formatExactDate(interaction.time)}>{formatRelativeTime(interaction.time)}</span>
+            <StatusBadge className="bg-cyan-500/15 text-cyan-200 ring-cyan-400/25">{interaction.source}</StatusBadge>
+            <StatusBadge className="bg-violet-500/15 text-violet-200 ring-violet-400/25">{interaction.type}</StatusBadge>
+          </div>
+          <p className="mt-3 text-sm font-medium text-white">
+            {interaction.from} <span className="text-slate-500">{"->"}</span> {interaction.to}
+          </p>
+          <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-400" title={interaction.summary}>{interaction.summary}</p>
         </article>
       ))}
     </div>
@@ -3250,6 +3521,30 @@ function getArchitectStatusLabel(review: ArchitectureReview | null) {
   if (!review) return "no review";
   if (review.status === "reviewed") return "clear";
   return review.status;
+}
+
+function getMeshStatusStyle(status: MeshAgent["status"]) {
+  if (["working", "detected", "enabled", "clear"].includes(status)) {
+    return "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25";
+  }
+
+  if (status === "idle") {
+    return "bg-slate-500/15 text-slate-200 ring-slate-400/20";
+  }
+
+  if (status === "blocked") {
+    return commandStatusStyles.failed;
+  }
+
+  if (["warning", "no_review"].includes(status)) {
+    return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
+  }
+
+  return consistencyStatusStyles.missing;
+}
+
+function findMeshAgent(meshOverview: MeshOverview, id: string) {
+  return meshOverview.agents.find((agent) => agent.id === id) ?? null;
 }
 
 function getOperationStatusLabel(status: DailyReport["status"]) {
