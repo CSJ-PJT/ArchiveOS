@@ -55,6 +55,29 @@ export type KnowledgeEdge = {
   created_at: string;
 };
 
+export type KnowledgeGraphNode = {
+  id: string;
+  type: string;
+  label: string;
+  title: string;
+  summary: string | null;
+  source: string | null;
+  externalRef: string | null;
+  createdAt: string;
+  metadata: Record<string, unknown>;
+};
+
+export type KnowledgeGraphEdge = {
+  id: string;
+  from: string;
+  to: string;
+  type: string;
+  label: string;
+  confidence: number | null;
+  createdAt: string;
+  metadata: Record<string, unknown>;
+};
+
 export async function upsertKnowledgeNode(input: {
   node_type: KnowledgeNodeType;
   title: string;
@@ -347,6 +370,55 @@ export async function getRecentKnowledgeEdges(limit = 20) {
   return data ?? [];
 }
 
+export async function getKnowledgeGraph(limit = 100) {
+  const safeLimit = Math.min(Math.max(Number.isFinite(limit) ? Math.floor(limit) : 100, 1), 300);
+  const [nodesResult, edgesResult] = await Promise.all([
+    supabaseAdmin
+      .from("knowledge_nodes")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(safeLimit),
+    supabaseAdmin
+      .from("knowledge_edges")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(safeLimit * 2),
+  ]);
+
+  if (nodesResult.error || edgesResult.error) {
+    return {
+      nodes: [] as KnowledgeGraphNode[],
+      edges: [] as KnowledgeGraphEdge[],
+      stats: {
+        nodeCount: 0,
+        edgeCount: 0,
+        types: {} as Record<string, number>,
+      },
+    };
+  }
+
+  const includedIds = new Set((nodesResult.data ?? []).map((node) => node.id));
+  const nodes = (nodesResult.data ?? []).map(toGraphNode);
+  const edges = (edgesResult.data ?? [])
+    .filter((edge) => includedIds.has(edge.from_node_id) && includedIds.has(edge.to_node_id))
+    .slice(0, safeLimit)
+    .map(toGraphEdge);
+  const types = nodes.reduce<Record<string, number>>((acc, node) => {
+    acc[node.type] = (acc[node.type] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    nodes,
+    edges,
+    stats: {
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      types,
+    },
+  };
+}
+
 export async function getKnowledgeNode(id: string) {
   const { data: node, error } = await supabaseAdmin
     .from("knowledge_nodes")
@@ -493,4 +565,68 @@ function hashText(value: string) {
 
 function clampLimit(value: number) {
   return Math.min(Math.max(Number.isFinite(value) ? Math.floor(value) : 20, 1), 100);
+}
+
+function toGraphNode(node: KnowledgeNode): KnowledgeGraphNode {
+  return {
+    id: node.id,
+    type: node.node_type,
+    label: buildNodeLabel(node),
+    title: node.title,
+    summary: node.summary,
+    source: node.source,
+    externalRef: node.external_ref,
+    createdAt: node.created_at,
+    metadata: sanitizeMetadata(node.metadata),
+  };
+}
+
+function toGraphEdge(edge: KnowledgeEdge): KnowledgeGraphEdge {
+  return {
+    id: edge.id,
+    from: edge.from_node_id,
+    to: edge.to_node_id,
+    type: edge.edge_type,
+    label: edge.edge_type,
+    confidence: edge.confidence ?? null,
+    createdAt: edge.created_at,
+    metadata: sanitizeMetadata(edge.metadata),
+  };
+}
+
+function buildNodeLabel(node: KnowledgeNode) {
+  const raw = node.external_ref?.split("/").pop() ?? node.title;
+  return raw.length > 42 ? `${raw.slice(0, 39)}...` : raw;
+}
+
+function sanitizeMetadata(metadata: Record<string, unknown>) {
+  const clean: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(metadata ?? {})) {
+    const lowerKey = key.toLowerCase();
+    if (lowerKey.includes("vault") || lowerKey.includes("absolute") || lowerKey.includes("secret") || lowerKey.includes("webhook")) {
+      continue;
+    }
+
+    clean[key] = sanitizeMetadataValue(value);
+  }
+
+  return clean;
+}
+
+function sanitizeMetadataValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    if (/^[A-Za-z]:\\/.test(value)) {
+      return value.split(/[\\/]/).pop() ?? "[local-path-hidden]";
+    }
+    return value;
+  }
+
+  if (Array.isArray(value)) return value.map(sanitizeMetadataValue);
+
+  if (value && typeof value === "object") {
+    return sanitizeMetadata(value as Record<string, unknown>);
+  }
+
+  return value;
 }
