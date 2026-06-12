@@ -178,3 +178,46 @@ OS-level scheduler는 아직 구현하지 않았습니다. 운영 단계에서 W
 
 - Nightly Review: 23:50 KST daily
 - Daily Report: 09:00 KST business days only
+## 한국어 PM Daily Report 및 히스토리 저장
+
+Daily Report는 한국 업무일 규칙을 통과한 경우 Discord에 한국어 PM 운영 보고서를 전송합니다. 메시지에는 다음 항목이 포함됩니다.
+
+- 대상일
+- 운영 상태: 정상, 주의, 문제
+- Runtime queue count
+- 최신 Builder/Reviewer 결과 이름과 verdict
+- 대기 작업 요약
+- Implementer, Reviewer, Loop, Reviewer Bridge 감지 상태
+- 경고
+- Decisions / Commands 수
+- `ARCHIVEOS_PUBLIC_URL`이 설정된 경우 Dashboard 링크
+
+히스토리는 backend service-role 쓰기 경로로 Supabase에 저장됩니다.
+
+- `batch_runs`: 배치 실행 상태
+- `daily_reports`: 보고서 본문, 운영 판정, Discord 전송/생략 상태
+- `runtime_snapshots`: queue count, 최신 결과 메타데이터, 작업자 상태, 경고
+
+환경 변수:
+
+```bash
+DISCORD_WEBHOOK_URL=
+ARCHIVEOS_PUBLIC_URL=
+```
+
+두 값은 backend-only입니다. Discord webhook은 frontend 코드에 노출하지 않습니다. `ARCHIVEOS_PUBLIC_URL`은 선택 값이며 보고서 하단 Dashboard 링크에만 사용됩니다.
+
+수동 검증:
+
+```bash
+npm run batch:nightly-review
+npm run batch:daily-report
+```
+
+읽기 전용 보고서 API:
+
+- `GET /api/reports/daily/latest`
+- `GET /api/reports/daily/recent`
+- `GET /api/runtime/snapshots/recent`
+
+Discord Daily Report는 Asia/Seoul 기준 월요일-금요일 중 `src/batches/koreanHolidays.ts`에 정의된 한국 공휴일과 대체공휴일을 제외한 업무일에만 전송됩니다. 로컬 공휴일 목록은 매년 갱신해야 합니다.

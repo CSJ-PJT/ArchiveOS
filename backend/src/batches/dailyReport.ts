@@ -1,8 +1,8 @@
 import { addDaysToDateString, getSeoulDateString, isKoreanBusinessDay } from "./businessDays.js";
 import { sendDiscordMessage } from "./discord.js";
 import { buildNightlyReviewSummary } from "./nightlyReview.js";
-import { getLatestBatchRun, recordBatchRun } from "./store.js";
-import type { BatchResult, NightlyReviewSummary } from "./types.js";
+import { getLatestBatchRun, recordBatchRun, recordDailyReport } from "./store.js";
+import type { BatchResult, DailyReportRecord, NightlyReviewSummary } from "./types.js";
 
 type DailyReportOptions = {
   today?: Date;
@@ -14,76 +14,102 @@ export async function runDailyReportBatch(options: DailyReportOptions = {}): Pro
   const todayString = getSeoulDateString(today);
   const targetDate = addDaysToDateString(todayString, -1);
   const businessDay = await isKoreanBusinessDay(today);
+  const nightly = await loadNightlyReview(targetDate);
+  const publicUrl = process.env.ARCHIVEOS_PUBLIC_URL?.trim() || null;
 
   if (!businessDay.businessDay) {
-    return persistResult(
+    const reportText = buildDailyReportMessage(targetDate, nightly, publicUrl, businessDay.reason);
+    return persistDailyAndBatch(
+      nightly,
+      reportText,
       {
         batch_type: "daily_report",
         status: "skipped",
         target_date: targetDate,
-        summary: `Discord daily report skipped: ${businessDay.reason}.`,
+        summary: `Discord 일일 보고 생략: ${businessDay.reason}.`,
         metadata: {
           today: todayString,
           reason: businessDay.reason,
           business_day: false,
+          nightly,
+          archiveos_public_url_configured: Boolean(publicUrl),
         },
       },
+      false,
+      businessDay.reason,
       options.persist,
     );
   }
 
   const webhookConfigured = Boolean(process.env.DISCORD_WEBHOOK_URL?.trim());
   if (!webhookConfigured) {
-    return persistResult(
+    const reason = "DISCORD_WEBHOOK_URL not configured";
+    const reportText = buildDailyReportMessage(targetDate, nightly, publicUrl, reason);
+    return persistDailyAndBatch(
+      nightly,
+      reportText,
       {
         batch_type: "daily_report",
         status: "skipped",
         target_date: targetDate,
-        summary: "Discord daily report skipped: DISCORD_WEBHOOK_URL not configured.",
+        summary: "Discord 일일 보고 생략: DISCORD_WEBHOOK_URL 미설정.",
         metadata: {
           today: todayString,
-          reason: "DISCORD_WEBHOOK_URL not configured",
+          reason,
           business_day: true,
+          nightly,
+          archiveos_public_url_configured: Boolean(publicUrl),
         },
       },
+      false,
+      reason,
       options.persist,
     );
   }
 
-  const nightly = await loadNightlyReview(targetDate);
-  const message = buildDailyReportMessage(targetDate, nightly);
+  const message = buildDailyReportMessage(targetDate, nightly, publicUrl);
   const sent = await sendDiscordMessage(message);
 
   if (!sent.ok) {
-    return persistResult(
+    return persistDailyAndBatch(
+      nightly,
+      message,
       {
         batch_type: "daily_report",
         status: "failed",
         target_date: targetDate,
-        summary: `Discord daily report failed: ${sent.reason}.`,
+        summary: `Discord 일일 보고 실패: ${sent.reason}.`,
         metadata: {
           today: todayString,
           reason: sent.reason,
           business_day: true,
           nightly,
+          archiveos_public_url_configured: Boolean(publicUrl),
         },
       },
+      false,
+      sent.reason,
       options.persist,
     );
   }
 
-  return persistResult(
+  return persistDailyAndBatch(
+    nightly,
+    message,
     {
       batch_type: "daily_report",
       status: "sent",
       target_date: targetDate,
-      summary: `Discord daily report sent for ${targetDate}.`,
+      summary: `Discord 일일 보고 전송 완료: ${targetDate}.`,
       metadata: {
         today: todayString,
         business_day: true,
         nightly,
+        archiveos_public_url_configured: Boolean(publicUrl),
       },
     },
+    true,
+    null,
     options.persist,
   );
 }
@@ -99,46 +125,114 @@ async function loadNightlyReview(targetDate: string): Promise<NightlyReviewSumma
   return buildNightlyReviewSummary(targetDate);
 }
 
-function buildDailyReportMessage(targetDate: string, nightly: NightlyReviewSummary) {
+function buildDailyReportMessage(
+  targetDate: string,
+  nightly: NightlyReviewSummary,
+  publicUrl: string | null,
+  skippedReason?: string,
+) {
+  const statusLine = formatOperationStatus(nightly.operationStatus);
+  const reason = skippedReason ? `${nightly.statusReason} / Discord 생략: ${skippedReason}` : nightly.statusReason;
   const warnings = nightly.warnings.length
-    ? nightly.warnings.map((warning) => `- ${translateWarning(warning)}`).join("\n")
-    : "- 감지된 경고 없음";
+    ? nightly.warnings.map((warning) => `• ${warning}`).join("\n")
+    : "• 감지된 경고 없음";
+  const latestWaitingTask = nightly.queue.inbox > 0
+    ? nightly.latestInboxTask ?? `대기 작업 ${nightly.queue.inbox}개`
+    : "대기 작업 없음";
+  const dashboardLink = publicUrl ? ["", "Dashboard:", publicUrl] : [];
 
   return [
-    "## ArchiveOS 일일 운영 보고",
+    "📊 ArchiveOS 일일 운영 보고",
     `대상일: ${targetDate}`,
     "",
-    "**Runtime**",
-    `- Inbox: ${nightly.queue.inbox}`,
-    `- Processing: ${nightly.queue.processing}`,
-    `- Outbox: ${nightly.queue.outbox}`,
-    `- Reviews: ${nightly.queue.reviews}`,
+    `상태: ${statusLine}`,
+    `사유: ${reason}`,
     "",
-    "**Latest**",
-    `- Builder: ${nightly.latestBuilder?.status ?? "없음"} / ${nightly.latestBuilder?.task_id ?? "-"}`,
-    `- Reviewer: ${nightly.latestReviewer?.verdict ?? "없음"} / ${nightly.latestReviewer?.reviewed_task_id ?? "-"}`,
+    "Runtime",
+    `• Inbox: ${nightly.queue.inbox}`,
+    `• Processing: ${nightly.queue.processing}`,
+    `• Outbox: ${nightly.queue.outbox}`,
+    `• Reviews: ${nightly.queue.reviews}`,
     "",
-    "**Warnings**",
+    "최신 결과",
+    `• Builder: ${nightly.latestBuilder?.status ?? "없음"} / ${shortenName(nightly.latestBuilder?.task_id ?? nightly.latestBuilder?.result_name ?? "-")}`,
+    `• Reviewer: ${nightly.latestReviewer?.verdict ?? "없음"} / ${shortenName(nightly.latestReviewer?.reviewed_task_id ?? nightly.latestReviewer?.review_name ?? "-")}`,
+    "",
+    "현재 대기 작업",
+    `• ${shortenName(latestWaitingTask)}`,
+    "",
+    "작업자",
+    `• Implementer: ${nightly.operators.implementer}`,
+    `• Reviewer: ${nightly.operators.reviewer}`,
+    `• Loop: ${nightly.operators.loop}`,
+    `• Reviewer Bridge: ${nightly.operators.reviewerBridge}`,
+    "",
+    "경고",
     warnings,
     "",
-    "**Decisions / Commands**",
-    `- Decisions: ${nightly.decisions.count}`,
-    `- Commands: ${nightly.commands.count}`,
+    "Decisions / Commands",
+    `• Decisions: ${nightly.decisions.count}`,
+    `• Commands: ${nightly.commands.count}`,
+    ...dashboardLink,
   ].join("\n");
 }
 
-function translateWarning(value: string) {
-  if (/usage limit/i.test(value)) return "Codex 사용량 제한으로 stop 상태가 감지되었습니다.";
-  if (/processing task/i.test(value)) return "processing 작업이 있지만 구현자 프로세스가 감지되지 않았습니다.";
-  if (/inbox has work/i.test(value)) return "inbox에 작업이 있지만 loop 프로세스가 감지되지 않았습니다.";
-  if (/reviewer verdict is stop/i.test(value)) return "최신 reviewer verdict가 stop입니다.";
-  return value;
-}
-
-async function persistResult(result: BatchResult, persist = true) {
+async function persistDailyAndBatch(
+  nightly: NightlyReviewSummary,
+  reportText: string,
+  result: BatchResult,
+  discordSent: boolean,
+  discordSkippedReason: string | null,
+  persist = true,
+) {
   if (persist === false) {
     return result;
   }
 
-  return recordBatchRun(result);
+  const report: DailyReportRecord = {
+    target_date: result.target_date,
+    status: nightly.operationStatus,
+    status_reason: nightly.statusReason,
+    runtime_summary: nightly.queue,
+    latest_builder: nightly.latestBuilder,
+    latest_reviewer: nightly.latestReviewer,
+    operator_summary: nightly.operators,
+    warnings: nightly.warnings,
+    decisions_count: nightly.decisions.count,
+    commands_count: nightly.commands.count,
+    discord_sent: discordSent,
+    discord_skipped_reason: discordSkippedReason,
+    report_text: reportText,
+  };
+
+  const persisted = await recordBatchRun(result);
+
+  try {
+    const dailyReport = await recordDailyReport(report);
+    persisted.metadata = {
+      ...persisted.metadata,
+      daily_report_id: dailyReport.id,
+    };
+  } catch (error) {
+    persisted.metadata = {
+      ...persisted.metadata,
+      daily_report_persistence_error: error instanceof Error ? error.message : "Unknown daily report persistence error.",
+    };
+  }
+
+  return persisted;
+}
+
+function formatOperationStatus(status: NightlyReviewSummary["operationStatus"]) {
+  if (status === "problem") return "🔴 문제";
+  if (status === "warning") return "🟡 주의";
+  return "🟢 정상";
+}
+
+function shortenName(value: string) {
+  if (value.length <= 72) {
+    return value;
+  }
+
+  return `${value.slice(0, 69)}...`;
 }

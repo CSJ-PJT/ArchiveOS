@@ -52,6 +52,7 @@ export type LocalRuntimeStatus = {
     reviewer_bridge: ProcessSnapshot | null;
   };
   latest: {
+    inbox: QueueFile | null;
     processing: QueueFile | null;
     outbox: QueueFile | null;
     review: QueueFile | null;
@@ -353,7 +354,8 @@ async function readConfiguredProcess(rawPid: string | undefined, name: string, c
 async function readQueueSnapshot(queuePath: string | null) {
   const empty = {
     counts: { inbox: 0, processing: 0, outbox: 0, reviews: 0 },
-    latest: { processing: null, outbox: null, review: null } as {
+    latest: { inbox: null, processing: null, outbox: null, review: null } as {
+      inbox: QueueFile | null;
       processing: QueueFile | null;
       outbox: QueueFile | null;
       review: QueueFile | null;
@@ -382,6 +384,7 @@ async function readQueueSnapshot(queuePath: string | null) {
       reviews: reviews.length,
     },
     latest: {
+      inbox: inbox[0] ?? null,
       processing: processing[0] ?? null,
       outbox: outbox[0] ?? null,
       review: latestReview,

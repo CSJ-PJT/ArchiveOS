@@ -5,7 +5,13 @@ import cors from "cors";
 import express from "express";
 import { runDailyReportBatch } from "./batches/dailyReport.js";
 import { runNightlyReviewBatch } from "./batches/nightlyReview.js";
-import { getLatestBatchRuns, getRecentBatchRuns } from "./batches/store.js";
+import {
+  getLatestBatchRuns,
+  getLatestDailyReport,
+  getRecentBatchRuns,
+  getRecentDailyReports,
+  getRecentRuntimeSnapshots,
+} from "./batches/store.js";
 import { findProject, projects } from "./config/projects.js";
 import { getLocalRuntimeStatus } from "./lib/localRuntime.js";
 import { supabaseAdmin } from "./lib/supabaseAdmin.js";
@@ -271,11 +277,36 @@ app.get("/api/batches/latest", async (_request, response) => {
       data: {
         ...(await getLatestBatchRuns()),
         discord_webhook_configured: Boolean(process.env.DISCORD_WEBHOOK_URL?.trim()),
+        archiveos_public_url_configured: Boolean(process.env.ARCHIVEOS_PUBLIC_URL?.trim()),
         holiday_years: [2026],
       },
     });
   } catch {
     response.status(500).json({ error: "Failed to fetch latest batch status." });
+  }
+});
+
+app.get("/api/reports/daily/latest", async (_request, response) => {
+  try {
+    response.json({ data: await getLatestDailyReport() });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch latest daily report." });
+  }
+});
+
+app.get("/api/reports/daily/recent", async (_request, response) => {
+  try {
+    response.json({ data: await getRecentDailyReports() });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch recent daily reports." });
+  }
+});
+
+app.get("/api/runtime/snapshots/recent", async (_request, response) => {
+  try {
+    response.json({ data: await getRecentRuntimeSnapshots() });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch recent runtime snapshots." });
   }
 });
 
@@ -503,7 +534,14 @@ async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
     events.push({
       id: `batch-${batch.id}`,
       type: "batch",
-      title: batch.batch_type === "nightly_review" ? "Nightly review batch" : "Daily report batch",
+      title:
+        batch.batch_type === "nightly_review"
+          ? "nightly_review_completed"
+          : batch.status === "sent"
+            ? "daily_report_sent"
+            : batch.status === "skipped"
+              ? "daily_report_skipped"
+              : "daily_report_failed",
       description: summarizeEventDescription(batch.summary),
       status: batch.status === "failed" ? "error" : batch.status === "skipped" ? "warning" : "success",
       source: "backend",
