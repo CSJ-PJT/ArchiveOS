@@ -287,3 +287,29 @@ npm run batch:daily-report
 - Daily Report: 매 영업일 09:00 KST
 
 현재 OS-level scheduler는 구현하지 않았습니다. Windows Task Scheduler 설정은 추후 운영 단계에서 별도로 연결합니다.
+## 한국어 PM Daily Report 및 히스토리 저장
+
+Daily Report Discord 메시지는 한국어 PM 운영 보고서 형식으로 전송됩니다. 보고서에는 대상일, 운영 상태 판정, queue count, 최신 Builder/Reviewer 결과, 대기 작업, 작업자 감지 상태, 경고, Decisions/Commands 수, `ARCHIVEOS_PUBLIC_URL`이 설정된 경우 Dashboard 링크가 포함됩니다.
+
+Daily Report 전송은 backend-only입니다. Discord는 Asia/Seoul 기준 월요일-금요일 중 `backend/src/batches/koreanHolidays.ts`에 정의된 한국 공휴일과 대체공휴일을 제외한 업무일에만 전송됩니다. 웹훅이 없거나 전송을 생략한 경우 서버 시작을 실패시키지 않고 사유를 기록합니다.
+
+운영 히스토리는 Supabase에 누적됩니다.
+
+- `batch_runs`: 배치 실행 상태
+- `daily_reports`: 한국어 보고서 본문, 운영 상태, Discord 전송/생략 상태
+- `runtime_snapshots`: queue count, 최신 결과 메타데이터, 작업자 요약, 경고
+
+수동 검증 명령:
+
+```bash
+cd backend
+npm run batch:nightly-review
+npm run batch:daily-report
+```
+
+Backend-only 환경 변수:
+
+```bash
+DISCORD_WEBHOOK_URL=
+ARCHIVEOS_PUBLIC_URL=
+```

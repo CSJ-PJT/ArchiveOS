@@ -1,5 +1,14 @@
 import { supabaseAdmin } from "../lib/supabaseAdmin.js";
-import type { BatchResult, BatchRun, BatchStatus, BatchType } from "./types.js";
+import type {
+  BatchResult,
+  BatchRun,
+  BatchStatus,
+  BatchType,
+  DailyReportRecord,
+  DailyReportRow,
+  NightlyReviewSummary,
+  RuntimeSnapshotRow,
+} from "./types.js";
 
 export async function recordBatchRun(input: {
   batch_type: BatchType;
@@ -77,4 +86,87 @@ export async function getLatestBatchRun(batchType: BatchType, targetDate?: strin
   }
 
   return ((data ?? [])[0] ?? null) as BatchRun | null;
+}
+
+export async function recordDailyReport(report: DailyReportRecord) {
+  const { data, error } = await supabaseAdmin
+    .from("daily_reports")
+    .insert(report)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to record daily report: ${error.message}`);
+  }
+
+  return data as DailyReportRow;
+}
+
+export async function getLatestDailyReport() {
+  const { data, error } = await supabaseAdmin
+    .from("daily_reports")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to fetch latest daily report: ${error.message}`);
+  }
+
+  return data as DailyReportRow | null;
+}
+
+export async function getRecentDailyReports(limit = 20) {
+  const { data, error } = await supabaseAdmin
+    .from("daily_reports")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(`Failed to fetch recent daily reports: ${error.message}`);
+  }
+
+  return (data ?? []) as DailyReportRow[];
+}
+
+export async function recordRuntimeSnapshot(summary: NightlyReviewSummary) {
+  const { data, error } = await supabaseAdmin
+    .from("runtime_snapshots")
+    .insert({
+      captured_at: new Date().toISOString(),
+      inbox_count: summary.queue.inbox,
+      processing_count: summary.queue.processing,
+      outbox_count: summary.queue.outbox,
+      reviews_count: summary.queue.reviews,
+      active_task: summary.latestBuilder?.task_id ?? summary.latestReviewer?.reviewed_task_id ?? null,
+      latest_builder: summary.latestBuilder,
+      latest_reviewer: summary.latestReviewer,
+      operators: summary.operators,
+      warnings: summary.warnings,
+      source: "nightly_review_batch",
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to record runtime snapshot: ${error.message}`);
+  }
+
+  return data as RuntimeSnapshotRow;
+}
+
+export async function getRecentRuntimeSnapshots(limit = 20) {
+  const { data, error } = await supabaseAdmin
+    .from("runtime_snapshots")
+    .select("*")
+    .order("captured_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(`Failed to fetch recent runtime snapshots: ${error.message}`);
+  }
+
+  return (data ?? []) as RuntimeSnapshotRow[];
 }

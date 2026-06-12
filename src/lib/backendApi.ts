@@ -1,4 +1,4 @@
-import type { BatchRun, CommandRun } from "../types/database";
+import type { BatchRun, CommandRun, DailyReport, RuntimeSnapshot } from "../types/database";
 import type { Agent, Task, WorkLog } from "../types/database";
 
 const configuredBackendUrlFromEnv = ((import.meta.env.VITE_BACKEND_URL as string | undefined) ?? "").trim();
@@ -80,6 +80,7 @@ export type LocalRuntimeStatus = {
     reviewer_bridge: LocalRuntimeProcess | null;
   };
   latest: {
+    inbox: LocalRuntimeQueueFile | null;
     processing: LocalRuntimeQueueFile | null;
     outbox: LocalRuntimeQueueFile | null;
     review: LocalRuntimeQueueFile | null;
@@ -119,6 +120,7 @@ export type LatestBatchStatus = {
   nightly_review: BatchRun | null;
   daily_report: BatchRun | null;
   discord_webhook_configured: boolean;
+  archiveos_public_url_configured: boolean;
   holiday_years: number[];
 };
 
@@ -185,6 +187,21 @@ export async function getRecentBatchRuns() {
 
 export async function getLatestBatchStatus() {
   const response = await request<ApiEnvelope<LatestBatchStatus>>("/api/batches/latest");
+  return response.data;
+}
+
+export async function getLatestDailyReport() {
+  const response = await request<ApiEnvelope<DailyReport | null>>("/api/reports/daily/latest");
+  return response.data;
+}
+
+export async function getRecentDailyReports() {
+  const response = await request<ApiEnvelope<DailyReport[]>>("/api/reports/daily/recent");
+  return response.data;
+}
+
+export async function getRecentRuntimeSnapshots() {
+  const response = await request<ApiEnvelope<RuntimeSnapshot[]>>("/api/runtime/snapshots/recent");
   return response.data;
 }
 

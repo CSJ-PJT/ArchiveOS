@@ -5,6 +5,7 @@ import {
   getDashboardData,
   getBackendHealth,
   getLatestBatchStatus,
+  getLatestDailyReport,
   getLocalActionProjects,
   getLocalRuntimeStatus,
   getRecentCommands,
@@ -22,6 +23,7 @@ import type {
   AgentStatus,
   CommandRun,
   CommandStatus,
+  DailyReport,
   LogType,
   Task,
   TaskStatus,
@@ -120,6 +122,12 @@ const remoteAccessStatusStyles: Record<RemoteAccessStatus, string> = {
   online: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25",
   offline: "bg-rose-500/15 text-rose-200 ring-rose-400/25",
   "not configured": "bg-slate-500/15 text-slate-200 ring-slate-400/20",
+};
+
+const operationStatusStyles: Record<DailyReport["status"], string> = {
+  normal: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25",
+  warning: "bg-amber-500/15 text-amber-200 ring-amber-400/25",
+  problem: "bg-rose-500/15 text-rose-200 ring-rose-400/25",
 };
 
 const quickActions = [
@@ -279,6 +287,7 @@ function OperationsLayout({
   const [commandRunsReachability, setCommandRunsReachability] = useState<ConsistencyStatus>("unknown");
   const [consistencyError, setConsistencyError] = useState<string | null>(null);
   const [batchStatus, setBatchStatus] = useState<LatestBatchStatus | null>(null);
+  const [latestDailyReport, setLatestDailyReport] = useState<DailyReport | null>(null);
   const [batchStatusError, setBatchStatusError] = useState<string | null>(null);
   const [focusMode, setFocusMode] = useState(false);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
@@ -360,7 +369,12 @@ function OperationsLayout({
     }
 
     try {
-      setBatchStatus(await getLatestBatchStatus());
+      const [latestBatchStatus, dailyReport] = await Promise.all([
+        getLatestBatchStatus(),
+        getLatestDailyReport(),
+      ]);
+      setBatchStatus(latestBatchStatus);
+      setLatestDailyReport(dailyReport);
     } catch (error) {
       setBatchStatusError(error instanceof Error ? error.message : "Batch status is not reachable.");
     }
@@ -394,6 +408,7 @@ function OperationsLayout({
           refreshRuntimeEvents={refreshRuntimeEvents}
           focusMode={focusMode}
           batchStatus={batchStatus}
+          latestDailyReport={latestDailyReport}
           batchStatusError={batchStatusError}
         />
       ) : null}
@@ -436,6 +451,7 @@ function OperationsLayout({
           commandRunsReachability={commandRunsReachability}
           runtimeStatus={runtimeStatus}
           batchStatus={batchStatus}
+          latestDailyReport={latestDailyReport}
           batchStatusError={batchStatusError}
         />
       ) : null}
@@ -511,6 +527,7 @@ function DashboardView({
   refreshRuntimeEvents,
   focusMode,
   batchStatus,
+  latestDailyReport,
   batchStatusError,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
@@ -521,6 +538,7 @@ function DashboardView({
   refreshRuntimeEvents: (options?: { silent?: boolean }) => void;
   focusMode: boolean;
   batchStatus: LatestBatchStatus | null;
+  latestDailyReport: DailyReport | null;
   batchStatusError: string | null;
 }) {
   return (
@@ -542,7 +560,11 @@ function DashboardView({
           </Panel>
 
           <Panel title="Daily Report Status">
-            <DailyReportStatusCard batchStatus={batchStatus} error={batchStatusError} />
+            <DailyReportStatusCard
+              batchStatus={batchStatus}
+              latestDailyReport={latestDailyReport}
+              error={batchStatusError}
+            />
           </Panel>
 
           <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
@@ -641,9 +663,11 @@ function DecisionsView({
 
 function DailyReportStatusCard({
   batchStatus,
+  latestDailyReport,
   error,
 }: {
   batchStatus: LatestBatchStatus | null;
+  latestDailyReport: DailyReport | null;
   error: string | null;
 }) {
   const nightly = batchStatus?.nightly_review ?? null;
@@ -655,18 +679,53 @@ function DailyReportStatusCard({
   }
 
   return (
-    <div className="grid gap-3 md:grid-cols-2">
-      <BatchStatusTile
-        title="Nightly Review"
-        run={nightly}
-        emptyDetail="No nightly review batch has been recorded yet."
-      />
-      <BatchStatusTile
-        title="Daily Discord Report"
-        run={daily}
-        emptyDetail="No daily report batch has been recorded yet."
-        extra={dailyReason ? `Skip/failure reason: ${dailyReason}` : undefined}
-      />
+    <div className="grid gap-3">
+      {latestDailyReport ? (
+        <div className="rounded-md border border-white/10 bg-black/20 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-white">Korean PM Daily Report</p>
+              <p className="mt-1 text-xs text-slate-500">target {latestDailyReport.target_date} / {formatDate(latestDailyReport.created_at)}</p>
+            </div>
+            <StatusBadge className={operationStatusStyles[latestDailyReport.status]}>
+              {getOperationStatusLabel(latestDailyReport.status)}
+            </StatusBadge>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <RuntimeMetric label="Discord sent" value={latestDailyReport.discord_sent ? "yes" : "no"} />
+            <RuntimeMetric label="Decisions" value={String(latestDailyReport.decisions_count)} />
+            <RuntimeMetric label="Commands" value={String(latestDailyReport.commands_count)} />
+            <RuntimeMetric
+              label="Dashboard link"
+              value={batchStatus?.archiveos_public_url_configured ? "configured" : "not configured"}
+            />
+          </div>
+          <p className="mt-3 text-sm leading-6 text-slate-300">{latestDailyReport.status_reason}</p>
+          {latestDailyReport.discord_skipped_reason ? (
+            <p className="mt-2 text-xs leading-5 text-amber-200">Discord skip/failure reason: {latestDailyReport.discord_skipped_reason}</p>
+          ) : null}
+        </div>
+      ) : (
+        <EmptyState
+          title="No stored daily report"
+          detail="Run the backend daily report batch after the daily_reports table exists."
+          muted
+        />
+      )}
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <BatchStatusTile
+          title="Nightly Review"
+          run={nightly}
+          emptyDetail="No nightly review batch has been recorded yet."
+        />
+        <BatchStatusTile
+          title="Daily Discord Report"
+          run={daily}
+          emptyDetail="No daily report batch has been recorded yet."
+          extra={dailyReason ? `Skip/failure reason: ${dailyReason}` : undefined}
+        />
+      </div>
     </div>
   );
 }
@@ -799,12 +858,14 @@ function SettingsView({
   commandRunsReachability,
   runtimeStatus,
   batchStatus,
+  latestDailyReport,
   batchStatusError,
 }: {
   backendReachability: ConsistencyStatus;
   commandRunsReachability: ConsistencyStatus;
   runtimeStatus: LocalRuntimeStatus | null;
   batchStatus: LatestBatchStatus | null;
+  latestDailyReport: DailyReport | null;
   batchStatusError: string | null;
 }) {
   const supabaseConfigured = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
@@ -870,6 +931,10 @@ function SettingsView({
               value={batchStatus?.discord_webhook_configured ? "configured: yes" : "configured: no"}
             />
             <RuntimeMetric
+              label="ArchiveOS public URL"
+              value={batchStatus?.archiveos_public_url_configured ? "configured: yes" : "configured: no"}
+            />
+            <RuntimeMetric
               label="Business day rule"
               value="Korea weekdays excluding public/substitute holidays"
             />
@@ -881,6 +946,11 @@ function SettingsView({
               label="Last batch run"
               value={batchStatus?.daily_report?.created_at ?? batchStatus?.nightly_review?.created_at ?? "none"}
               copyable
+            />
+            <RuntimeMetric
+              label="Latest report stored"
+              value={latestDailyReport?.created_at ?? "none"}
+              copyable={Boolean(latestDailyReport?.created_at)}
             />
           </div>
           <p className="text-sm leading-6 text-slate-400">
@@ -2547,6 +2617,12 @@ function getBatchStatusStyle(status: string) {
   if (status === "skipped") return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
   if (status === "failed") return commandStatusStyles.failed;
   return commandStatusStyles.pending;
+}
+
+function getOperationStatusLabel(status: DailyReport["status"]) {
+  if (status === "problem") return "문제";
+  if (status === "warning") return "주의";
+  return "정상";
 }
 
 function readBatchReason(run: LatestBatchStatus["daily_report"]) {
