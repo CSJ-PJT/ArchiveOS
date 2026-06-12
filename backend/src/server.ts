@@ -3,6 +3,11 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import cors from "cors";
 import express from "express";
+import {
+  getLatestArchitectureReview,
+  getRecentArchitectureReviews,
+  runArchitectReview,
+} from "./architect/index.js";
 import { runDailyReportBatch } from "./batches/dailyReport.js";
 import { runNightlyReviewBatch } from "./batches/nightlyReview.js";
 import {
@@ -390,6 +395,38 @@ app.get("/api/knowledge/node/:id", async (request, response) => {
   }
 });
 
+// Local/admin/manual-test endpoint only. It records a deterministic architecture review and does not execute commands.
+app.post("/api/architect/review", async (request, response) => {
+  const validation = validateArchitectReviewBody(request.body);
+
+  if (!validation.ok) {
+    response.status(400).json({ error: validation.error });
+    return;
+  }
+
+  try {
+    response.status(201).json({ data: await runArchitectReview(validation.value) });
+  } catch {
+    response.status(500).json({ error: "Failed to record architecture review." });
+  }
+});
+
+app.get("/api/architect/reviews/recent", async (request, response) => {
+  try {
+    response.json({ data: await getRecentArchitectureReviews(readLimit(request.query.limit)) });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch architecture reviews." });
+  }
+});
+
+app.get("/api/architect/reviews/latest", async (_request, response) => {
+  try {
+    response.json({ data: await getLatestArchitectureReview() });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch latest architecture review." });
+  }
+});
+
 app.use(
   (
     error: Error,
@@ -436,6 +473,14 @@ type LocalActionBody = {
   action: LocalAction;
 };
 
+type ArchitectReviewBody = {
+  targetType: string;
+  targetRef: string;
+  title: string;
+  description: string;
+  metadata?: Record<string, unknown>;
+};
+
 type LocalActionResult = {
   action: LocalAction;
   status: "succeeded" | "failed";
@@ -464,6 +509,10 @@ type CommandValidationResult =
 
 type LocalActionValidationResult =
   | { ok: true; value: LocalActionBody }
+  | { ok: false; error: string };
+
+type ArchitectReviewValidationResult =
+  | { ok: true; value: ArchitectReviewBody }
   | { ok: false; error: string };
 
 function validateWorkLogBody(body: unknown): ValidationResult {
@@ -498,6 +547,46 @@ function validateWorkLogBody(body: unknown): ValidationResult {
       content: candidate.content.trim(),
     },
   };
+}
+
+function validateArchitectReviewBody(body: unknown): ArchitectReviewValidationResult {
+  if (!body || typeof body !== "object") {
+    return { ok: false, error: "Request body must be a JSON object." };
+  }
+
+  const candidate = body as Record<string, unknown>;
+  const targetType = readRequiredString(candidate.targetType, "targetType");
+  const targetRef = readRequiredString(candidate.targetRef, "targetRef");
+  const title = readRequiredString(candidate.title, "title");
+  const description = readRequiredString(candidate.description, "description");
+
+  if (!targetType.ok) return targetType;
+  if (!targetRef.ok) return targetRef;
+  if (!title.ok) return title;
+  if (!description.ok) return description;
+
+  if (candidate.metadata !== undefined && (candidate.metadata === null || typeof candidate.metadata !== "object" || Array.isArray(candidate.metadata))) {
+    return { ok: false, error: "metadata must be a JSON object when provided." };
+  }
+
+  return {
+    ok: true,
+    value: {
+      targetType: targetType.value,
+      targetRef: targetRef.value,
+      title: title.value,
+      description: description.value,
+      metadata: candidate.metadata as Record<string, unknown> | undefined,
+    },
+  };
+}
+
+function readRequiredString(value: unknown, name: string): { ok: true; value: string } | { ok: false; error: string } {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return { ok: false, error: `${name} is required.` };
+  }
+
+  return { ok: true, value: value.trim() };
 }
 
 function readLimit(value: unknown) {
