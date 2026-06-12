@@ -8,7 +8,9 @@
     "serve:dev": "tsx src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "batch:nightly-review": "tsx src/batches/runBatch.ts nightly-review",
+    "batch:daily-report": "tsx src/batches/runBatch.ts daily-report"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.86.0",

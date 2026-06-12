@@ -68,6 +68,16 @@ create table if not exists public.command_runs (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.batch_runs (
+  id uuid primary key default gen_random_uuid(),
+  batch_type text not null check (batch_type in ('nightly_review', 'daily_report')),
+  status text not null check (status in ('completed', 'sent', 'skipped', 'failed')),
+  target_date date not null,
+  summary text not null,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists tasks_status_idx on public.tasks(status);
 create index if not exists tasks_assigned_agent_id_idx on public.tasks(assigned_agent_id);
 create index if not exists work_logs_task_id_idx on public.work_logs(task_id);
@@ -75,6 +85,8 @@ create index if not exists work_logs_agent_id_idx on public.work_logs(agent_id);
 create index if not exists work_logs_log_type_created_at_idx on public.work_logs(log_type, created_at desc);
 create index if not exists command_runs_created_at_idx on public.command_runs(created_at desc);
 create index if not exists command_runs_status_idx on public.command_runs(status);
+create index if not exists batch_runs_type_created_at_idx on public.batch_runs(batch_type, created_at desc);
+create index if not exists batch_runs_target_date_idx on public.batch_runs(target_date desc);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -108,6 +120,7 @@ alter table public.agents enable row level security;
 alter table public.tasks enable row level security;
 alter table public.work_logs enable row level security;
 alter table public.command_runs enable row level security;
+alter table public.batch_runs enable row level security;
 
 drop policy if exists "Allow public read agents" on public.agents;
 create policy "Allow public read agents"
@@ -137,8 +150,16 @@ for select
 to anon, authenticated
 using (true);
 
+drop policy if exists "Allow public read batch runs" on public.batch_runs;
+create policy "Allow public read batch runs"
+on public.batch_runs
+for select
+to anon, authenticated
+using (true);
+
 grant usage on schema public to anon, authenticated;
 grant select on public.agents to anon, authenticated;
 grant select on public.tasks to anon, authenticated;
 grant select on public.work_logs to anon, authenticated;
 grant select on public.command_runs to anon, authenticated;
+grant select on public.batch_runs to anon, authenticated;

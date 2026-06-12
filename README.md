@@ -242,3 +242,48 @@ git에서 제외되는 로컬 파일:
 - `backend/src/lib/supabaseAdmin.ts`: 서버 전용 Supabase admin client
 - `backend/src/lib/localRuntime.ts`: 로컬 Codex/MCP 런타임 상태 읽기
 - `tools/runtime/`: 로컬 전용 프로세스 오케스트레이션 스크립트
+
+## Nightly Review Batch / Daily Report Batch
+
+ArchiveOS는 PM 가시화 목적의 운영 요약 batch를 제공합니다. 이 기능은 backend/local-worker에서만 동작하며, UI에서 MCP 실행, Codex 제어, 임의 shell 실행을 하지 않습니다.
+
+Nightly Review Batch:
+
+- 전날 ArchiveOS 운영 상태를 읽기 전용으로 요약합니다.
+- MCP queue counts, 최신 builder/reviewer 결과, 최근 command_runs, work_logs decisions를 요약합니다.
+- 결과는 `batch_runs` 테이블에 `batch_type = nightly_review`로 저장됩니다.
+
+Daily Report Batch:
+
+- Asia/Seoul 기준 오늘이 한국 영업일인지 확인합니다.
+- 월요일부터 금요일만 전송 후보입니다.
+- 토요일/일요일, 한국 공휴일, 대체공휴일에는 Discord를 보내지 않고 `skipped`로 기록합니다.
+- 2026년 한국 공휴일/대체공휴일은 `backend/src/batches/koreanHolidays.ts`에 로컬 리스트로 관리합니다.
+- holiday list가 없는 연도는 fail-safe로 Discord를 보내지 않습니다.
+
+Discord webhook 설정은 backend 전용입니다.
+
+```bash
+cd backend
+cp .env.example .env
+
+# backend/.env
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+```
+
+`DISCORD_WEBHOOK_URL`은 frontend에 노출하지 않습니다. 값이 없으면 Daily Report는 실패하지 않고 `skipped` 상태와 `DISCORD_WEBHOOK_URL not configured` reason을 기록합니다.
+
+수동 테스트:
+
+```bash
+cd backend
+npm run batch:nightly-review
+npm run batch:daily-report
+```
+
+권장 스케줄:
+
+- Nightly Review: 매일 23:50 KST
+- Daily Report: 매 영업일 09:00 KST
+
+현재 OS-level scheduler는 구현하지 않았습니다. Windows Task Scheduler 설정은 추후 운영 단계에서 별도로 연결합니다.

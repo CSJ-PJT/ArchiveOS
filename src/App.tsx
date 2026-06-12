@@ -4,6 +4,7 @@ import {
   createCommandRun,
   getDashboardData,
   getBackendHealth,
+  getLatestBatchStatus,
   getLocalActionProjects,
   getLocalRuntimeStatus,
   getRecentCommands,
@@ -13,6 +14,7 @@ import {
   type LocalActionProject,
   type LocalActionResult,
   type LocalRuntimeStatus,
+  type LatestBatchStatus,
   type RuntimeEvent,
 } from "./lib/backendApi";
 import type {
@@ -103,6 +105,7 @@ const runtimeEventTypeStyles: Record<RuntimeEvent["type"], string> = {
   command: "border-violet-300/30 bg-violet-300/[0.04]",
   decision: "border-sky-300/30 bg-sky-300/[0.04]",
   warning: "border-rose-300/30 bg-rose-300/[0.05]",
+  batch: "border-emerald-300/30 bg-emerald-300/[0.04]",
 };
 
 const consistencyStatusStyles: Record<ConsistencyStatus, string> = {
@@ -275,6 +278,8 @@ function OperationsLayout({
   const [backendReachability, setBackendReachability] = useState<ConsistencyStatus>("unknown");
   const [commandRunsReachability, setCommandRunsReachability] = useState<ConsistencyStatus>("unknown");
   const [consistencyError, setConsistencyError] = useState<string | null>(null);
+  const [batchStatus, setBatchStatus] = useState<LatestBatchStatus | null>(null);
+  const [batchStatusError, setBatchStatusError] = useState<string | null>(null);
   const [focusMode, setFocusMode] = useState(false);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
 
@@ -282,10 +287,12 @@ function OperationsLayout({
     refreshRuntime();
     refreshRuntimeEvents();
     refreshConsistency();
+    refreshBatchStatus();
     const timer = window.setInterval(() => {
       refreshRuntime({ silent: true });
       refreshRuntimeEvents({ silent: true });
       refreshConsistency({ silent: true });
+      refreshBatchStatus({ silent: true });
     }, 5000);
 
     return () => window.clearInterval(timer);
@@ -347,6 +354,18 @@ function OperationsLayout({
     }
   }
 
+  async function refreshBatchStatus(options: { silent?: boolean } = {}) {
+    if (!options.silent) {
+      setBatchStatusError(null);
+    }
+
+    try {
+      setBatchStatus(await getLatestBatchStatus());
+    } catch (error) {
+      setBatchStatusError(error instanceof Error ? error.message : "Batch status is not reachable.");
+    }
+  }
+
   const warningCount = getPipelineWarningMessages(runtimeStatus).length;
   const operatorActive = Boolean(runtimeStatus?.queue.processing || runtimeStatus?.processes.implementer || runtimeStatus?.processes.reviewer || runtimeStatus?.processes.reviewer_bridge);
 
@@ -374,6 +393,8 @@ function OperationsLayout({
           refreshRuntime={refreshRuntime}
           refreshRuntimeEvents={refreshRuntimeEvents}
           focusMode={focusMode}
+          batchStatus={batchStatus}
+          batchStatusError={batchStatusError}
         />
       ) : null}
 
@@ -414,6 +435,8 @@ function OperationsLayout({
           backendReachability={backendReachability}
           commandRunsReachability={commandRunsReachability}
           runtimeStatus={runtimeStatus}
+          batchStatus={batchStatus}
+          batchStatusError={batchStatusError}
         />
       ) : null}
     </div>
@@ -487,6 +510,8 @@ function DashboardView({
   refreshRuntime,
   refreshRuntimeEvents,
   focusMode,
+  batchStatus,
+  batchStatusError,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
   runtimeError: string | null;
@@ -495,6 +520,8 @@ function DashboardView({
   refreshRuntime: (options?: { silent?: boolean }) => void;
   refreshRuntimeEvents: (options?: { silent?: boolean }) => void;
   focusMode: boolean;
+  batchStatus: LatestBatchStatus | null;
+  batchStatusError: string | null;
 }) {
   return (
     <div className="grid gap-5">
@@ -512,6 +539,10 @@ function DashboardView({
         <>
           <Panel title="Pipeline Warnings">
             <PipelineWarnings runtimeStatus={runtimeStatus} />
+          </Panel>
+
+          <Panel title="Daily Report Status">
+            <DailyReportStatusCard batchStatus={batchStatus} error={batchStatusError} />
           </Panel>
 
           <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
@@ -608,6 +639,73 @@ function DecisionsView({
   );
 }
 
+function DailyReportStatusCard({
+  batchStatus,
+  error,
+}: {
+  batchStatus: LatestBatchStatus | null;
+  error: string | null;
+}) {
+  const nightly = batchStatus?.nightly_review ?? null;
+  const daily = batchStatus?.daily_report ?? null;
+  const dailyReason = readBatchReason(daily);
+
+  if (error) {
+    return <EmptyState title="Batch status unavailable" detail={error} />;
+  }
+
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <BatchStatusTile
+        title="Nightly Review"
+        run={nightly}
+        emptyDetail="No nightly review batch has been recorded yet."
+      />
+      <BatchStatusTile
+        title="Daily Discord Report"
+        run={daily}
+        emptyDetail="No daily report batch has been recorded yet."
+        extra={dailyReason ? `Skip/failure reason: ${dailyReason}` : undefined}
+      />
+    </div>
+  );
+}
+
+function BatchStatusTile({
+  title,
+  run,
+  emptyDetail,
+  extra,
+}: {
+  title: string;
+  run: LatestBatchStatus["nightly_review"];
+  emptyDetail: string;
+  extra?: string;
+}) {
+  if (!run) {
+    return (
+      <div className="rounded-md border border-white/10 bg-black/20 p-4">
+        <p className="text-sm font-semibold text-white">{title}</p>
+        <p className="mt-2 text-sm text-slate-500">{emptyDetail}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-white/10 bg-black/20 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-white">{title}</p>
+        <StatusBadge className={getBatchStatusStyle(run.status)}>{run.status}</StatusBadge>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">target {run.target_date} / {formatDate(run.created_at)}</p>
+      <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-300" title={run.summary}>
+        {run.summary}
+      </p>
+      {extra ? <p className="mt-2 text-xs leading-5 text-amber-200">{extra}</p> : null}
+    </div>
+  );
+}
+
 function OperatorsView({
   runtimeStatus,
   runtimeError,
@@ -700,10 +798,14 @@ function SettingsView({
   backendReachability,
   commandRunsReachability,
   runtimeStatus,
+  batchStatus,
+  batchStatusError,
 }: {
   backendReachability: ConsistencyStatus;
   commandRunsReachability: ConsistencyStatus;
   runtimeStatus: LocalRuntimeStatus | null;
+  batchStatus: LatestBatchStatus | null;
+  batchStatusError: string | null;
 }) {
   const supabaseConfigured = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
   const currentFrontendUrl = typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:5173";
@@ -753,6 +855,37 @@ function SettingsView({
           <ConsistencyMini label="Backend" status={backendReachability} />
           <ConsistencyMini label="command_runs" status={commandRunsReachability} />
           <ConsistencyMini label="MCP queue" status={runtimeStatus?.queue.path ? "matched" : "unknown"} />
+        </div>
+      </Panel>
+      <Panel title="Batch Settings">
+        <div className="grid gap-4">
+          {batchStatusError ? (
+            <p className="rounded border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+              {batchStatusError}
+            </p>
+          ) : null}
+          <div className="grid gap-3 md:grid-cols-2">
+            <RuntimeMetric
+              label="Discord webhook"
+              value={batchStatus?.discord_webhook_configured ? "configured: yes" : "configured: no"}
+            />
+            <RuntimeMetric
+              label="Business day rule"
+              value="Korea weekdays excluding public/substitute holidays"
+            />
+            <RuntimeMetric
+              label="Holiday list years"
+              value={batchStatus?.holiday_years?.join(", ") || "2026"}
+            />
+            <RuntimeMetric
+              label="Last batch run"
+              value={batchStatus?.daily_report?.created_at ?? batchStatus?.nightly_review?.created_at ?? "none"}
+              copyable
+            />
+          </div>
+          <p className="text-sm leading-6 text-slate-400">
+            Nightly Review and Daily Report batches are backend/local-worker controlled. The UI is read-only and does not expose scheduling, webhook values, or execution controls.
+          </p>
         </div>
       </Panel>
       <Panel title="Security Principles">
@@ -2385,6 +2518,7 @@ function getEventTypeLabel(event: RuntimeEvent) {
   if (event.type === "queue") return "queue changed";
   if (event.type === "command") return "command recorded";
   if (event.type === "warning") return "warning detected";
+  if (event.type === "batch") return "batch event";
   return event.type;
 }
 
@@ -2394,6 +2528,7 @@ function getEventTypeBadgeClassName(event: RuntimeEvent) {
   if (event.type === "queue") return commandStatusStyles.running;
   if (event.type === "command") return "bg-violet-500/15 text-violet-200 ring-violet-400/25";
   if (event.type === "warning") return commandStatusStyles.failed;
+  if (event.type === "batch") return runtimeEventStatusStyles[event.status];
   return runtimeEventStatusStyles[event.status];
 }
 
@@ -2403,7 +2538,20 @@ function getEventCardClassName(event: RuntimeEvent) {
   if (event.type === "queue") return "border-cyan-300/30 bg-cyan-300/[0.05]";
   if (event.type === "command") return "border-violet-300/30 bg-violet-300/[0.05]";
   if (event.type === "warning") return "border-rose-300/40 bg-rose-300/[0.07]";
+  if (event.type === "batch") return "border-emerald-300/30 bg-emerald-300/[0.05]";
   return runtimeEventTypeStyles[event.type];
+}
+
+function getBatchStatusStyle(status: string) {
+  if (status === "sent" || status === "completed") return commandStatusStyles.succeeded;
+  if (status === "skipped") return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
+  if (status === "failed") return commandStatusStyles.failed;
+  return commandStatusStyles.pending;
+}
+
+function readBatchReason(run: LatestBatchStatus["daily_report"]) {
+  const reason = run?.metadata?.reason;
+  return typeof reason === "string" ? reason : "";
 }
 
 function getLiveLoopState(runtimeStatus: LocalRuntimeStatus | null) {

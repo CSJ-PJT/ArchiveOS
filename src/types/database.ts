@@ -3,6 +3,8 @@ export type TaskPriority = "low" | "medium" | "high";
 export type TaskStatus = "todo" | "in_progress" | "review" | "done" | "failed";
 export type LogType = "summary" | "decision" | "error" | "review";
 export type CommandStatus = "pending" | "running" | "succeeded" | "failed";
+export type BatchStatus = "completed" | "sent" | "skipped" | "failed";
+export type BatchType = "nightly_review" | "daily_report";
 
 export interface Agent {
   id: string;
@@ -45,4 +47,14 @@ export interface CommandRun {
   result: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface BatchRun {
+  id: string;
+  batch_type: BatchType;
+  status: BatchStatus;
+  target_date: string;
+  summary: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
 }
