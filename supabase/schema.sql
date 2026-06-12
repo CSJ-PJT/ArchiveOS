@@ -124,6 +124,57 @@ create table if not exists public.historian_exports (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.knowledge_nodes (
+  id uuid primary key default gen_random_uuid(),
+  node_type text not null check (
+    node_type in (
+      'task',
+      'builder_result',
+      'reviewer_result',
+      'decision',
+      'incident',
+      'daily_report',
+      'nightly_review',
+      'batch_run',
+      'command',
+      'obsidian_note',
+      'architecture_note'
+    )
+  ),
+  title text not null,
+  summary text,
+  source text,
+  external_ref text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint knowledge_nodes_type_external_ref_key unique (node_type, external_ref)
+);
+
+create table if not exists public.knowledge_edges (
+  id uuid primary key default gen_random_uuid(),
+  from_node_id uuid not null references public.knowledge_nodes(id) on delete cascade,
+  to_node_id uuid not null references public.knowledge_nodes(id) on delete cascade,
+  edge_type text not null check (
+    edge_type in (
+      'relates_to',
+      'produced',
+      'reviewed_by',
+      'decided_by',
+      'exported_to',
+      'caused_by',
+      'resolved_by',
+      'mentioned_in',
+      'follows',
+      'blocks'
+    )
+  ),
+  confidence numeric not null default 1,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  constraint knowledge_edges_unique_link unique (from_node_id, to_node_id, edge_type)
+);
+
 alter table public.daily_reports add column if not exists historian_exported boolean not null default false;
 alter table public.daily_reports add column if not exists historian_note_path text;
 alter table public.daily_reports add column if not exists historian_export_reason text;
@@ -142,6 +193,13 @@ create index if not exists daily_reports_created_at_idx on public.daily_reports(
 create index if not exists runtime_snapshots_captured_at_idx on public.runtime_snapshots(captured_at desc);
 create index if not exists historian_exports_created_at_idx on public.historian_exports(created_at desc);
 create index if not exists historian_exports_note_type_idx on public.historian_exports(note_type, created_at desc);
+create index if not exists knowledge_nodes_node_type_idx on public.knowledge_nodes(node_type);
+create index if not exists knowledge_nodes_external_ref_idx on public.knowledge_nodes(external_ref);
+create index if not exists knowledge_nodes_created_at_idx on public.knowledge_nodes(created_at desc);
+create index if not exists knowledge_edges_edge_type_idx on public.knowledge_edges(edge_type);
+create index if not exists knowledge_edges_created_at_idx on public.knowledge_edges(created_at desc);
+create index if not exists knowledge_edges_from_node_id_idx on public.knowledge_edges(from_node_id);
+create index if not exists knowledge_edges_to_node_id_idx on public.knowledge_edges(to_node_id);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -171,6 +229,12 @@ before update on public.command_runs
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_knowledge_nodes_updated_at on public.knowledge_nodes;
+create trigger set_knowledge_nodes_updated_at
+before update on public.knowledge_nodes
+for each row
+execute function public.set_updated_at();
+
 alter table public.agents enable row level security;
 alter table public.tasks enable row level security;
 alter table public.work_logs enable row level security;
@@ -179,6 +243,8 @@ alter table public.batch_runs enable row level security;
 alter table public.daily_reports enable row level security;
 alter table public.runtime_snapshots enable row level security;
 alter table public.historian_exports enable row level security;
+alter table public.knowledge_nodes enable row level security;
+alter table public.knowledge_edges enable row level security;
 
 drop policy if exists "Allow public read agents" on public.agents;
 create policy "Allow public read agents"
@@ -236,6 +302,20 @@ for select
 to anon, authenticated
 using (true);
 
+drop policy if exists "Allow public read knowledge nodes" on public.knowledge_nodes;
+create policy "Allow public read knowledge nodes"
+on public.knowledge_nodes
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "Allow public read knowledge edges" on public.knowledge_edges;
+create policy "Allow public read knowledge edges"
+on public.knowledge_edges
+for select
+to anon, authenticated
+using (true);
+
 grant usage on schema public to anon, authenticated;
 grant select on public.agents to anon, authenticated;
 grant select on public.tasks to anon, authenticated;
@@ -245,3 +325,5 @@ grant select on public.batch_runs to anon, authenticated;
 grant select on public.daily_reports to anon, authenticated;
 grant select on public.runtime_snapshots to anon, authenticated;
 grant select on public.historian_exports to anon, authenticated;
+grant select on public.knowledge_nodes to anon, authenticated;
+grant select on public.knowledge_edges to anon, authenticated;

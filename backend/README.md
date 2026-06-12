@@ -248,3 +248,36 @@ ARCHIVEOS_OBSIDIAN_VAULT_PATH=
 Historian 상태 API:
 
 - `GET /api/historian/status`
+
+## Historian v2 Knowledge Graph MVP
+
+Historian v2는 실행 agent가 아니라 Supabase metadata 관계 저장 계층입니다. ArchiveOS 운영 이벤트, 보고서, 결과, incident, Obsidian note 사이의 보수적인 관계만 저장합니다.
+
+테이블:
+
+- `knowledge_nodes`
+- `knowledge_edges`
+
+자동 생성되는 대표 관계:
+
+- `daily_report exported_to obsidian_note`
+- `nightly_review exported_to obsidian_note`
+- `builder_result reviewed_by reviewer_result`
+- `incident mentioned_in daily_report`
+
+API:
+
+- `GET /api/knowledge/overview`
+- `GET /api/knowledge/recent`
+- `GET /api/knowledge/node/:id`
+- `GET /api/knowledge/search?q=`
+- `GET /api/knowledge/related?external_ref=`
+
+제한:
+
+- OpenAI API 없음
+- embeddings/vector search 없음
+- graph database 없음
+- recursive traversal 없음
+- Obsidian 양방향 sync 없음
+- 절대 vault path 노출 없음

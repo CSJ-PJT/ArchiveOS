@@ -5,19 +5,26 @@ import {
   getDashboardData,
   getBackendHealth,
   getHistorianStatus,
+  getKnowledgeOverview,
+  getRelatedKnowledge,
   getLatestBatchStatus,
   getLatestDailyReport,
   getLocalActionProjects,
   getLocalRuntimeStatus,
   getRecentCommands,
+  getRecentKnowledgeNodes,
   getRecentRuntimeEvents,
   runLocalAction,
+  searchKnowledgeNodes,
   type LocalAction,
   type LocalActionProject,
   type LocalActionResult,
   type LocalRuntimeStatus,
   type LatestBatchStatus,
   type HistorianStatus,
+  type KnowledgeNode,
+  type KnowledgeOverview,
+  type RelatedKnowledgeGroup,
   type RuntimeEvent,
 } from "./lib/backendApi";
 import type {
@@ -293,6 +300,9 @@ function OperationsLayout({
   const [batchStatusError, setBatchStatusError] = useState<string | null>(null);
   const [historianStatus, setHistorianStatus] = useState<HistorianStatus | null>(null);
   const [historianError, setHistorianError] = useState<string | null>(null);
+  const [knowledgeOverview, setKnowledgeOverview] = useState<KnowledgeOverview | null>(null);
+  const [recentKnowledgeNodes, setRecentKnowledgeNodes] = useState<KnowledgeNode[]>([]);
+  const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
   const [focusMode, setFocusMode] = useState(false);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
 
@@ -302,12 +312,14 @@ function OperationsLayout({
     refreshConsistency();
     refreshBatchStatus();
     refreshHistorianStatus();
+    refreshKnowledge();
     const timer = window.setInterval(() => {
       refreshRuntime({ silent: true });
       refreshRuntimeEvents({ silent: true });
       refreshConsistency({ silent: true });
       refreshBatchStatus({ silent: true });
       refreshHistorianStatus({ silent: true });
+      refreshKnowledge({ silent: true });
     }, 5000);
 
     return () => window.clearInterval(timer);
@@ -398,6 +410,23 @@ function OperationsLayout({
     }
   }
 
+  async function refreshKnowledge(options: { silent?: boolean } = {}) {
+    if (!options.silent) {
+      setKnowledgeError(null);
+    }
+
+    try {
+      const [overview, recent] = await Promise.all([
+        getKnowledgeOverview(),
+        getRecentKnowledgeNodes(12),
+      ]);
+      setKnowledgeOverview(overview);
+      setRecentKnowledgeNodes(recent);
+    } catch (error) {
+      setKnowledgeError(error instanceof Error ? error.message : "Knowledge graph is not reachable.");
+    }
+  }
+
   const warningCount = getPipelineWarningMessages(runtimeStatus).length;
   const operatorActive = Boolean(runtimeStatus?.queue.processing || runtimeStatus?.processes.implementer || runtimeStatus?.processes.reviewer || runtimeStatus?.processes.reviewer_bridge);
 
@@ -462,7 +491,13 @@ function OperationsLayout({
       ) : null}
 
       {view === "knowledge" ? (
-        <KnowledgeView historianStatus={historianStatus} error={historianError} />
+        <KnowledgeView
+          historianStatus={historianStatus}
+          historianError={historianError}
+          knowledgeOverview={knowledgeOverview}
+          recentNodes={recentKnowledgeNodes}
+          knowledgeError={knowledgeError}
+        />
       ) : null}
 
       {view === "github" ? <GitHubView runtimeStatus={runtimeStatus} /> : null}
@@ -597,15 +632,18 @@ function DashboardView({
           <div className="grid gap-5 xl:grid-cols-2">
             <Panel title="Latest Builder Result">
               {runtimeStatus?.latest_details.builder ? (
-                <RuntimeResult
-                  title={runtimeStatus.latest_details.builder.task_id ?? "Unknown builder task"}
-                  status={runtimeStatus.latest_details.builder.status ?? "unknown"}
-                  timestamp={runtimeStatus.latest_details.builder.finished_at}
-                  lastUpdated={runtimeStatus.latest_details.builder.finished_at ?? runtimeStatus.latest.outbox?.updated_at ?? null}
-                  sourceLabel="live MCP"
-                  body={runtimeStatus.latest_details.builder.summary ?? "No builder summary captured."}
-                  imageRef={runtimeStatus.latest_details.builder.image_ref}
-                />
+                <div className="grid gap-3">
+                  <RuntimeResult
+                    title={runtimeStatus.latest_details.builder.task_id ?? "Unknown builder task"}
+                    status={runtimeStatus.latest_details.builder.status ?? "unknown"}
+                    timestamp={runtimeStatus.latest_details.builder.finished_at}
+                    lastUpdated={runtimeStatus.latest_details.builder.finished_at ?? runtimeStatus.latest.outbox?.updated_at ?? null}
+                    sourceLabel="live MCP"
+                    body={runtimeStatus.latest_details.builder.summary ?? "No builder summary captured."}
+                    imageRef={runtimeStatus.latest_details.builder.image_ref}
+                  />
+                  <RelatedKnowledgeMini externalRef={runtimeStatus.latest.outbox?.name ?? runtimeStatus.latest_details.builder.task_id ?? null} />
+                </div>
               ) : (
                 <EmptyState title="No live builder result" detail="No readable MCP builder result payload was returned." muted />
               )}
@@ -613,15 +651,18 @@ function DashboardView({
 
             <Panel title="Latest Reviewer Result">
               {runtimeStatus?.latest_details.reviewer ? (
-                <RuntimeResult
-                  title={runtimeStatus.latest_details.reviewer.reviewed_task_id ?? "Unknown reviewed task"}
-                  status={runtimeStatus.latest_details.reviewer.verdict ?? "unknown"}
-                  timestamp={runtimeStatus.latest_details.reviewer.reviewed_at}
-                  lastUpdated={runtimeStatus.latest_details.reviewer.reviewed_at ?? runtimeStatus.latest.review?.updated_at ?? null}
-                  sourceLabel="live MCP"
-                  body={runtimeStatus.latest_details.reviewer.summary ?? "No reviewer summary captured."}
-                  imageRef={runtimeStatus.latest_details.reviewer.image_ref}
-                />
+                <div className="grid gap-3">
+                  <RuntimeResult
+                    title={runtimeStatus.latest_details.reviewer.reviewed_task_id ?? "Unknown reviewed task"}
+                    status={runtimeStatus.latest_details.reviewer.verdict ?? "unknown"}
+                    timestamp={runtimeStatus.latest_details.reviewer.reviewed_at}
+                    lastUpdated={runtimeStatus.latest_details.reviewer.reviewed_at ?? runtimeStatus.latest.review?.updated_at ?? null}
+                    sourceLabel="live MCP"
+                    body={runtimeStatus.latest_details.reviewer.summary ?? "No reviewer summary captured."}
+                    imageRef={runtimeStatus.latest_details.reviewer.image_ref}
+                  />
+                  <RelatedKnowledgeMini externalRef={runtimeStatus.latest.review?.name ?? runtimeStatus.latest_details.reviewer.reviewed_task_id ?? null} />
+                </div>
               ) : (
                 <EmptyState title="No live reviewer result" detail="No readable MCP reviewer result payload was returned." muted />
               )}
@@ -673,7 +714,10 @@ function DecisionsView({
             <CompactValue value={runtimeStatus?.latest.outbox?.name ?? "No linked result file"} className="mt-3 text-xs text-slate-500" copyable={Boolean(runtimeStatus?.latest.outbox?.name)} />
             <CompactValue value={runtimeStatus?.latest.review?.name ?? "No linked review file"} className="mt-2 text-xs text-slate-500" copyable={Boolean(runtimeStatus?.latest.review?.name)} />
           </div>
-          <ApprovalRecorder targetTask={targetTask} onRecorded={onRecorded} />
+          <div className="grid gap-3">
+            <ApprovalRecorder targetTask={targetTask} onRecorded={onRecorded} />
+            <RelatedKnowledgeMini externalRef={targetTask} />
+          </div>
         </div>
       </Panel>
       <Panel title="Recorded Decisions">
@@ -742,6 +786,7 @@ function DailyReportStatusCard({
           ) : latestDailyReport.historian_export_reason ? (
             <p className="mt-2 text-xs leading-5 text-slate-500">Historian: {latestDailyReport.historian_export_reason}</p>
           ) : null}
+          <RelatedKnowledgeMini externalRef={`daily_report:${latestDailyReport.target_date}`} />
         </div>
       ) : (
         <EmptyState
@@ -870,29 +915,54 @@ function TimelineView({
 
 function KnowledgeView({
   historianStatus,
-  error,
+  historianError,
+  knowledgeOverview,
+  recentNodes,
+  knowledgeError,
 }: {
   historianStatus: HistorianStatus | null;
-  error: string | null;
+  historianError: string | null;
+  knowledgeOverview: KnowledgeOverview | null;
+  recentNodes: KnowledgeNode[];
+  knowledgeError: string | null;
 }) {
-  const memoryTypes = ["Daily Reports", "Decisions", "Incidents", "Architecture", "Batches"];
+  const memoryTypes = [
+    { label: "Decisions", type: "decision" },
+    { label: "Incidents", type: "incident" },
+    { label: "Daily Reports", type: "daily_report" },
+    { label: "Nightly Reviews", type: "nightly_review" },
+    { label: "Builder Results", type: "builder_result" },
+    { label: "Reviewer Results", type: "reviewer_result" },
+    { label: "Obsidian Notes", type: "obsidian_note" },
+  ];
 
   return (
     <div className="grid gap-5">
-      <Panel title="Historian Status">
-        {error ? (
-          <EmptyState title="Historian status unavailable" detail={error} />
+      <Panel title="Knowledge Health">
+        {historianError || knowledgeError ? (
+          <EmptyState
+            title="Knowledge status unavailable"
+            detail={historianError ?? knowledgeError ?? "Knowledge graph status is not reachable."}
+          />
         ) : (
           <div className="grid gap-4">
-            <SourceLabel label="backend/local-only Obsidian Markdown export" />
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <SourceLabel label="metadata-only Supabase relationships + backend/local Obsidian export" />
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
               <RuntimeMetric
-                label="Configured"
+                label="Historian"
                 value={historianStatus?.configured ? "yes" : "no"}
               />
               <RuntimeMetric
-                label="Enabled"
+                label="Obsidian export"
                 value={historianStatus?.enabled ? "yes" : "no"}
+              />
+              <RuntimeMetric
+                label="Nodes"
+                value={String(knowledgeOverview?.totalNodes ?? 0)}
+              />
+              <RuntimeMetric
+                label="Edges"
+                value={String(knowledgeOverview?.totalEdges ?? 0)}
               />
               <RuntimeMetric
                 label="Last export"
@@ -914,32 +984,240 @@ function KnowledgeView({
       </Panel>
 
       <Panel title="Memory Types">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {memoryTypes.map((type) => (
-            <div key={type} className="rounded-md border border-white/10 bg-black/20 p-4">
-              <p className="text-sm font-semibold text-white">{type}</p>
-              <p className="mt-2 text-xs leading-5 text-slate-500">Markdown export target</p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+          {memoryTypes.map((item) => (
+            <div key={item.type} className="rounded-md border border-white/10 bg-black/20 p-4">
+              <p className="text-sm font-semibold text-white">{item.label}</p>
+              <p className="mt-2 text-2xl font-semibold text-cyan-100">
+                {knowledgeOverview?.countsByType?.[item.type] ?? 0}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">{item.type}</p>
             </div>
           ))}
         </div>
       </Panel>
 
-      <Panel title="Runtime vs Long-term Memory">
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-md border border-cyan-300/20 bg-cyan-300/[0.04] p-4">
-            <p className="text-sm font-semibold text-cyan-100">ArchiveOS</p>
-            <p className="mt-2 text-sm leading-6 text-slate-400">
-              Live operations, queue visibility, runtime status, reports, and PM dashboard monitoring.
-            </p>
-          </div>
-          <div className="rounded-md border border-emerald-300/20 bg-emerald-300/[0.04] p-4">
-            <p className="text-sm font-semibold text-emerald-100">Obsidian Vault</p>
-            <p className="mt-2 text-sm leading-6 text-slate-400">
-              Long-term memory for decisions, incidents, daily reports, architecture notes, and batch records.
-            </p>
-          </div>
-        </div>
+      <Panel title="Recent Memory">
+        <KnowledgeNodeList nodes={recentNodes} />
       </Panel>
+
+      <KnowledgeSearchPanel />
+
+      <Panel title="Graph MVP">
+        <p className="mb-4 text-sm leading-6 text-slate-400">
+          Compact relationship list only. No force graph, embeddings, vector search, or graph database is enabled.
+        </p>
+        <KnowledgeEdgeTable edges={knowledgeOverview?.latestEdges ?? []} />
+      </Panel>
+    </div>
+  );
+}
+
+function KnowledgeNodeList({ nodes }: { nodes: KnowledgeNode[] }) {
+  if (!nodes.length) {
+    return <EmptyState title="No memory nodes yet" detail="Run Nightly Review or Daily Report after the knowledge graph schema is applied." muted />;
+  }
+
+  return (
+    <div className="grid gap-3">
+      {nodes.map((node) => (
+        <article key={node.id} className="rounded-md border border-white/10 bg-black/20 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge className="bg-cyan-500/15 text-cyan-200 ring-cyan-400/25">{node.node_type}</StatusBadge>
+            <span className="rounded bg-black/20 px-2 py-1 text-xs text-slate-400">{node.source ?? "unknown"}</span>
+            <span className="text-xs text-slate-500" title={formatExactDate(node.created_at)}>{formatRelativeTime(node.created_at)}</span>
+          </div>
+          <p className="mt-3 truncate text-sm font-semibold text-white" title={node.title}>{node.title}</p>
+          <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-400" title={node.summary ?? ""}>{node.summary ?? "No summary."}</p>
+          {node.external_ref ? (
+            <CompactValue value={node.external_ref} className="mt-2 text-xs text-slate-500" copyable />
+          ) : null}
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function KnowledgeSearchPanel() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<KnowledgeNode[]>([]);
+  const [related, setRelated] = useState<RelatedKnowledgeGroup[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function search() {
+    const clean = query.trim();
+    if (!clean) {
+      setResults([]);
+      setRelated([]);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const nodes = await searchKnowledgeNodes(clean, 12);
+      setResults(nodes);
+      if (nodes[0]?.external_ref) {
+        setRelated(await getRelatedKnowledge({ external_ref: nodes[0].external_ref }));
+      } else {
+        setRelated([]);
+      }
+    } catch (searchError) {
+      setError(searchError instanceof Error ? searchError.message : "Knowledge search failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Panel title="Related Context">
+      <div className="grid gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <input
+            className="min-h-11 flex-1 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-300/50"
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") search();
+            }}
+            placeholder="Search task filename, result filename, review filename, note path, or keyword"
+            value={query}
+          />
+          <button
+            className="rounded-md bg-cyan-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={loading}
+            onClick={search}
+            type="button"
+          >
+            {loading ? "Searching" : "Search"}
+          </button>
+        </div>
+        {error ? <EmptyState title="Related context unavailable" detail={error} /> : null}
+        <KnowledgeNodeList nodes={results} />
+        {related.length ? (
+          <div className="grid gap-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Related groups</p>
+            {related.map((group) => (
+              <div key={group.node.id} className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                <p className="text-sm font-semibold text-white">{group.node.title}</p>
+                <KnowledgeEdgeTable edges={group.related} />
+              </div>
+            ))}
+          </div>
+        ) : results.length ? (
+          <p className="text-sm text-slate-500">No related memory yet.</p>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+function KnowledgeEdgeTable({ edges }: { edges: Array<KnowledgeOverview["latestEdges"][number]> }) {
+  if (!edges.length) {
+    return <EmptyState title="No graph relationships yet" detail="Edges will appear after report/export batches create conservative links." muted />;
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[42rem] text-left text-sm">
+        <thead className="text-xs uppercase tracking-[0.14em] text-slate-500">
+          <tr>
+            <th className="px-3 py-2">From</th>
+            <th className="px-3 py-2">Edge</th>
+            <th className="px-3 py-2">To</th>
+            <th className="px-3 py-2">Reason</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/10">
+          {edges.map((edge) => (
+            <tr key={edge.id}>
+              <td className="max-w-[14rem] truncate px-3 py-2 text-slate-300" title={edge.from_node?.title ?? edge.from_node_id}>
+                {edge.from_node?.title ?? edge.from_node_id}
+              </td>
+              <td className="px-3 py-2">
+                <StatusBadge className="bg-violet-500/15 text-violet-200 ring-violet-400/25">{edge.edge_type}</StatusBadge>
+              </td>
+              <td className="max-w-[14rem] truncate px-3 py-2 text-slate-300" title={edge.to_node?.title ?? edge.to_node_id}>
+                {edge.to_node?.title ?? edge.to_node_id}
+              </td>
+              <td className="max-w-[16rem] truncate px-3 py-2 text-slate-500" title={readEdgeReason(edge)}>
+                {readEdgeReason(edge)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function RelatedKnowledgeMini({ externalRef }: { externalRef: string | null }) {
+  const [groups, setGroups] = useState<RelatedKnowledgeGroup[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      if (!externalRef) {
+        setGroups([]);
+        setLoaded(true);
+        return;
+      }
+
+      try {
+        const relatedGroups = await getRelatedKnowledge({ external_ref: externalRef });
+        if (!cancelled) {
+          setGroups(relatedGroups);
+        }
+      } catch {
+        if (!cancelled) {
+          setGroups([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoaded(true);
+        }
+      }
+    }
+
+    setLoaded(false);
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [externalRef]);
+
+  const relatedItems = groups.flatMap((group) =>
+    group.related.map((edge) => ({
+      edge,
+      node: edge.from_node?.id === group.node.id ? edge.to_node : edge.from_node,
+    })),
+  ).slice(0, 3);
+
+  return (
+    <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Related Knowledge</p>
+      {!externalRef ? (
+        <p className="mt-2 text-sm text-slate-500">No related memory yet</p>
+      ) : !loaded ? (
+        <p className="mt-2 text-sm text-slate-500">Loading related memory...</p>
+      ) : relatedItems.length ? (
+        <div className="mt-3 grid gap-2">
+          {relatedItems.map((item) => (
+            <div key={item.edge.id} className="flex min-w-0 items-center gap-2 text-sm">
+              <StatusBadge className="bg-violet-500/15 text-violet-200 ring-violet-400/25">{item.edge.edge_type}</StatusBadge>
+              <span className="min-w-0 truncate text-slate-300" title={item.node?.title ?? "Unknown node"}>
+                {item.node?.title ?? "Unknown node"}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-slate-500">No related memory yet</p>
+      )}
     </div>
   );
 }
@@ -2777,6 +3055,11 @@ function getOperationStatusLabel(status: DailyReport["status"]) {
 function readBatchReason(run: LatestBatchStatus["daily_report"]) {
   const reason = run?.metadata?.reason;
   return typeof reason === "string" ? reason : "";
+}
+
+function readEdgeReason(edge: { metadata?: Record<string, unknown> }) {
+  const reason = edge.metadata?.reason;
+  return typeof reason === "string" ? reason : "metadata relationship";
 }
 
 function getLiveLoopState(runtimeStatus: LocalRuntimeStatus | null) {

@@ -14,7 +14,14 @@ import {
   getRecentRuntimeSnapshots,
 } from "./batches/store.js";
 import { findProject, projects } from "./config/projects.js";
-import { isHistorianConfigured } from "./historian/index.js";
+import {
+  getKnowledgeNode,
+  getKnowledgeOverview,
+  getRecentKnowledgeNodes,
+  getRelatedKnowledge,
+  isHistorianConfigured,
+  searchKnowledge,
+} from "./historian/index.js";
 import { getLocalRuntimeStatus } from "./lib/localRuntime.js";
 import { supabaseAdmin } from "./lib/supabaseAdmin.js";
 
@@ -336,6 +343,53 @@ app.get("/api/historian/status", async (_request, response) => {
   }
 });
 
+app.get("/api/knowledge/overview", async (_request, response) => {
+  try {
+    response.json({ data: await getKnowledgeOverview() });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch knowledge overview." });
+  }
+});
+
+app.get("/api/knowledge/recent", async (request, response) => {
+  try {
+    response.json({ data: await getRecentKnowledgeNodes(readLimit(request.query.limit)) });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch recent knowledge nodes." });
+  }
+});
+
+app.get("/api/knowledge/search", async (request, response) => {
+  const query = typeof request.query.q === "string" ? request.query.q : "";
+
+  try {
+    response.json({ data: await searchKnowledge(query, readLimit(request.query.limit)) });
+  } catch {
+    response.status(500).json({ error: "Failed to search knowledge nodes." });
+  }
+});
+
+app.get("/api/knowledge/related", async (request, response) => {
+  try {
+    response.json({
+      data: await getRelatedKnowledge({
+        external_ref: typeof request.query.external_ref === "string" ? request.query.external_ref : null,
+        node_type: typeof request.query.node_type === "string" ? request.query.node_type : null,
+      }),
+    });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch related knowledge." });
+  }
+});
+
+app.get("/api/knowledge/node/:id", async (request, response) => {
+  try {
+    response.json({ data: await getKnowledgeNode(request.params.id) });
+  } catch {
+    response.status(404).json({ error: "Knowledge node not found." });
+  }
+});
+
 app.use(
   (
     error: Error,
@@ -444,6 +498,11 @@ function validateWorkLogBody(body: unknown): ValidationResult {
       content: candidate.content.trim(),
     },
   };
+}
+
+function readLimit(value: unknown) {
+  const numeric = typeof value === "string" ? Number(value) : 20;
+  return Number.isFinite(numeric) ? Math.min(Math.max(Math.floor(numeric), 1), 100) : 20;
 }
 
 async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {

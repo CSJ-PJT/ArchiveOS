@@ -1,6 +1,6 @@
 import { addDaysToDateString, getSeoulDateString, isKoreanBusinessDay } from "./businessDays.js";
 import { sendDiscordMessage } from "./discord.js";
-import { exportDailyReportToObsidian } from "../historian/index.js";
+import { exportDailyReportToObsidian, linkDailyReportExport } from "../historian/index.js";
 import type { ExportResult } from "../historian/index.js";
 import { buildNightlyReviewSummary } from "./nightlyReview.js";
 import {
@@ -234,6 +234,12 @@ async function persistDailyAndBatch(
       reason: historianResult.success ? null : historianResult.reason ?? null,
       source_id: dailyReport.id,
     }).catch(() => undefined);
+    await linkDailyReportExport(dailyReport, historianResult).catch((error) => {
+      persisted.metadata = {
+        ...persisted.metadata,
+        knowledge_graph_error: error instanceof Error ? error.message : "Unknown knowledge graph link error.",
+      };
+    });
     persisted.metadata = {
       ...persisted.metadata,
       daily_report_id: dailyReport.id,

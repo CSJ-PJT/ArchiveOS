@@ -352,3 +352,36 @@ Markdown export 대상 폴더:
 - graph database 없음
 - UI file browser/edit 없음
 - OpenAI API, Codex 직접 제어, MCP 실행 제어 없음
+
+## Historian v2 Knowledge Graph MVP
+
+Historian v2는 전체 graph database가 아니라 Supabase metadata 관계 테이블 기반의 Knowledge Graph MVP입니다. 목적은 PM이 "왜 이런 일이 발생했는가"와 "어떤 기록이 연결되어 있는가"를 빠르게 확인하는 것입니다.
+
+저장 모델:
+
+- `knowledge_nodes`: task, builder_result, reviewer_result, decision, incident, daily_report, nightly_review, batch_run, command, obsidian_note, architecture_note
+- `knowledge_edges`: exported_to, reviewed_by, mentioned_in, relates_to 등 보수적인 관계
+
+자동 연결:
+
+- Daily Report → Obsidian note: `exported_to`
+- Nightly Review → Obsidian note: `exported_to`
+- Builder result → Reviewer result: `reviewed_by`
+- Warning/incident → report/review: `mentioned_in`
+
+명시적 제한:
+
+- vector search 없음
+- embeddings 없음
+- graph database 없음
+- recursive graph traversal 없음
+- Obsidian bidirectional sync 없음
+- 절대 vault path frontend 노출 없음
+
+읽기 전용 API:
+
+- `GET /api/knowledge/overview`
+- `GET /api/knowledge/recent`
+- `GET /api/knowledge/node/:id`
+- `GET /api/knowledge/search?q=`
+- `GET /api/knowledge/related?external_ref=`
