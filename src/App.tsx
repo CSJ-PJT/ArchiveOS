@@ -803,130 +803,283 @@ function DashboardView({
 }) {
   return (
     <div className="grid gap-5">
-      <TopStatusStrip
+      <DashboardHero
         runtimeStatus={runtimeStatus}
         runtimeError={runtimeError}
         latestArchitectureReview={latestArchitectureReview}
-      />
-      <RuntimeSummary
-        runtimeStatus={runtimeStatus}
-        runtimeError={runtimeError}
-        isRefreshing={isRefreshingRuntime}
-        refresh={refreshRuntime}
-        onRecorded={refreshRuntimeEvents}
-        showNowWorking={false}
+        readiness={platformReadiness}
+        endpointHealth={endpointHealth}
+        kpiOverview={kpiOverview}
+        meshOverview={meshOverview}
+        latestDailyReport={latestDailyReport}
       />
 
       {focusMode ? null : (
         <>
-          <Panel title="Pipeline Warnings">
-            <PipelineWarnings runtimeStatus={runtimeStatus} />
-          </Panel>
+          <DashboardMetricStrip
+            endpointHealth={endpointHealth}
+            knowledgeOverview={knowledgeOverview}
+            meshOverview={meshOverview}
+            kpiOverview={kpiOverview}
+            latestDailyReport={latestDailyReport}
+          />
 
-          <div className="grid gap-5 xl:grid-cols-2">
-            <Panel title="System Health">
-              <SystemHealthCard
-                platformHealth={platformHealth}
-                endpointHealth={endpointHealth}
-                error={platformHealthError}
-              />
-            </Panel>
-
-            <Panel title="ArchiveOS Readiness Score">
-              <ReadinessScoreCard readiness={platformReadiness} error={platformHealthError} />
-            </Panel>
-          </div>
-
-          <Panel title="Daily Report Status">
-            <DailyReportStatusCard
-              batchStatus={batchStatus}
-              latestDailyReport={latestDailyReport}
-              error={batchStatusError}
-            />
-          </Panel>
-
-          <Panel title="Agent Mesh Summary">
-            <MeshSummaryCard meshOverview={meshOverview} error={meshError} />
-          </Panel>
-
-          <Panel title="KPI Summary">
-            <KpiSummaryCard kpiOverview={kpiOverview} error={kpiError} />
-          </Panel>
-
-          <Panel title="Knowledge Graph Summary">
-            <KnowledgeGraphSummaryCard knowledgeOverview={knowledgeOverview} />
-          </Panel>
-
-          <Panel title="Architect Summary">
-            <ArchitectSummaryCard review={latestArchitectureReview} />
-          </Panel>
-
-          <Panel title="Portfolio Snapshot">
-            <PortfolioSnapshotCard
-              readiness={platformReadiness}
+          <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+            <DashboardAlerts
+              runtimeStatus={runtimeStatus}
+              runtimeError={runtimeError}
               endpointHealth={endpointHealth}
-              knowledgeOverview={knowledgeOverview}
-              kpiOverview={kpiOverview}
-              meshOverview={meshOverview}
-              latestDailyReport={latestDailyReport}
-              publicAccessStatus={publicAccessStatus}
+              platformHealthError={platformHealthError}
+              kpiError={kpiError}
+              meshError={meshError}
+              batchStatusError={batchStatusError}
             />
-          </Panel>
-
-          <div className="grid gap-5 xl:grid-cols-2">
-            <Panel title="Latest Builder Result">
-              {runtimeStatus?.latest_details.builder ? (
-                <div className="grid gap-3">
-                  <RuntimeResult
-                    title={runtimeStatus.latest_details.builder.task_id ?? "Unknown builder task"}
-                    status={runtimeStatus.latest_details.builder.status ?? "unknown"}
-                    timestamp={runtimeStatus.latest_details.builder.finished_at}
-                    lastUpdated={runtimeStatus.latest_details.builder.finished_at ?? runtimeStatus.latest.outbox?.updated_at ?? null}
-                    sourceLabel="live MCP"
-                    body={runtimeStatus.latest_details.builder.summary ?? "No builder summary captured."}
-                    imageRef={runtimeStatus.latest_details.builder.image_ref}
-                  />
-                  <RelatedKnowledgeMini externalRef={runtimeStatus.latest.outbox?.name ?? runtimeStatus.latest_details.builder.task_id ?? null} />
-                </div>
-              ) : (
-                <EmptyState title="No live builder result" detail="No readable MCP builder result payload was returned." muted />
-              )}
-            </Panel>
-
-            <Panel title="Latest Reviewer Result">
-              {runtimeStatus?.latest_details.reviewer ? (
-                <div className="grid gap-3">
-                  <RuntimeResult
-                    title={runtimeStatus.latest_details.reviewer.reviewed_task_id ?? "Unknown reviewed task"}
-                    status={runtimeStatus.latest_details.reviewer.verdict ?? "unknown"}
-                    timestamp={runtimeStatus.latest_details.reviewer.reviewed_at}
-                    lastUpdated={runtimeStatus.latest_details.reviewer.reviewed_at ?? runtimeStatus.latest.review?.updated_at ?? null}
-                    sourceLabel="live MCP"
-                    body={runtimeStatus.latest_details.reviewer.summary ?? "No reviewer summary captured."}
-                    imageRef={runtimeStatus.latest_details.reviewer.image_ref}
-                  />
-                  <RelatedKnowledgeMini externalRef={runtimeStatus.latest.review?.name ?? runtimeStatus.latest_details.reviewer.reviewed_task_id ?? null} />
-                </div>
-              ) : (
-                <EmptyState title="No live reviewer result" detail="No readable MCP reviewer result payload was returned." muted />
-              )}
-            </Panel>
+            <DashboardLatestEvidence runtimeStatus={runtimeStatus} />
           </div>
 
-          <Panel title="Screenshot Freshness" muted>
-            <EmptyState
-              title="No screenshot freshness signal yet"
-              detail="This placeholder will summarize proof screenshot freshness when that runtime source exists."
-              muted
-            />
-          </Panel>
-
-          <Panel title="Recent Timeline Preview">
+          <Panel title="Recent Activity">
             <TimelinePreview events={runtimeEvents} />
           </Panel>
         </>
       )}
     </div>
+  );
+}
+
+function DashboardHero({
+  runtimeStatus,
+  runtimeError,
+  latestArchitectureReview,
+  readiness,
+  endpointHealth,
+  kpiOverview,
+  meshOverview,
+  latestDailyReport,
+}: {
+  runtimeStatus: LocalRuntimeStatus | null;
+  runtimeError: string | null;
+  latestArchitectureReview: ArchitectureReview | null;
+  readiness: PlatformReadiness | null;
+  endpointHealth: EndpointHealth | null;
+  kpiOverview: KpiOverview | null;
+  meshOverview: MeshOverview | null;
+  latestDailyReport: DailyReport | null;
+}) {
+  const bottleneck = getPipelineBottleneck(runtimeStatus);
+  const warnings = getDashboardWarningMessages(runtimeStatus, runtimeError, endpointHealth, kpiOverview, meshOverview, latestDailyReport);
+  const systemState = runtimeError ? "offline" : runtimeStatus?.queue.processing ? "working" : runtimeStatus?.queue.inbox ? "waiting" : "idle";
+  const activeTask = runtimeStatus?.active_task ?? runtimeStatus?.latest_details.builder?.task_id ?? "No active task";
+  const currentWorker = getCurrentWorker(runtimeStatus);
+  const latestVerdict = runtimeStatus?.latest_details.reviewer?.verdict ?? "none";
+  const recommendedAction = getRecommendedPmAction(runtimeStatus, runtimeError, latestArchitectureReview, endpointHealth);
+
+  return (
+    <section className="rounded-lg border border-cyan-300/20 bg-gradient-to-br from-[#0e1824] via-[#0b1119] to-[#080b11] p-5 shadow-2xl shadow-cyan-950/20 sm:p-6">
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge className={getDashboardStateStyle(systemState)}>{systemState}</StatusBadge>
+            <StatusBadge className={readiness ? "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25" : "bg-slate-500/15 text-slate-200 ring-slate-400/20"}>
+              readiness {readiness ? `${readiness.score} ${readiness.grade}` : "unknown"}
+            </StatusBadge>
+            <StatusBadge className={warnings.length ? "bg-amber-500/15 text-amber-200 ring-amber-400/25" : "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25"}>
+              {warnings.length ? `${warnings.length} alerts` : "no critical alerts"}
+            </StatusBadge>
+          </div>
+          <h1 className="mt-4 text-2xl font-semibold text-white sm:text-3xl">ArchiveOS PM Operations Overview</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+            Read-only AI operations visibility. Decisions are recorded as PM memory; no Codex, MCP, OpenAI, or shell execution is triggered from the UI.
+          </p>
+        </div>
+        <div className="rounded-md border border-white/10 bg-black/25 p-4 xl:w-80">
+          <p className="text-xs uppercase tracking-[0.14em] text-cyan-300">Recommended PM action</p>
+          <p className="mt-2 text-sm leading-6 text-slate-100">{recommendedAction}</p>
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <RuntimeMetric label="Active task" value={activeTask} copyable={activeTask !== "No active task"} emphasized />
+        <RuntimeMetric label="Current worker" value={currentWorker} />
+        <RuntimeMetric label="Latest verdict" value={latestVerdict} />
+        <RuntimeMetric label="Runtime health" value={bottleneck.label} />
+        <RuntimeMetric label="Architect" value={getArchitectStatusLabel(latestArchitectureReview)} />
+        <RuntimeMetric label="Endpoint health" value={endpointHealth ? `${endpointHealth.summary.ok}/${endpointHealth.summary.total} online` : "unknown"} />
+      </div>
+    </section>
+  );
+}
+
+function DashboardMetricStrip({
+  endpointHealth,
+  knowledgeOverview,
+  meshOverview,
+  kpiOverview,
+  latestDailyReport,
+}: {
+  endpointHealth: EndpointHealth | null;
+  knowledgeOverview: KnowledgeOverview | null;
+  meshOverview: MeshOverview | null;
+  kpiOverview: KpiOverview | null;
+  latestDailyReport: DailyReport | null;
+}) {
+  const activeAgents = meshOverview?.agents.filter((agent) => ["working", "detected", "enabled", "clear"].includes(agent.status)).length ?? 0;
+  const offlineAgents = meshOverview?.agents.filter((agent) => ["not_detected", "disabled", "offline"].includes(agent.status)).length ?? 0;
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+      <RuntimeMetric label="Agents active/offline" value={meshOverview ? `${activeAgents}/${offlineAgents}` : "unknown"} />
+      <RuntimeMetric label="Knowledge nodes" value={String(knowledgeOverview?.totalNodes ?? 0)} />
+      <RuntimeMetric label="Knowledge edges" value={String(knowledgeOverview?.totalEdges ?? 0)} />
+      <RuntimeMetric label="Approval rate" value={kpiOverview ? formatKpiPercent(kpiOverview.quality.approvalRate) : "insufficient data"} />
+      <RuntimeMetric label="Warnings" value={kpiOverview ? formatKpiValue(kpiOverview.runtime.warningCount) : String(endpointHealth?.summary.error ?? 0)} />
+      <RuntimeMetric label="Daily report" value={latestDailyReport?.status ?? "not recorded"} />
+    </div>
+  );
+}
+
+function DashboardAlerts({
+  runtimeStatus,
+  runtimeError,
+  endpointHealth,
+  platformHealthError,
+  kpiError,
+  meshError,
+  batchStatusError,
+}: {
+  runtimeStatus: LocalRuntimeStatus | null;
+  runtimeError: string | null;
+  endpointHealth: EndpointHealth | null;
+  platformHealthError: string | null;
+  kpiError: string | null;
+  meshError: string | null;
+  batchStatusError: string | null;
+}) {
+  const warnings = [
+    ...getPipelineWarningMessages(runtimeStatus),
+    runtimeError ? "Runtime backend is unreachable. Check Operators and Settings diagnostics." : null,
+    platformHealthError ? "Endpoint health is unavailable. Restart backend from latest main if this persists." : null,
+    kpiError ? "KPI data is not available yet. Check KPI tab after batches run." : null,
+    meshError ? "Mesh data is not available yet. Check Mesh tab after backend sync." : null,
+    batchStatusError ? "Daily/Nightly batch status is not available yet." : null,
+    endpointHealth && endpointHealth.summary.missing + endpointHealth.summary.error > 0
+      ? `${endpointHealth.summary.missing + endpointHealth.summary.error} endpoint checks need attention.`
+      : null,
+  ].filter(Boolean).slice(0, 3) as string[];
+
+  return (
+    <Panel title="Critical Alerts">
+      {warnings.length ? (
+        <div className="grid gap-2">
+          {warnings.map((warning) => (
+            <p key={warning} className="rounded border border-amber-300/20 bg-amber-300/[0.06] p-3 text-sm leading-6 text-amber-100">
+              {warning}
+            </p>
+          ))}
+          <p className="text-xs text-slate-500">Open Timeline for history or Settings for endpoint diagnostics.</p>
+        </div>
+      ) : (
+        <EmptyState title="No critical alerts" detail="No stale runtime, endpoint, or batch warning is currently visible." muted />
+      )}
+    </Panel>
+  );
+}
+
+function DashboardLatestEvidence({ runtimeStatus }: { runtimeStatus: LocalRuntimeStatus | null }) {
+  const builder = runtimeStatus?.latest_details.builder ?? null;
+  const reviewer = runtimeStatus?.latest_details.reviewer ?? null;
+
+  return (
+    <Panel title="Latest Evidence">
+      <div className="grid gap-3 md:grid-cols-2">
+        <EvidenceTile
+          kind="Builder"
+          title={builder?.task_id ?? runtimeStatus?.latest.outbox?.name ?? "No builder result"}
+          status={builder?.status ?? "none"}
+          timestamp={builder?.finished_at ?? runtimeStatus?.latest.outbox?.updated_at ?? null}
+          summary={builder?.summary ?? "No builder summary captured yet."}
+          externalRef={runtimeStatus?.latest.outbox?.name ?? builder?.task_id ?? null}
+        />
+        <EvidenceTile
+          kind="Reviewer"
+          title={reviewer?.reviewed_task_id ?? runtimeStatus?.latest.review?.name ?? "No reviewer result"}
+          status={reviewer?.verdict ?? "none"}
+          timestamp={reviewer?.reviewed_at ?? runtimeStatus?.latest.review?.updated_at ?? null}
+          summary={reviewer?.summary ?? "No reviewer summary captured yet."}
+          externalRef={runtimeStatus?.latest.review?.name ?? reviewer?.reviewed_task_id ?? null}
+        />
+      </div>
+    </Panel>
+  );
+}
+
+function EvidenceTile({
+  kind,
+  title,
+  status,
+  timestamp,
+  summary,
+  externalRef,
+}: {
+  kind: string;
+  title: string;
+  status: string;
+  timestamp: string | null;
+  summary: string;
+  externalRef: string | null;
+}) {
+  return (
+    <article className="rounded-md border border-white/10 bg-black/20 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{kind}</p>
+          <CompactValue value={title} className="mt-2 text-sm font-semibold text-white" copyable={title !== `No ${kind.toLowerCase()} result`} />
+        </div>
+        <StatusBadge className={getResultStatusStyle(status)}>{status}</StatusBadge>
+      </div>
+      <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-300" title={summary}>{summary}</p>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs text-slate-500" title={timestamp ? formatExactDate(timestamp) : "No timestamp available"}>
+          {timestamp ? formatRelativeTime(timestamp) : "unknown time"}
+        </span>
+        <RelatedKnowledgeCount externalRef={externalRef} />
+      </div>
+    </article>
+  );
+}
+
+function RelatedKnowledgeCount({ externalRef }: { externalRef: string | null }) {
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCount() {
+      if (!externalRef) {
+        setCount(0);
+        return;
+      }
+      try {
+        const relatedGroups = await getRelatedKnowledge({ external_ref: externalRef });
+        if (!cancelled) {
+          setCount(relatedGroups.reduce((total, group) => total + group.related.length, 0));
+        }
+      } catch {
+        if (!cancelled) {
+          setCount(null);
+        }
+      }
+    }
+
+    loadCount();
+    return () => {
+      cancelled = true;
+    };
+  }, [externalRef]);
+
+  return (
+    <span className="rounded border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-slate-400">
+      related {count ?? "unknown"}
+    </span>
   );
 }
 
@@ -947,36 +1100,87 @@ function DecisionsView({
     runtimeStatus?.latest_details.builder?.task_id ??
     runtimeStatus?.latest.outbox?.name ??
     null;
+  const latestDecisionTime = decisions[0]?.created_at ?? null;
+  const pendingCount = targetTask ? 1 : 0;
+  const architectWarnings = latestArchitectureReview?.findings.length ?? 0;
+  const recommendedAction = latestArchitectureReview?.status === "blocked"
+    ? "Architect blocked this target. Record rejection or request decomposition before implementation continues."
+    : targetTask
+      ? "Review the latest evidence and record approval or rejection."
+      : "No active runtime target is available. Wait for a builder/reviewer result before recording a PM decision.";
 
   return (
     <div className="grid gap-5">
-      <Panel title="PM Decision Console">
+      <Panel title="PM Decision Center">
         <SourceLabel label="Writes real PM decisions to Supabase work_logs with log_type=decision. No agent execution is triggered." />
-        <div className="mt-4 grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
-          <div className="rounded-md border border-white/10 bg-black/20 p-4">
-            <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Recorded PM decisions</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{decisions.length}</p>
-            <p className="mt-2 text-sm leading-6 text-slate-400">
-              Approve or reject the current runtime target. The decision is stored as operational memory and appears in the decision archive.
-            </p>
-            <CompactValue value={targetTask ?? "No linked runtime task"} className="mt-3 text-sm text-slate-300" copyable={Boolean(targetTask)} />
-            <CompactValue value={runtimeStatus?.latest.outbox?.name ?? "No linked result file"} className="mt-3 text-xs text-slate-500" copyable={Boolean(runtimeStatus?.latest.outbox?.name)} />
-            <CompactValue value={runtimeStatus?.latest.review?.name ?? "No linked review file"} className="mt-2 text-xs text-slate-500" copyable={Boolean(runtimeStatus?.latest.review?.name)} />
-          </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <RuntimeMetric label="Pending decision targets" value={String(pendingCount)} emphasized={pendingCount > 0} />
+          <RuntimeMetric label="Recorded decisions" value={String(decisions.length)} />
+          <RuntimeMetric label="Architect warnings" value={String(architectWarnings)} />
+          <RuntimeMetric label="Related knowledge" value={targetTask ? "linked by target" : "none"} />
+          <RuntimeMetric label="Last decision" value={latestDecisionTime ? formatRelativeTime(latestDecisionTime) : "none"} />
+        </div>
+        <div className="mt-4 rounded-md border border-cyan-300/20 bg-cyan-300/[0.04] p-4">
+          <p className="text-xs uppercase tracking-[0.14em] text-cyan-300">Current recommended action</p>
+          <p className="mt-2 text-sm leading-6 text-slate-100">{recommendedAction}</p>
+        </div>
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1.1fr]">
           <div className="grid gap-3">
-            <ApprovalRecorder targetTask={targetTask} onRecorded={onRecorded} />
-            <RelatedKnowledgeMini externalRef={targetTask} />
+            <DecisionTargetCard runtimeStatus={runtimeStatus} targetTask={targetTask} />
             <RelatedArchitectReviewMini review={latestArchitectureReview} targetRef={targetTask} />
+            <RelatedKnowledgeMini externalRef={targetTask} />
+          </div>
+          <div className="rounded-md border border-white/10 bg-black/20 p-4">
+            <p className="text-sm font-semibold text-white">Record PM decision</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              This stores PM intent as operational memory only. It does not approve, reject, or execute MCP/Codex work automatically.
+            </p>
+            <ApprovalRecorder targetTask={targetTask} onRecorded={onRecorded} />
           </div>
         </div>
       </Panel>
       <Panel title="Recorded Decisions">
         <SourceLabel label="non-seed Supabase work_logs where log_type=decision" />
         <div className="mt-3">
-          <LogList logs={decisions} />
+          {decisions.length ? (
+            <LogList logs={decisions} />
+          ) : (
+            <EmptyState
+              title="No PM decisions recorded yet"
+              detail="Use Record Approval or Record Rejection above when a real runtime target is ready. Seed/demo decisions remain hidden."
+              muted
+            />
+          )}
         </div>
       </Panel>
     </div>
+  );
+}
+
+function DecisionTargetCard({
+  runtimeStatus,
+  targetTask,
+}: {
+  runtimeStatus: LocalRuntimeStatus | null;
+  targetTask: string | null;
+}) {
+  return (
+    <article className="rounded-md border border-white/10 bg-black/20 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-white">Decision target</p>
+          <p className="mt-1 text-xs text-slate-500">Current task/result/review context</p>
+        </div>
+        <StatusBadge className={targetTask ? "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25" : "bg-slate-500/15 text-slate-200 ring-slate-400/20"}>
+          {targetTask ? "ready" : "empty"}
+        </StatusBadge>
+      </div>
+      <div className="mt-4 grid gap-3">
+        <RuntimeMetric label="Target task" value={targetTask ?? "No linked runtime task"} copyable={Boolean(targetTask)} emphasized={Boolean(targetTask)} />
+        <RuntimeMetric label="Builder result" value={runtimeStatus?.latest.outbox?.name ?? "No linked result file"} copyable={Boolean(runtimeStatus?.latest.outbox?.name)} />
+        <RuntimeMetric label="Reviewer result" value={runtimeStatus?.latest.review?.name ?? "No linked review file"} copyable={Boolean(runtimeStatus?.latest.review?.name)} />
+      </div>
+    </article>
   );
 }
 
@@ -1378,38 +1582,44 @@ function KnowledgeView({
         )}
       </Panel>
 
+      <KnowledgeGraphPanel />
+
+      <KnowledgeSearchPanel />
+
       <Panel title="Memory Types">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="flex flex-wrap gap-2">
           {memoryTypes.map((item) => (
-            <div key={item.type} className="rounded-md border border-white/10 bg-black/20 p-4">
-              <p className="text-sm font-semibold text-white">{item.label}</p>
-              <p className="mt-2 text-2xl font-semibold text-cyan-100">
-                {knowledgeOverview?.countsByType?.[item.type] ?? 0}
-              </p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">{item.type}</p>
-            </div>
+            <span key={item.type} className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-slate-200">
+              <span>{item.label}</span>
+              <span className="rounded bg-cyan-400/15 px-2 py-0.5 text-xs text-cyan-200">{knowledgeOverview?.countsByType?.[item.type] ?? 0}</span>
+            </span>
           ))}
         </div>
       </Panel>
 
-      <Panel title="Recent Memory">
-        <KnowledgeNodeList nodes={recentNodes} />
-      </Panel>
+      <details className="rounded-md border border-white/10 bg-[#0d1117] p-4 sm:p-5">
+        <summary className="cursor-pointer text-lg font-semibold text-white">Recent Memory</summary>
+        <div className="mt-4">
+          <KnowledgeNodeList nodes={recentNodes} />
+        </div>
+      </details>
 
-      <Panel title="Architecture Reviews">
-        <ArchitectureReviewList reviews={recentArchitectureReviews} />
-      </Panel>
+      <details className="rounded-md border border-white/10 bg-[#0d1117] p-4 sm:p-5">
+        <summary className="cursor-pointer text-lg font-semibold text-white">Architecture Reviews</summary>
+        <div className="mt-4">
+          <ArchitectureReviewList reviews={recentArchitectureReviews} />
+        </div>
+      </details>
 
-      <KnowledgeSearchPanel />
-
-      <KnowledgeGraphPanel />
-
-      <Panel title="Graph MVP Edge Fallback">
-        <p className="mb-4 text-sm leading-6 text-slate-400">
+      <details className="rounded-md border border-white/10 bg-[#0d1117] p-4 sm:p-5">
+        <summary className="cursor-pointer text-lg font-semibold text-white">Graph Edge Fallback</summary>
+        <p className="mt-4 text-sm leading-6 text-slate-400">
           Compact relationship list only. No force graph, embeddings, vector search, or graph database is enabled.
         </p>
-        <KnowledgeEdgeTable edges={knowledgeOverview?.latestEdges ?? []} />
-      </Panel>
+        <div className="mt-4">
+          <KnowledgeEdgeTable edges={knowledgeOverview?.latestEdges ?? []} />
+        </div>
+      </details>
     </div>
   );
 }
@@ -2173,6 +2383,9 @@ function KpiView({
             <p className="mt-3 text-sm text-slate-400">
               Generated {formatRelativeTime(kpiOverview.generatedAt)} / {formatExactDate(kpiOverview.generatedAt)}
             </p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+              {getKpiInterpretation(kpiOverview)}
+            </p>
           </div>
           <div className="inline-flex rounded-md border border-white/10 bg-black/20 p-1">
             {(["today", "7d", "30d"] as KpiRange[]).map((item) => (
@@ -2360,20 +2573,26 @@ function MeshView({
         <AgentMeshMap agents={meshOverview.agents} links={meshOverview.links} />
       </Panel>
 
-      <Panel title="Relationship List">
-        <MeshRelationshipList links={meshOverview.links} />
-      </Panel>
-
       <Panel title="Recent Interactions">
-        <MeshInteractionList interactions={meshOverview.recentInteractions} />
+        <MeshInteractionList interactions={meshOverview.recentInteractions.slice(0, 5)} />
       </Panel>
 
-      <Panel title="Related Knowledge">
-        <p className="mb-4 text-sm leading-6 text-slate-400">
+      <details className="rounded-md border border-white/10 bg-[#0d1117] p-4 sm:p-5">
+        <summary className="cursor-pointer text-lg font-semibold text-white">Relationship List</summary>
+        <div className="mt-4">
+          <MeshRelationshipList links={meshOverview.links} />
+        </div>
+      </details>
+
+      <details className="rounded-md border border-white/10 bg-[#0d1117] p-4 sm:p-5">
+        <summary className="cursor-pointer text-lg font-semibold text-white">Related Knowledge</summary>
+        <p className="mt-4 text-sm leading-6 text-slate-400">
           Latest Knowledge Graph edges involving builder, reviewer, Architect, Historian, reports, and Obsidian notes.
         </p>
-        <KnowledgeEdgeTable edges={knowledgeOverview?.latestEdges ?? []} />
-      </Panel>
+        <div className="mt-4">
+          <KnowledgeEdgeTable edges={knowledgeOverview?.latestEdges ?? []} />
+        </div>
+      </details>
     </div>
   );
 }
@@ -2669,10 +2888,6 @@ function SettingsView({
         </div>
       </Panel>
 
-      <Panel title="Endpoint Health Matrix">
-        <EndpointHealthMatrix endpointHealth={endpointHealth} />
-      </Panel>
-
       <Panel title="Environment & Rules">
         <div className="grid gap-4">
           {batchStatusError ? (
@@ -2732,6 +2947,16 @@ function SettingsView({
           <li>No OpenAI API, MCP execution, Codex direct control, or GitHub automation is enabled from the UI.</li>
         </ul>
       </Panel>
+
+      <details className="rounded-md border border-white/10 bg-[#0d1117] p-4 sm:p-5">
+        <summary className="cursor-pointer text-lg font-semibold text-white">Developer Diagnostics</summary>
+        <p className="mt-3 text-sm leading-6 text-slate-400">
+          Endpoint Health Matrix is intentionally tucked away for debugging stale backend/frontend/ngrok processes.
+        </p>
+        <div className="mt-4">
+          <EndpointHealthMatrix endpointHealth={endpointHealth} />
+        </div>
+      </details>
     </div>
   );
 }
@@ -3240,7 +3465,14 @@ function EventTimeline({
   refresh: (options?: { silent?: boolean }) => void;
 }) {
   const [showAllToday, setShowAllToday] = useState(false);
-  const todayEvents = events.filter((event) => isToday(event.created_at));
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const eventTypes = useMemo(() => ["all", ...Array.from(new Set(events.map((event) => event.type))).sort()], [events]);
+  const eventStatuses = useMemo(() => ["all", ...Array.from(new Set(events.map((event) => event.status))).sort()], [events]);
+  const todayEvents = events
+    .filter((event) => isToday(event.created_at))
+    .filter((event) => typeFilter === "all" || event.type === typeFilter)
+    .filter((event) => statusFilter === "all" || event.status === statusFilter);
   const visibleEvents = showAllToday ? todayEvents : todayEvents.slice(0, 6);
   const hiddenCount = Math.max(todayEvents.length - visibleEvents.length, 0);
   const groupedEvents = groupEventsByDay(visibleEvents);
@@ -3263,6 +3495,25 @@ function EventTimeline({
         >
           {isRefreshing ? "Refreshing..." : "Refresh Timeline"}
         </button>
+      </div>
+
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <select
+          className="min-h-10 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          onChange={(event) => setTypeFilter(event.target.value)}
+          value={typeFilter}
+        >
+          {eventTypes.map((type) => <option key={type} value={type}>{type === "all" ? "All event types" : type}</option>)}
+        </select>
+        <select
+          className="min-h-10 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          onChange={(event) => setStatusFilter(event.target.value)}
+          value={statusFilter}
+        >
+          {eventStatuses.map((status) => <option key={status} value={status}>{status === "all" ? "All statuses" : status}</option>)}
+        </select>
+        <StatusBadge className="bg-slate-500/15 text-slate-200 ring-slate-400/20">today only</StatusBadge>
+        <StatusBadge className="bg-cyan-500/15 text-cyan-200 ring-cyan-400/25">compact mode</StatusBadge>
       </div>
 
       {error ? (
@@ -3566,12 +3817,19 @@ function ProcessCard({
           </StatusBadge>
           <LastUpdatedIndicator value={process?.startTime ?? null} label="Started" />
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <RuntimeMetric label="PID" value={process ? String(process.pid) : "not detected"} />
-          <RuntimeMetric label="CPU" value={process?.cpu !== null && process?.cpu !== undefined ? process.cpu.toFixed(1) : "unknown"} />
-        </div>
-        <RuntimeMetric label="Command" value={process?.commandLine ?? "not detected"} copyable />
-        <p className="rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-300">{interpretation}</p>
+        <p className="rounded border border-white/10 bg-black/20 p-3 text-sm leading-6 text-slate-300">{interpretation}</p>
+        <details className="rounded border border-white/10 bg-white/[0.03] p-3">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+            Technical Details
+          </summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <RuntimeMetric label="PID" value={process ? String(process.pid) : "not detected"} />
+            <RuntimeMetric label="CPU" value={process?.cpu !== null && process?.cpu !== undefined ? process.cpu.toFixed(1) : "unknown"} />
+            <div className="sm:col-span-2">
+              <RuntimeMetric label="Command" value={process?.commandLine ?? "not detected"} copyable />
+            </div>
+          </div>
+        </details>
       </div>
     </>
   );
@@ -4303,6 +4561,84 @@ function LogItem({ log }: { log: WorkLog }) {
       {log.task?.title ? <p className="mt-3 text-xs text-slate-500">Task: {log.task.title}</p> : null}
     </article>
   );
+}
+
+function getDashboardStateStyle(state: string) {
+  switch (state) {
+    case "working":
+      return "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25";
+    case "waiting":
+      return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
+    case "offline":
+      return "bg-rose-500/15 text-rose-200 ring-rose-400/25";
+    case "idle":
+    default:
+      return "bg-slate-500/15 text-slate-200 ring-slate-400/20";
+  }
+}
+
+function getCurrentWorker(runtimeStatus: LocalRuntimeStatus | null) {
+  if (!runtimeStatus) return "unknown";
+  if (runtimeStatus.queue.processing > 0 && runtimeStatus.processes.implementer) return "Implementer";
+  if (runtimeStatus.processes.reviewer || runtimeStatus.processes.reviewer_bridge) return "Reviewer / Bridge";
+  if (runtimeStatus.processes.loop) return "MCP Loop";
+  return "none detected";
+}
+
+function getRecommendedPmAction(
+  runtimeStatus: LocalRuntimeStatus | null,
+  runtimeError: string | null,
+  latestArchitectureReview: ArchitectureReview | null,
+  endpointHealth: EndpointHealth | null,
+) {
+  if (runtimeError) return "Backend runtime is unreachable. Check Operators and Settings diagnostics before making a decision.";
+  if (endpointHealth && endpointHealth.summary.error + endpointHealth.summary.missing > 0) {
+    return "Resolve stale or missing backend endpoints in Settings before portfolio/demo review.";
+  }
+  if (latestArchitectureReview?.status === "blocked") {
+    return "Architect marked a blocking risk. Record rejection or split the task before continuing.";
+  }
+  if (runtimeStatus?.queue.processing) return "Monitor the active task. Wait for builder/reviewer evidence before recording a PM decision.";
+  if (runtimeStatus?.queue.inbox && !runtimeStatus.processes.loop) return "Inbox has work but the loop is not detected. Treat this as an operations warning.";
+  if (runtimeStatus?.latest_details.reviewer?.verdict && runtimeStatus.latest_details.reviewer.verdict !== "none") {
+    return "Review latest builder/reviewer evidence and record approval or rejection in Decisions.";
+  }
+  return "No immediate PM action required. Continue monitoring or create the next reviewed task outside the UI.";
+}
+
+function getDashboardWarningMessages(
+  runtimeStatus: LocalRuntimeStatus | null,
+  runtimeError: string | null,
+  endpointHealth: EndpointHealth | null,
+  kpiOverview: KpiOverview | null,
+  meshOverview: MeshOverview | null,
+  latestDailyReport: DailyReport | null,
+) {
+  return [
+    ...getPipelineWarningMessages(runtimeStatus),
+    runtimeError ? "runtime offline" : null,
+    endpointHealth && endpointHealth.summary.error + endpointHealth.summary.missing > 0 ? "endpoint warning" : null,
+    kpiOverview?.runtime.latestStatus === "blocked" ? "KPI runtime blocked" : null,
+    meshOverview?.health.status === "blocked" ? "mesh blocked" : null,
+    latestDailyReport?.status === "problem" ? "daily report problem" : null,
+  ].filter(Boolean) as string[];
+}
+
+function getKpiInterpretation(kpiOverview: KpiOverview) {
+  const approval = kpiOverview.quality.approvalRate;
+  const warnings = kpiOverview.runtime.warningCount;
+  const knowledgeNodes = kpiOverview.knowledge.nodesCreatedInRange;
+
+  if (warnings !== null && warnings > 0) {
+    return `Operational attention is needed: ${warnings} warning signal(s) were found in this range. Check Runtime Health and Timeline before treating the trend as stable.`;
+  }
+  if (approval !== null && approval >= 80 && knowledgeNodes !== null && knowledgeNodes > 0) {
+    return "Operations look healthy: approvals are high and operational memory is being captured.";
+  }
+  if (approval === null && knowledgeNodes === null) {
+    return "Historical data is still thin. Run daily/nightly batches to make KPI trends meaningful.";
+  }
+  return "Use this view as directional analytics only; metrics are derived from existing ArchiveOS records and may be incomplete.";
 }
 
 function StatusBadge({ children, className = "" }: { children: React.ReactNode; className?: string }) {
