@@ -191,7 +191,7 @@ app.get("/api/runtime/public-access", (request, response) => {
       : request.get("host")
         ? `${request.protocol}://${request.get("host")}`
         : null;
-  const frontendPublicUrl = readOptionalUrlEnv("ARCHIVEOS_PUBLIC_URL");
+  const frontendPublicUrl = readOptionalUrlEnv("ARCHIVEOS_PUBLIC_URL") ?? readOptionalUrlEnv("ARCHIVEOS_NGROK_URL");
   const backendPublicUrl = readOptionalUrlEnv("ARCHIVEOS_BACKEND_PUBLIC_URL");
 
   response.json({

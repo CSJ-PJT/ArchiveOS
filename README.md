@@ -529,3 +529,14 @@ GET /api/knowledge/graph/insights?limit=100
 ```
 
 This layer is read-only and helps the PM understand why a decision, review, incident, command, or report matters without adding execution controls.
+
+## Portfolio Productization Notes
+
+ArchiveOS is presented as an AI Agent Operations Platform, not a raw developer debug console.
+
+- Dashboard prioritizes current status, risk, active work, achievements, and portfolio snapshot signals.
+- Knowledge Graph uses rule-based importance so PMs can see which memory, decision, review, or incident matters most.
+- Operators keeps PID/CPU/process details under technical diagnostics instead of making them the primary story.
+- KPI cards include top-contributor interpretation so raw counts have operational meaning.
+- Mesh relationships are read-only and expandable for traceability from agent relationship to related knowledge.
+- Remote access can use `ARCHIVEOS_PUBLIC_URL` or `ARCHIVEOS_NGROK_URL` for the latest public frontend URL.

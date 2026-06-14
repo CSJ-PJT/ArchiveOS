@@ -901,12 +901,19 @@ function DashboardHero({
       </div>
 
       <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <RuntimeMetric label="Inbox / Loop" value={`${runtimeStatus?.queue.inbox ?? 0} / ${runtimeStatus?.processes.loop ? "online" : "offline"}`} emphasized={Boolean(runtimeStatus?.queue.inbox && !runtimeStatus.processes.loop)} />
+        <RuntimeMetric label="Approvals" value={formatKpiValue(kpiOverview?.quality.reviewApproveCount ?? null)} />
+        <RuntimeMetric label="Knowledge nodes" value={formatKpiValue(kpiOverview?.knowledge.totalNodes ?? null)} />
         <RuntimeMetric label="Active task" value={activeTask} copyable={activeTask !== "No active task"} emphasized />
         <RuntimeMetric label="Current worker" value={currentWorker} />
         <RuntimeMetric label="Latest verdict" value={latestVerdict} />
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <RuntimeMetric label="Runtime health" value={bottleneck.label} />
         <RuntimeMetric label="Architect" value={getArchitectStatusLabel(latestArchitectureReview)} />
         <RuntimeMetric label="Endpoint health" value={endpointHealth ? `${endpointHealth.summary.ok}/${endpointHealth.summary.total} online` : "unknown"} />
+        <RuntimeMetric label="Portfolio modules" value="Dashboard, Decisions, Timeline, Mesh, KPI, Knowledge" />
       </div>
     </section>
   );
@@ -930,12 +937,12 @@ function DashboardMetricStrip({
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-      <RuntimeMetric label="Agents active/offline" value={meshOverview ? `${activeAgents}/${offlineAgents}` : "unknown"} />
+      <RuntimeMetric label="Reviews completed" value={formatKpiValue(kpiOverview?.productivity.reviewsCompleted ?? null)} />
+      <RuntimeMetric label="Nightly reviews" value={formatKpiValue(kpiOverview?.productivity.nightlyReviewsCompleted ?? null)} />
+      <RuntimeMetric label="Decisions recorded" value={formatKpiValue(kpiOverview?.productivity.decisionsRecorded ?? null)} />
       <RuntimeMetric label="Knowledge nodes" value={String(knowledgeOverview?.totalNodes ?? 0)} />
-      <RuntimeMetric label="Knowledge edges" value={String(knowledgeOverview?.totalEdges ?? 0)} />
-      <RuntimeMetric label="Approval rate" value={kpiOverview ? formatKpiPercent(kpiOverview.quality.approvalRate) : "insufficient data"} />
-      <RuntimeMetric label="Warnings" value={kpiOverview ? formatKpiValue(kpiOverview.runtime.warningCount) : String(endpointHealth?.summary.error ?? 0)} />
-      <RuntimeMetric label="Daily report" value={latestDailyReport?.status ?? "not recorded"} />
+      <RuntimeMetric label="Architecture reviews" value={formatKpiValue(kpiOverview?.quality.architectReviewCount ?? null)} />
+      <RuntimeMetric label="Agents active/offline" value={meshOverview ? `${activeAgents}/${offlineAgents}` : "unknown"} />
     </div>
   );
 }
@@ -1664,6 +1671,7 @@ function KnowledgeGraphPanel() {
   const [recentOnly, setRecentOnly] = useState(false);
   const [decisionPathOnly, setDecisionPathOnly] = useState(false);
   const [architectPathOnly, setArchitectPathOnly] = useState(false);
+  const [incidentPathOnly, setIncidentPathOnly] = useState(false);
   const [hideLowImportance, setHideLowImportance] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -1711,8 +1719,8 @@ function KnowledgeGraphPanel() {
   const nodeTypes = useMemo(() => ["all", ...Object.keys(graph?.stats.types ?? {}).sort()], [graph]);
   const edgeTypes = useMemo(() => ["all", ...Array.from(new Set((graph?.edges ?? []).map((edge) => edge.type))).sort()], [graph]);
   const filtered = useMemo(
-    () => filterKnowledgeGraph(graph, { nodeType, edgeType, query, importanceFilter, recentOnly, decisionPathOnly, architectPathOnly, hideLowImportance }),
-    [graph, nodeType, edgeType, query, importanceFilter, recentOnly, decisionPathOnly, architectPathOnly, hideLowImportance],
+    () => filterKnowledgeGraph(graph, { nodeType, edgeType, query, importanceFilter, recentOnly, decisionPathOnly, architectPathOnly, incidentPathOnly, hideLowImportance }),
+    [graph, nodeType, edgeType, query, importanceFilter, recentOnly, decisionPathOnly, architectPathOnly, incidentPathOnly, hideLowImportance],
   );
   const selectedNode = filtered.nodes.find((node) => node.id === selectedNodeId) ?? filtered.nodes[0] ?? null;
   const selectedEdges = selectedNode ? filtered.edges.filter((edge) => edge.from === selectedNode.id || edge.to === selectedNode.id) : [];
@@ -1760,6 +1768,7 @@ function KnowledgeGraphPanel() {
           <GraphToggle label="Recent only" checked={recentOnly} onChange={setRecentOnly} />
           <GraphToggle label="Decision paths" checked={decisionPathOnly} onChange={setDecisionPathOnly} />
           <GraphToggle label="Architect paths" checked={architectPathOnly} onChange={setArchitectPathOnly} />
+          <GraphToggle label="Incident paths" checked={incidentPathOnly} onChange={setIncidentPathOnly} />
           <GraphToggle label="Hide low importance" checked={hideLowImportance} onChange={setHideLowImportance} />
         </div>
 
@@ -2610,6 +2619,7 @@ function KpiView({
           ["Daily reports sent", kpiOverview.productivity.dailyReportsSent],
           ["Nightly reviews completed", kpiOverview.productivity.nightlyReviewsCompleted],
         ]}
+        contributor={getKpiContributor("Productivity", kpiOverview)}
       />
 
       <KpiMetricSection
@@ -2622,6 +2632,7 @@ function KpiView({
           ["Architect warnings", kpiOverview.quality.architectWarningCount],
           ["Architect blocked", kpiOverview.quality.architectBlockedCount],
         ]}
+        contributor={getKpiContributor("Quality", kpiOverview)}
       />
 
       <KpiMetricSection
@@ -2633,6 +2644,7 @@ function KpiView({
           ["Loop detected rate", formatKpiPercent(kpiOverview.runtime.loopDetectedRate)],
           ["Current processing", kpiOverview.runtime.latestProcessing],
         ]}
+        contributor={getKpiContributor("Runtime Health", kpiOverview)}
       />
 
       <KpiMetricSection
@@ -2645,6 +2657,7 @@ function KpiView({
           ["Obsidian exports", kpiOverview.knowledge.obsidianExports],
           ["Graph density", kpiOverview.knowledge.graphDensity],
         ]}
+        contributor={getKpiContributor("Knowledge Growth", kpiOverview)}
       />
 
       <Panel title="Trends">
@@ -2662,12 +2675,19 @@ function KpiView({
 function KpiMetricSection({
   title,
   metrics,
+  contributor,
 }: {
   title: string;
   metrics: Array<[string, string | number | null]>;
+  contributor?: string;
 }) {
   return (
     <Panel title={title}>
+      {contributor ? (
+        <p className="mb-3 rounded border border-cyan-300/20 bg-cyan-300/[0.04] p-3 text-sm leading-6 text-cyan-100">
+          Top Contributor: {contributor}
+        </p>
+      ) : null}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
         {metrics.map(([label, value]) => (
           <RuntimeMetric key={label} label={label} value={formatKpiMetric(value)} />
@@ -2856,15 +2876,24 @@ function MeshNode({ agent, active }: { agent: MeshAgent; active: boolean }) {
 }
 
 function MeshRelationshipList({ links }: { links: MeshLink[] }) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
+
   if (!links.length) {
     return <EmptyState title="No mesh relationships" detail="No runtime or Knowledge Graph relationship was derived yet." muted />;
   }
 
   return (
     <div className="grid gap-2">
-      {links.map((link) => (
-        <article key={`${link.from}-${link.to}-${link.type}-${link.source}`} className="rounded-md border border-white/10 bg-black/20 p-3">
-          <div className="grid gap-2 md:grid-cols-[1fr_auto_1fr_auto_auto] md:items-center">
+      {links.map((link) => {
+        const key = `${link.from}-${link.to}-${link.type}-${link.source}`;
+        const open = openKey === key;
+        return (
+        <article key={key} className={`rounded-md border p-3 transition ${open ? "border-cyan-300/35 bg-cyan-300/[0.05]" : "border-white/10 bg-black/20"}`}>
+          <button
+            className="grid w-full gap-2 text-left md:grid-cols-[1fr_auto_1fr_auto_auto] md:items-center"
+            onClick={() => setOpenKey(open ? null : key)}
+            type="button"
+          >
             <CompactValue value={link.from} className="text-sm font-medium text-cyan-100" />
             <StatusBadge className="bg-violet-500/15 text-violet-200 ring-violet-400/25">{link.type}</StatusBadge>
             <CompactValue value={link.to} className="text-sm font-medium text-emerald-100" />
@@ -2872,10 +2901,19 @@ function MeshRelationshipList({ links }: { links: MeshLink[] }) {
               {link.recent ? "recent" : "not recent"}
             </StatusBadge>
             <span className="rounded bg-white/[0.04] px-2 py-1 text-xs text-slate-400">{link.source}</span>
-          </div>
+          </button>
           <p className="mt-2 text-xs text-slate-500" title={link.label}>{link.label}</p>
+          {open ? (
+            <div className="mt-3 grid gap-2 rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-300">
+              <p className="font-semibold text-white">Trace path</p>
+              <p><span className="text-cyan-200">{link.from}</span> {"->"} <span className="text-emerald-200">{link.to}</span></p>
+              <p>Builder Result: {link.type === "hands_off_to" || link.from === "implementer" ? "follow latest builder_result node in Knowledge" : "related if graph edge exists"}</p>
+              <p>Review Result: {link.to === "reviewer" || link.type.includes("review") ? "follow reviewer_result node in Knowledge" : "related if graph edge exists"}</p>
+              <p>Related Knowledge: open Knowledge tab and search this relationship source: {link.source}</p>
+            </div>
+          ) : null}
         </article>
-      ))}
+      );})}
     </div>
   );
 }
@@ -3029,7 +3067,7 @@ function SettingsView({
               label="Frontend URL"
               value={publicAccessStatus?.frontendPublicUrl ?? remoteFrontendUrl}
               status={publicAccessStatus?.frontendPublicUrlConfigured || frontendIsRemote ? "online" : "not configured"}
-              detail={publicAccessStatus?.frontendPublicUrlConfigured ? "ARCHIVEOS_PUBLIC_URL is configured on backend." : "Set ARCHIVEOS_PUBLIC_URL to display the latest ngrok frontend URL."}
+              detail={publicAccessStatus?.frontendPublicUrlConfigured ? "ARCHIVEOS_PUBLIC_URL or ARCHIVEOS_NGROK_URL is configured on backend." : "Set ARCHIVEOS_PUBLIC_URL or ARCHIVEOS_NGROK_URL to display the latest ngrok frontend URL."}
             />
             <RemoteAccessCard
               label="Backend URL"
@@ -3747,7 +3785,7 @@ function EventTimeline({
               onClick={() => setShowAllToday((current) => !current)}
               type="button"
             >
-              {showAllToday ? "Show less" : `Show ${hiddenCount} more today`}
+              {showAllToday ? "Show fewer events" : `Load Older Events (${hiddenCount})`}
             </button>
           ) : null}
         </div>
@@ -4829,6 +4867,38 @@ function getKpiInterpretation(kpiOverview: KpiOverview) {
   return "Use this view as directional analytics only; metrics are derived from existing ArchiveOS records and may be incomplete.";
 }
 
+function getKpiContributor(section: string, kpiOverview: KpiOverview) {
+  if (section === "Runtime Health") {
+    const warnings = kpiOverview.runtime.warningCount ?? 0;
+    if (warnings > 0 && !kpiOverview.runtime.loopDetectedRate) return `Loop offline signals appear to dominate ${warnings} warning(s).`;
+    if ((kpiOverview.runtime.latestInbox ?? 0) > 0 && (kpiOverview.runtime.latestProcessing ?? 0) === 0) return "Inbox backlog with no active processing is the main operational pressure.";
+    return "Latest runtime state is the main source for this section.";
+  }
+
+  if (section === "Quality") {
+    const approvals = kpiOverview.quality.reviewApproveCount ?? 0;
+    const stops = kpiOverview.quality.reviewStopCount ?? 0;
+    const architectWarnings = kpiOverview.quality.architectWarningCount ?? 0;
+    if (stops > approvals) return `Reviewer stop verdicts dominate quality risk (${stops}).`;
+    if (architectWarnings > 0) return `Architect warnings contribute ${architectWarnings} quality signal(s).`;
+    return approvals ? `Approved reviews are the strongest quality signal (${approvals}).` : "No dominant review outcome yet.";
+  }
+
+  if (section === "Knowledge Growth") {
+    const nodes = kpiOverview.knowledge.nodesCreatedInRange ?? 0;
+    const edges = kpiOverview.knowledge.edgesCreatedInRange ?? 0;
+    if (nodes || edges) return `Knowledge capture is led by ${nodes} node(s) and ${edges} edge(s) in range.`;
+    return "Knowledge growth needs more Daily/Nightly/Architect/Decision records.";
+  }
+
+  const decisions = kpiOverview.productivity.decisionsRecorded ?? 0;
+  const commands = kpiOverview.productivity.commandsRecorded ?? 0;
+  const reports = (kpiOverview.productivity.dailyReportsSent ?? 0) + (kpiOverview.productivity.nightlyReviewsCompleted ?? 0);
+  if (reports >= decisions && reports >= commands) return `Batch reports are the main productivity signal (${reports}).`;
+  if (decisions >= commands) return `PM decisions are the main productivity signal (${decisions}).`;
+  return `Recorded commands are the main productivity signal (${commands}).`;
+}
+
 function StatusBadge({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     <span className={`inline-flex rounded px-2 py-1 text-xs font-medium ring-1 ring-inset ${className}`}>
@@ -5047,6 +5117,7 @@ function filterKnowledgeGraph(
     recentOnly: boolean;
     decisionPathOnly: boolean;
     architectPathOnly: boolean;
+    incidentPathOnly: boolean;
     hideLowImportance: boolean;
   },
 ): KnowledgeGraph {
@@ -5076,7 +5147,8 @@ function filterKnowledgeGraph(
     const typeMatch = filters.edgeType === "all" || edge.type === filters.edgeType;
     const decisionMatch = !filters.decisionPathOnly || edge.isDecisionPath;
     const architectMatch = !filters.architectPathOnly || edge.isArchitectPath;
-    return typeMatch && decisionMatch && architectMatch && nodeIds.has(edge.from) && nodeIds.has(edge.to);
+    const incidentMatch = !filters.incidentPathOnly || edge.isIncidentPath;
+    return typeMatch && decisionMatch && architectMatch && incidentMatch && nodeIds.has(edge.from) && nodeIds.has(edge.to);
   });
 
   return {
