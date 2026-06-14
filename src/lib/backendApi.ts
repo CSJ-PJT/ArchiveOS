@@ -254,6 +254,15 @@ export type KnowledgeGraphNode = {
   externalRef: string | null;
   createdAt: string;
   metadata: Record<string, unknown>;
+  importanceScore: number;
+  importanceLevel: ImportanceLevel;
+  degree: number;
+  inDegree: number;
+  outDegree: number;
+  lastReferencedAt: string | null;
+  isRecent: boolean;
+  isHub: boolean;
+  isDecisionRelevant: boolean;
 };
 
 export type KnowledgeGraphEdge = {
@@ -265,7 +274,15 @@ export type KnowledgeGraphEdge = {
   confidence: number | null;
   createdAt: string;
   metadata: Record<string, unknown>;
+  importanceScore: number;
+  importanceLevel: ImportanceLevel;
+  isRecent: boolean;
+  isDecisionPath: boolean;
+  isArchitectPath: boolean;
+  isIncidentPath: boolean;
 };
+
+export type ImportanceLevel = "low" | "medium" | "high" | "critical";
 
 export type KnowledgeGraph = {
   nodes: KnowledgeGraphNode[];
@@ -275,6 +292,52 @@ export type KnowledgeGraph = {
     edgeCount: number;
     types: Record<string, number>;
   };
+};
+
+export type KnowledgeGraphInsights = {
+  topNodes: Array<{
+    id: string;
+    label: string;
+    type: string;
+    importanceScore: number;
+    importanceLevel: ImportanceLevel;
+    reason: string;
+    degree: number;
+  }>;
+  topEdges: Array<{
+    id: string;
+    from: string;
+    to: string;
+    type: string;
+    importanceScore: number;
+    importanceLevel: ImportanceLevel;
+    reason: string;
+  }>;
+  decisionChains: Array<{
+    decisionNodeId: string;
+    decisionLabel: string;
+    relatedReviews: KnowledgeGraphInsightNode[];
+    relatedCommands: KnowledgeGraphInsightNode[];
+    relatedReports: KnowledgeGraphInsightNode[];
+    relatedIncidents: KnowledgeGraphInsightNode[];
+    relatedArchitectReviews: KnowledgeGraphInsightNode[];
+  }>;
+  graphHealth: {
+    nodeCount: number;
+    edgeCount: number;
+    hubCount: number;
+    criticalCount: number;
+    recentCount: number;
+    isolatedNodeCount: number;
+  };
+  notes: string[];
+};
+
+export type KnowledgeGraphInsightNode = {
+  id: string;
+  label: string;
+  type: string;
+  importanceLevel: ImportanceLevel;
 };
 
 export type ArchitectureReview = {
@@ -564,6 +627,11 @@ export async function getRelatedKnowledge(input: { external_ref?: string | null;
 
 export async function getKnowledgeGraph(limit = 100) {
   const response = await request<ApiEnvelope<KnowledgeGraph>>(`/api/knowledge/graph?limit=${limit}`);
+  return response.data;
+}
+
+export async function getKnowledgeGraphInsights(limit = 100) {
+  const response = await request<ApiEnvelope<KnowledgeGraphInsights>>(`/api/knowledge/graph/insights?limit=${limit}`);
   return response.data;
 }
 

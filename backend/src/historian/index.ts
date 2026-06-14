@@ -7,6 +7,7 @@ export {
   createKnowledgeEdge,
   getKnowledgeNode,
   getKnowledgeGraph,
+  getKnowledgeGraphInsights,
   getKnowledgeOverview,
   getRecentKnowledgeEdges,
   getRecentKnowledgeNodes,

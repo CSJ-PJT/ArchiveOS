@@ -510,3 +510,22 @@ GET /api/knowledge/graph?limit=100
 - OpenAI/LLM reasoning 없음
 - Codex/MCP/process 제어 없음
 - Obsidian vault 절대 경로와 secret 값 노출 없음
+## Knowledge Graph Importance Insights
+
+ArchiveOS now adds a rule-based importance layer to the Knowledge Graph view.
+
+- The graph still uses the existing Supabase `knowledge_nodes` and `knowledge_edges` tables.
+- No embeddings, vector search, graph database, or LLM reasoning are used.
+- Node importance is derived from degree, recency, node type, and links to decisions, architecture reviews, and incidents.
+- Edge importance is derived from edge type, recency, and whether the edge participates in a decision, Architect, or incident path.
+- The Knowledge tab visualizes importance with node size, node border, glow, edge thickness, and path colors.
+- Graph Insights highlights important nodes, hubs, recent memories, isolated nodes, and decision chains.
+
+Useful endpoints:
+
+```bash
+GET /api/knowledge/graph?limit=100
+GET /api/knowledge/graph/insights?limit=100
+```
+
+This layer is read-only and helps the PM understand why a decision, review, incident, command, or report matters without adding execution controls.

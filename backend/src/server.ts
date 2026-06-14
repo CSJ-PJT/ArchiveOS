@@ -23,6 +23,7 @@ import { findProject, projects } from "./config/projects.js";
 import {
   getKnowledgeNode,
   getKnowledgeGraph,
+  getKnowledgeGraphInsights,
   getKnowledgeOverview,
   getRecentKnowledgeNodes,
   getRelatedKnowledge,
@@ -110,6 +111,7 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Knowledge Search", method: "GET", path: "/api/knowledge/search", service: "knowledge", description: "Knowledge text search." },
   { name: "Related Knowledge", method: "GET", path: "/api/knowledge/related", service: "knowledge", description: "Related knowledge lookup." },
   { name: "Knowledge Graph", method: "GET", path: "/api/knowledge/graph", service: "knowledge", description: "Knowledge Graph visualization data." },
+  { name: "Knowledge Graph Insights", method: "GET", path: "/api/knowledge/graph/insights", service: "knowledge", description: "Knowledge Graph importance and decision chain insights." },
   { name: "Knowledge Node", method: "GET", path: "/api/knowledge/node/:id", service: "knowledge", description: "Knowledge node detail." },
   { name: "Architect Review", method: "POST", path: "/api/architect/review", service: "architect", description: "Rule-based Architect review recorder." },
   { name: "Architect Reviews", method: "GET", path: "/api/architect/reviews/recent", service: "architect", description: "Recent Architect reviews." },
@@ -505,9 +507,17 @@ app.get("/api/knowledge/related", async (request, response) => {
 
 app.get("/api/knowledge/graph", async (request, response) => {
   try {
-    response.json({ data: await getKnowledgeGraph(readLimit(request.query.limit ?? "100")) });
+    response.json({ data: await getKnowledgeGraph(readGraphLimit(request.query.limit ?? "100")) });
   } catch {
     response.status(500).json({ error: "Failed to fetch knowledge graph." });
+  }
+});
+
+app.get("/api/knowledge/graph/insights", async (request, response) => {
+  try {
+    response.json({ data: await getKnowledgeGraphInsights(readGraphLimit(request.query.limit ?? "100")) });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch knowledge graph insights." });
   }
 });
 
@@ -732,6 +742,11 @@ function readRequiredString(value: unknown, name: string): { ok: true; value: st
 function readLimit(value: unknown) {
   const numeric = typeof value === "string" ? Number(value) : 20;
   return Number.isFinite(numeric) ? Math.min(Math.max(Math.floor(numeric), 1), 100) : 20;
+}
+
+function readGraphLimit(value: unknown) {
+  const numeric = typeof value === "string" ? Number(value) : 100;
+  return Number.isFinite(numeric) ? Math.min(Math.max(Math.floor(numeric), 1), 300) : 100;
 }
 
 async function getServiceHealth() {

@@ -8,6 +8,7 @@ import {
   getEndpointHealth,
   getHistorianStatus,
   getKnowledgeGraph,
+  getKnowledgeGraphInsights,
   getKnowledgeOverview,
   getKpiOverview,
   getPlatformHealth,
@@ -38,6 +39,8 @@ import {
   type KnowledgeGraph,
   type KnowledgeGraphNode,
   type KnowledgeGraphEdge,
+  type KnowledgeGraphInsights,
+  type ImportanceLevel,
   type KnowledgeOverview,
   type KpiOverview,
   type KpiRange,
@@ -1651,11 +1654,17 @@ function KnowledgeNodeList({ nodes }: { nodes: KnowledgeNode[] }) {
 
 function KnowledgeGraphPanel() {
   const [graph, setGraph] = useState<KnowledgeGraph | null>(null);
+  const [insights, setInsights] = useState<KnowledgeGraphInsights | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [limit, setLimit] = useState(100);
   const [nodeType, setNodeType] = useState("all");
   const [edgeType, setEdgeType] = useState("all");
+  const [importanceFilter, setImportanceFilter] = useState<"all" | "medium" | "high" | "critical">("all");
+  const [recentOnly, setRecentOnly] = useState(false);
+  const [decisionPathOnly, setDecisionPathOnly] = useState(false);
+  const [architectPathOnly, setArchitectPathOnly] = useState(false);
+  const [hideLowImportance, setHideLowImportance] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -1667,9 +1676,15 @@ function KnowledgeGraphPanel() {
       setError(null);
 
       try {
-        const nextGraph = await getKnowledgeGraph(limit);
+        const [nextGraph, nextInsights] = await Promise.all([
+          getKnowledgeGraph(limit),
+          getKnowledgeGraphInsights(limit),
+        ]);
         if (!cancelled) {
           setGraph(nextGraph);
+          setInsights(nextInsights);
+          setHideLowImportance((current) => current || nextGraph.nodes.length > 20);
+          setImportanceFilter((current) => (current === "all" && nextGraph.nodes.length > 20 ? "medium" : current));
           setSelectedNodeId((current) =>
             current && nextGraph.nodes.some((node) => node.id === current) ? current : nextGraph.nodes[0]?.id ?? null,
           );
@@ -1695,7 +1710,10 @@ function KnowledgeGraphPanel() {
 
   const nodeTypes = useMemo(() => ["all", ...Object.keys(graph?.stats.types ?? {}).sort()], [graph]);
   const edgeTypes = useMemo(() => ["all", ...Array.from(new Set((graph?.edges ?? []).map((edge) => edge.type))).sort()], [graph]);
-  const filtered = useMemo(() => filterKnowledgeGraph(graph, { nodeType, edgeType, query }), [graph, nodeType, edgeType, query]);
+  const filtered = useMemo(
+    () => filterKnowledgeGraph(graph, { nodeType, edgeType, query, importanceFilter, recentOnly, decisionPathOnly, architectPathOnly, hideLowImportance }),
+    [graph, nodeType, edgeType, query, importanceFilter, recentOnly, decisionPathOnly, architectPathOnly, hideLowImportance],
+  );
   const selectedNode = filtered.nodes.find((node) => node.id === selectedNodeId) ?? filtered.nodes[0] ?? null;
   const selectedEdges = selectedNode ? filtered.edges.filter((edge) => edge.from === selectedNode.id || edge.to === selectedNode.id) : [];
   const topTypes = Object.entries(graph?.stats.types ?? {})
@@ -1712,7 +1730,9 @@ function KnowledgeGraphPanel() {
           <RuntimeMetric label="Top types" value={topTypes.map(([type, count]) => `${type} ${count}`).join(", ") || "none"} />
         </div>
 
-        <div className="grid gap-3 md:grid-cols-4">
+        <KnowledgeGraphInsightsPanel insights={insights} />
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <select className="min-h-11 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none" onChange={(event) => setNodeType(event.target.value)} value={nodeType}>
             {nodeTypes.map((type) => <option key={type} value={type}>{type === "all" ? "All node types" : type}</option>)}
           </select>
@@ -1722,13 +1742,28 @@ function KnowledgeGraphPanel() {
           <select className="min-h-11 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none" onChange={(event) => setLimit(Number(event.target.value))} value={limit}>
             {[50, 100, 200].map((value) => <option key={value} value={value}>Limit {value}</option>)}
           </select>
+          <select className="min-h-11 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none" onChange={(event) => setImportanceFilter(event.target.value as "all" | "medium" | "high" | "critical")} value={importanceFilter}>
+            <option value="all">All importance</option>
+            <option value="medium">Medium+</option>
+            <option value="high">High+</option>
+            <option value="critical">Critical only</option>
+          </select>
           <input
-            className="min-h-11 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600"
+            className="min-h-11 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 xl:col-span-2"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search label, title, external ref"
             value={query}
           />
         </div>
+
+        <div className="flex flex-wrap gap-2">
+          <GraphToggle label="Recent only" checked={recentOnly} onChange={setRecentOnly} />
+          <GraphToggle label="Decision paths" checked={decisionPathOnly} onChange={setDecisionPathOnly} />
+          <GraphToggle label="Architect paths" checked={architectPathOnly} onChange={setArchitectPathOnly} />
+          <GraphToggle label="Hide low importance" checked={hideLowImportance} onChange={setHideLowImportance} />
+        </div>
+
+        <KnowledgeGraphLegend />
 
         {error ? (
           <EmptyState
@@ -1752,9 +1787,127 @@ function KnowledgeGraphPanel() {
           </div>
         )}
 
+        <DecisionChainsPanel insights={insights} />
+
         <KnowledgeGraphEdgeList edges={filtered.edges} nodes={filtered.nodes} />
       </div>
     </Panel>
+  );
+}
+
+function GraphToggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-slate-200">
+      <input
+        checked={checked}
+        className="accent-cyan-300"
+        onChange={(event) => onChange(event.target.checked)}
+        type="checkbox"
+      />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+function KnowledgeGraphInsightsPanel({ insights }: { insights: KnowledgeGraphInsights | null }) {
+  const mostImportant = insights?.topNodes[0] ?? null;
+  const mostConnected = insights?.topNodes.slice().sort((left, right) => right.degree - left.degree)[0] ?? null;
+  const latestImportant = insights?.topNodes.find((node) => node.importanceLevel === "critical" || node.importanceLevel === "high") ?? null;
+  const activeChain = insights?.decisionChains[0] ?? null;
+
+  return (
+    <div className="rounded-md border border-cyan-300/20 bg-cyan-300/[0.04] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-white">Graph Insights</p>
+          <p className="mt-1 text-xs text-slate-500">Rule-based importance from degree, recency, node type, and decision/Architect/incident paths.</p>
+        </div>
+        <StatusBadge className="bg-cyan-500/15 text-cyan-200 ring-cyan-400/25">
+          {insights ? `${insights.graphHealth.criticalCount} critical / ${insights.graphHealth.hubCount} hubs` : "loading"}
+        </StatusBadge>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <RuntimeMetric label="Most important" value={mostImportant ? `${mostImportant.label} (${mostImportant.importanceScore})` : "none"} />
+        <RuntimeMetric label="Most connected" value={mostConnected ? `${mostConnected.label} (${mostConnected.degree})` : "none"} />
+        <RuntimeMetric label="Latest important" value={latestImportant?.label ?? "none"} />
+        <RuntimeMetric label="Active decision chain" value={activeChain?.decisionLabel ?? "none"} />
+        <RuntimeMetric label="Critical/high nodes" value={String(insights?.topNodes.filter((node) => node.importanceLevel === "critical" || node.importanceLevel === "high").length ?? 0)} />
+        <RuntimeMetric label="Isolated nodes" value={String(insights?.graphHealth.isolatedNodeCount ?? 0)} />
+      </div>
+      {insights?.notes.length ? (
+        <div className="mt-3 grid gap-2">
+          {insights.notes.slice(0, 2).map((note) => (
+            <p key={note} className="rounded border border-white/10 bg-black/20 p-2 text-xs leading-5 text-slate-400">{note}</p>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function KnowledgeGraphLegend() {
+  const items = [
+    ["Decision path", "bg-cyan-300"],
+    ["Architect path", "bg-amber-300"],
+    ["Incident path", "bg-rose-300"],
+    ["Recent node", "bg-emerald-300"],
+  ];
+
+  return (
+    <div className="flex flex-wrap gap-2 rounded-md border border-white/10 bg-black/20 p-3">
+      {items.map(([label, color]) => (
+        <span key={label} className="inline-flex items-center gap-2 text-xs text-slate-300">
+          <span className={`h-2.5 w-2.5 rounded-full ${color}`} />
+          {label}
+        </span>
+      ))}
+      <span className="text-xs text-slate-500">Node size = importance level. Edge thickness = trace importance.</span>
+    </div>
+  );
+}
+
+function DecisionChainsPanel({ insights }: { insights: KnowledgeGraphInsights | null }) {
+  const chains = insights?.decisionChains.slice(0, 3) ?? [];
+
+  return (
+    <details className="rounded-md border border-white/10 bg-black/20 p-4" open={Boolean(chains.length)}>
+      <summary className="cursor-pointer text-sm font-semibold text-white">Decision Chains</summary>
+      <div className="mt-4 grid gap-3">
+        {chains.length ? chains.map((chain) => (
+          <article key={chain.decisionNodeId} className="rounded border border-white/10 bg-white/[0.03] p-3">
+            <p className="text-sm font-semibold text-cyan-100" title={chain.decisionLabel}>{chain.decisionLabel}</p>
+            <div className="mt-3 grid gap-2 text-sm text-slate-300">
+              <ChainRow label="Command / Result" nodes={[...chain.relatedCommands, ...chain.relatedReviews]} />
+              <ChainRow label="Architect Review" nodes={chain.relatedArchitectReviews} />
+              <ChainRow label="Decision" nodes={[{ id: chain.decisionNodeId, label: chain.decisionLabel, type: "decision", importanceLevel: "high" }]} />
+              <ChainRow label="Daily / Nightly Report" nodes={chain.relatedReports} />
+              <ChainRow label="Incident" nodes={chain.relatedIncidents} />
+            </div>
+          </article>
+        )) : (
+          <EmptyState
+            title="아직 Decision Chain이 완성되지 않았습니다."
+            detail="Command, Review, Decision, Report가 연결되면 추적 경로가 표시됩니다."
+            muted
+          />
+        )}
+      </div>
+    </details>
+  );
+}
+
+function ChainRow({ label, nodes }: { label: string; nodes: Array<{ id: string; label: string; type: string; importanceLevel: ImportanceLevel }> }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-[9rem_1fr]">
+      <span className="text-xs uppercase tracking-[0.12em] text-slate-500">{label}</span>
+      <div className="flex flex-wrap gap-2">
+        {nodes.length ? nodes.slice(0, 3).map((node) => (
+          <StatusBadge key={node.id} className={getImportanceBadgeStyle(node.importanceLevel)}>
+            {node.type}: {truncateGraphLabel(node.label, 26)}
+          </StatusBadge>
+        )) : <span className="text-xs text-slate-500">missing</span>}
+      </div>
+    </div>
   );
 }
 
@@ -1784,8 +1937,18 @@ function KnowledgeGraphSvg({
         const to = positions.get(edge.to);
         if (!from || !to) return null;
         return (
-          <line key={edge.id} markerEnd="url(#kg-arrow)" stroke={getKnowledgeEdgeColor(edge.type)} strokeOpacity="0.58" strokeWidth={edge.type === "reviewed_by" || edge.type === "exported_to" ? 2.2 : 1.3} x1={from.x} x2={to.x} y1={from.y} y2={to.y}>
-            <title>{edge.type}: {edge.label}</title>
+          <line
+            key={edge.id}
+            markerEnd="url(#kg-arrow)"
+            stroke={getKnowledgeEdgeColor(edge)}
+            strokeOpacity={edge.importanceLevel === "low" ? 0.35 : 0.72}
+            strokeWidth={getKnowledgeEdgeWidth(edge)}
+            x1={from.x}
+            x2={to.x}
+            y1={from.y}
+            y2={to.y}
+          >
+            <title>{edge.type}: {edge.label} / importance {edge.importanceScore}</title>
           </line>
         );
       })}
@@ -1793,12 +1956,24 @@ function KnowledgeGraphSvg({
         const position = positions.get(node.id);
         if (!position) return null;
         const selected = node.id === selectedNodeId;
+        const radius = getKnowledgeNodeRadius(node, selected);
         return (
           <g key={node.id} className="cursor-pointer" onClick={() => onSelectNode(node.id)} role="button" tabIndex={0}>
-            <circle cx={position.x} cy={position.y} fill={getKnowledgeNodeColor(node.type)} opacity={selected ? 1 : 0.86} r={selected ? 28 : 23} stroke={selected ? "white" : "rgba(255,255,255,0.35)"} strokeWidth={selected ? 3 : 1} />
-            <text fill="white" fontSize="11" fontWeight="700" textAnchor="middle" x={position.x} y={position.y - 34}>{node.type}</text>
-            <text fill="rgba(226,232,240,0.92)" fontSize="12" textAnchor="middle" x={position.x} y={position.y + 43}>{truncateGraphLabel(node.label, 18)}</text>
-            <title>{node.title}</title>
+            {node.importanceLevel === "critical" || node.isRecent ? (
+              <circle cx={position.x} cy={position.y} fill={getKnowledgeNodeColor(node.type)} opacity={node.importanceLevel === "critical" ? 0.16 : 0.1} r={radius + 10} />
+            ) : null}
+            <circle
+              cx={position.x}
+              cy={position.y}
+              fill={getKnowledgeNodeColor(node.type)}
+              opacity={selected ? 1 : 0.86}
+              r={radius}
+              stroke={selected ? "white" : getKnowledgeNodeStroke(node)}
+              strokeWidth={selected ? 3.5 : getKnowledgeNodeStrokeWidth(node)}
+            />
+            <text fill="white" fontSize="11" fontWeight="700" textAnchor="middle" x={position.x} y={position.y - radius - 11}>{node.type}</text>
+            <text fill="rgba(226,232,240,0.92)" fontSize="12" textAnchor="middle" x={position.x} y={position.y + radius + 18}>{truncateGraphLabel(node.label, 18)}</text>
+            <title>{node.title} / {node.importanceLevel} / score {node.importanceScore}</title>
           </g>
         );
       })}
@@ -1813,12 +1988,23 @@ function KnowledgeGraphNodeDetail({ node, edges, nodes }: { node: KnowledgeGraph
     <aside className="rounded-md border border-white/10 bg-black/20 p-4">
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge className="bg-cyan-500/15 text-cyan-200 ring-cyan-400/25">{node.type}</StatusBadge>
+        <StatusBadge className={getImportanceBadgeStyle(node.importanceLevel)}>{node.importanceLevel} {node.importanceScore}</StatusBadge>
+        {node.isRecent ? <StatusBadge className="bg-emerald-500/15 text-emerald-200 ring-emerald-400/25">recent</StatusBadge> : null}
+        {node.isHub ? <StatusBadge className="bg-violet-500/15 text-violet-200 ring-violet-400/25">hub</StatusBadge> : null}
         <span className="rounded bg-white/[0.04] px-2 py-1 text-xs text-slate-400">{node.source ?? "unknown"}</span>
       </div>
       <h3 className="mt-3 text-base font-semibold text-white" title={node.title}>{node.title}</h3>
       <p className="mt-2 text-xs text-slate-500" title={formatExactDate(node.createdAt)}>{formatRelativeTime(node.createdAt)}</p>
       {node.externalRef ? <CompactValue value={node.externalRef} className="mt-3 text-xs text-slate-500" copyable /> : null}
       <p className="mt-3 max-h-32 overflow-y-auto text-sm leading-6 text-slate-300">{node.summary ?? "No summary."}</p>
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        <RuntimeMetric label="Degree" value={String(node.degree)} />
+        <RuntimeMetric label="In / Out" value={`${node.inDegree} / ${node.outDegree}`} />
+        <RuntimeMetric label="Last referenced" value={node.lastReferencedAt ? formatRelativeTime(node.lastReferencedAt) : "none"} />
+      </div>
+      <p className="mt-3 rounded border border-white/10 bg-white/[0.03] p-3 text-xs leading-5 text-slate-300">
+        {getGraphNodeImportanceReason(node, edges, nodes)}
+      </p>
       <div className="mt-4">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Related edges</p>
         <div className="mt-2 grid gap-2">
@@ -1852,6 +2038,7 @@ function KnowledgeGraphEdgeList({ edges, nodes }: { edges: KnowledgeGraphEdge[];
             <th className="px-3 py-2">From</th>
             <th className="px-3 py-2">Edge</th>
             <th className="px-3 py-2">To</th>
+            <th className="px-3 py-2">Importance</th>
             <th className="px-3 py-2">Reason</th>
           </tr>
         </thead>
@@ -1861,6 +2048,7 @@ function KnowledgeGraphEdgeList({ edges, nodes }: { edges: KnowledgeGraphEdge[];
               <td className="max-w-[14rem] truncate px-3 py-2 text-slate-300" title={nodeMap.get(edge.from)?.title ?? edge.from}>{nodeMap.get(edge.from)?.label ?? edge.from}</td>
               <td className="px-3 py-2"><StatusBadge className="bg-violet-500/15 text-violet-200 ring-violet-400/25">{edge.type}</StatusBadge></td>
               <td className="max-w-[14rem] truncate px-3 py-2 text-slate-300" title={nodeMap.get(edge.to)?.title ?? edge.to}>{nodeMap.get(edge.to)?.label ?? edge.to}</td>
+              <td className="px-3 py-2"><StatusBadge className={getImportanceBadgeStyle(edge.importanceLevel)}>{edge.importanceLevel} {edge.importanceScore}</StatusBadge></td>
               <td className="max-w-[16rem] truncate px-3 py-2 text-slate-500" title={readEdgeReason(edge)}>{readEdgeReason(edge)}</td>
             </tr>
           ))}
@@ -4851,7 +5039,16 @@ function findMeshAgent(meshOverview: MeshOverview, id: string) {
 
 function filterKnowledgeGraph(
   graph: KnowledgeGraph | null,
-  filters: { nodeType: string; edgeType: string; query: string },
+  filters: {
+    nodeType: string;
+    edgeType: string;
+    query: string;
+    importanceFilter: "all" | "medium" | "high" | "critical";
+    recentOnly: boolean;
+    decisionPathOnly: boolean;
+    architectPathOnly: boolean;
+    hideLowImportance: boolean;
+  },
 ): KnowledgeGraph {
   if (!graph) {
     return {
@@ -4864,18 +5061,22 @@ function filterKnowledgeGraph(
   const cleanQuery = filters.query.trim().toLowerCase();
   const nodes = graph.nodes.filter((node) => {
     const typeMatch = filters.nodeType === "all" || node.type === filters.nodeType;
+    const importanceMatch = importancePasses(node.importanceLevel, filters.importanceFilter) && (!filters.hideLowImportance || node.importanceLevel !== "low");
+    const recentMatch = !filters.recentOnly || node.isRecent;
     const queryMatch =
       !cleanQuery ||
       [node.label, node.title, node.externalRef ?? "", node.summary ?? ""]
         .join(" ")
         .toLowerCase()
         .includes(cleanQuery);
-    return typeMatch && queryMatch;
+    return typeMatch && importanceMatch && recentMatch && queryMatch;
   });
   const nodeIds = new Set(nodes.map((node) => node.id));
   const edges = graph.edges.filter((edge) => {
     const typeMatch = filters.edgeType === "all" || edge.type === filters.edgeType;
-    return typeMatch && nodeIds.has(edge.from) && nodeIds.has(edge.to);
+    const decisionMatch = !filters.decisionPathOnly || edge.isDecisionPath;
+    const architectMatch = !filters.architectPathOnly || edge.isArchitectPath;
+    return typeMatch && decisionMatch && architectMatch && nodeIds.has(edge.from) && nodeIds.has(edge.to);
   });
 
   return {
@@ -4890,6 +5091,12 @@ function filterKnowledgeGraph(
       }, {}),
     },
   };
+}
+
+function importancePasses(level: ImportanceLevel, filter: "all" | "medium" | "high" | "critical") {
+  const order: Record<ImportanceLevel, number> = { low: 1, medium: 2, high: 3, critical: 4 };
+  if (filter === "all") return true;
+  return order[level] >= order[filter];
 }
 
 function layoutGraphNodes(nodes: KnowledgeGraphNode[], width: number, height: number) {
@@ -4950,12 +5157,71 @@ function getKnowledgeNodeColor(type: string) {
   return colors[type] ?? "#94a3b8";
 }
 
-function getKnowledgeEdgeColor(type: string) {
-  if (type === "exported_to") return "rgba(139,92,246,0.9)";
-  if (type === "reviewed_by" || type === "reviewed_architecture_of") return "rgba(245,158,11,0.9)";
-  if (type === "mentioned_in") return "rgba(56,189,248,0.82)";
-  if (type === "references_memory") return "rgba(168,85,247,0.8)";
+function getKnowledgeNodeRadius(node: KnowledgeGraphNode, selected: boolean) {
+  const sizes: Record<ImportanceLevel, number> = {
+    low: 17,
+    medium: 22,
+    high: 28,
+    critical: 34,
+  };
+  return sizes[node.importanceLevel] + (selected ? 4 : 0);
+}
+
+function getKnowledgeNodeStroke(node: KnowledgeGraphNode) {
+  if (node.type === "decision") return "rgba(34,211,238,0.95)";
+  if (node.type === "architecture_review") return "rgba(251,191,36,0.95)";
+  if (node.type === "incident") return "rgba(251,113,133,0.95)";
+  if (node.type === "daily_report" || node.type === "nightly_review") return "rgba(96,165,250,0.9)";
+  if (node.importanceLevel === "critical") return "rgba(255,255,255,0.9)";
+  return "rgba(255,255,255,0.35)";
+}
+
+function getKnowledgeNodeStrokeWidth(node: KnowledgeGraphNode) {
+  if (node.importanceLevel === "critical") return 3;
+  if (node.importanceLevel === "high") return 2.4;
+  if (["decision", "architecture_review", "incident"].includes(node.type)) return 2.2;
+  return 1.2;
+}
+
+function getKnowledgeEdgeColor(edge: KnowledgeGraphEdge) {
+  if (edge.isDecisionPath) return "rgba(34,211,238,0.92)";
+  if (edge.isArchitectPath) return "rgba(251,191,36,0.9)";
+  if (edge.isIncidentPath) return "rgba(251,113,133,0.9)";
+  if (edge.type === "exported_to") return "rgba(139,92,246,0.9)";
+  if (edge.type === "reviewed_by" || edge.type === "reviewed_architecture_of") return "rgba(245,158,11,0.9)";
+  if (edge.type === "mentioned_in") return "rgba(56,189,248,0.82)";
+  if (edge.type === "references_memory") return "rgba(168,85,247,0.8)";
   return "rgba(148,163,184,0.72)";
+}
+
+function getKnowledgeEdgeWidth(edge: KnowledgeGraphEdge) {
+  if (edge.importanceLevel === "critical") return 4;
+  if (edge.importanceLevel === "high") return 3;
+  if (edge.importanceLevel === "medium") return 2;
+  return 1.1;
+}
+
+function getImportanceBadgeStyle(level: ImportanceLevel) {
+  if (level === "critical") return "bg-rose-500/15 text-rose-200 ring-rose-400/25";
+  if (level === "high") return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
+  if (level === "medium") return "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25";
+  return "bg-slate-500/15 text-slate-200 ring-slate-400/20";
+}
+
+function getGraphNodeImportanceReason(node: KnowledgeGraphNode, edges: KnowledgeGraphEdge[], nodes: KnowledgeGraphNode[]) {
+  const relatedTypes = new Set(edges.map((edge) => nodes.find((item) => item.id === (edge.from === node.id ? edge.to : edge.from))?.type).filter(Boolean));
+  const reasons = [];
+  if (node.type === "decision") reasons.push("it records a PM decision");
+  if (node.type === "architecture_review") reasons.push("it contains Architect risk review");
+  if (node.type === "incident") reasons.push("it marks an operational incident");
+  if (node.isHub) reasons.push(`it connects ${node.degree} graph relationships`);
+  if (node.isRecent) reasons.push("it was created or referenced recently");
+  if (node.isDecisionRelevant || relatedTypes.has("decision")) reasons.push("it is connected to decision context");
+  if (relatedTypes.has("architecture_review")) reasons.push("it is connected to an Architect review");
+  if (relatedTypes.has("incident")) reasons.push("it is connected to an incident");
+  return reasons.length
+    ? `This node matters because ${reasons.join(", ")}.`
+    : "This node is currently low-importance operational memory with few graph relationships.";
 }
 
 function truncateGraphLabel(value: string, maxLength: number) {
