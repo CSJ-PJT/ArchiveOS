@@ -11,6 +11,7 @@ import {
   getKpiOverview,
   getPlatformHealth,
   getPlatformReadiness,
+  getPublicAccessStatus,
   getRelatedKnowledge,
   getLatestBatchStatus,
   getLatestDailyReport,
@@ -45,6 +46,7 @@ import {
   type RelatedKnowledgeGroup,
   type PlatformHealth,
   type PlatformReadiness,
+  type PublicAccessStatus,
   type RuntimeEvent,
 } from "./lib/backendApi";
 import type {
@@ -341,6 +343,7 @@ function OperationsLayout({
   const [platformHealth, setPlatformHealth] = useState<PlatformHealth | null>(null);
   const [endpointHealth, setEndpointHealth] = useState<EndpointHealth | null>(null);
   const [platformReadiness, setPlatformReadiness] = useState<PlatformReadiness | null>(null);
+  const [publicAccessStatus, setPublicAccessStatus] = useState<PublicAccessStatus | null>(null);
   const [platformHealthError, setPlatformHealthError] = useState<string | null>(null);
   const [focusMode, setFocusMode] = useState(false);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
@@ -529,6 +532,7 @@ function OperationsLayout({
       setPlatformHealth(health);
       setEndpointHealth(endpoints);
       setPlatformReadiness(readiness);
+      setPublicAccessStatus(await getPublicAccessStatus());
     } catch (error) {
       setPlatformHealthError(error instanceof Error ? error.message : "Platform health is not reachable.");
     }
@@ -574,6 +578,7 @@ function OperationsLayout({
           endpointHealth={endpointHealth}
           platformReadiness={platformReadiness}
           platformHealthError={platformHealthError}
+          publicAccessStatus={publicAccessStatus}
         />
       ) : null}
 
@@ -651,6 +656,10 @@ function OperationsLayout({
           historianStatus={historianStatus}
           historianError={historianError}
           batchStatusError={batchStatusError}
+          endpointHealth={endpointHealth}
+          platformReadiness={platformReadiness}
+          publicAccessStatus={publicAccessStatus}
+          platformHealthError={platformHealthError}
         />
       ) : null}
     </div>
@@ -740,6 +749,7 @@ function DashboardView({
   endpointHealth,
   platformReadiness,
   platformHealthError,
+  publicAccessStatus,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
   runtimeError: string | null;
@@ -761,6 +771,7 @@ function DashboardView({
   endpointHealth: EndpointHealth | null;
   platformReadiness: PlatformReadiness | null;
   platformHealthError: string | null;
+  publicAccessStatus: PublicAccessStatus | null;
 }) {
   return (
     <div className="grid gap-5">
@@ -816,6 +827,22 @@ function DashboardView({
 
           <Panel title="Knowledge Graph Summary">
             <KnowledgeGraphSummaryCard knowledgeOverview={knowledgeOverview} />
+          </Panel>
+
+          <Panel title="Architect Summary">
+            <ArchitectSummaryCard review={latestArchitectureReview} />
+          </Panel>
+
+          <Panel title="Portfolio Snapshot">
+            <PortfolioSnapshotCard
+              readiness={platformReadiness}
+              endpointHealth={endpointHealth}
+              knowledgeOverview={knowledgeOverview}
+              kpiOverview={kpiOverview}
+              meshOverview={meshOverview}
+              latestDailyReport={latestDailyReport}
+              publicAccessStatus={publicAccessStatus}
+            />
           </Panel>
 
           <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
@@ -1035,7 +1062,7 @@ function SystemHealthCard({
     return <EmptyState title="System health loading" detail="Checking registered ArchiveOS endpoints." muted />;
   }
 
-  const failedEndpoints = endpointHealth.endpoints.filter((endpoint) => endpoint.status === "failed");
+  const failedEndpoints = endpointHealth.endpoints.filter((endpoint) => endpoint.status === "error");
   const missingEndpoints = endpointHealth.endpoints.filter((endpoint) => endpoint.status === "missing");
   const failedServices = platformHealth
     ? Object.entries(platformHealth.services).filter(([, online]) => !online).map(([service]) => service)
@@ -1066,7 +1093,7 @@ function SystemHealthCard({
           {[...failedEndpoints, ...missingEndpoints].slice(0, 5).map((endpoint) => (
             <div key={`${endpoint.method}-${endpoint.path}`} className="flex items-center justify-between gap-3 rounded border border-white/10 bg-black/20 px-3 py-2 text-xs">
               <span className="truncate text-slate-300" title={`${endpoint.method} ${endpoint.path}`}>
-                {endpoint.method} {endpoint.path}
+                {endpoint.name}: {endpoint.method} {endpoint.path}
               </span>
               <StatusBadge className="bg-rose-500/15 text-rose-200 ring-rose-400/25">{endpoint.status}</StatusBadge>
             </div>
@@ -1278,8 +1305,8 @@ function KnowledgeView({
       <Panel title="Knowledge Health">
         {historianError || knowledgeError ? (
           <EmptyState
-            title="Knowledge status unavailable"
-            detail={historianError ?? knowledgeError ?? "Knowledge graph status is not reachable."}
+            title="Knowledge status needs backend sync"
+            detail="Historian or Knowledge endpoints are missing, stale, or unreachable. Check Settings > Endpoint Health Matrix."
           />
         ) : (
           <div className="grid gap-4">
@@ -1463,7 +1490,10 @@ function KnowledgeGraphPanel() {
         </div>
 
         {error ? (
-          <EmptyState title="Knowledge Graph API를 불러오지 못했습니다." detail={error} />
+          <EmptyState
+            title="Knowledge Graph API를 불러오지 못했습니다."
+            detail="백엔드 엔드포인트가 누락되었거나 오래된 프로세스일 수 있습니다. Settings > Endpoint Health Matrix를 확인하고 백엔드를 최신 main으로 재시작하세요."
+          />
         ) : loading ? (
           <EmptyState title="Loading graph" detail="Reading knowledge_nodes and knowledge_edges." muted />
         ) : !filtered.nodes.length ? (
@@ -1654,7 +1684,12 @@ function KnowledgeSearchPanel() {
             {loading ? "Searching" : "Search"}
           </button>
         </div>
-        {error ? <EmptyState title="Related context unavailable" detail={error} /> : null}
+        {error ? (
+          <EmptyState
+            title="Related context needs backend sync"
+            detail="Related Knowledge endpoint is missing, stale, or unreachable. Check Endpoint Health Matrix."
+          />
+        ) : null}
         <KnowledgeNodeList nodes={results} />
         {related.length ? (
           <div className="grid gap-3">
@@ -1826,7 +1861,12 @@ function ArchitectStatusCard({
   error: string | null;
 }) {
   if (error) {
-    return <EmptyState title="Architect unavailable" detail={error} />;
+    return (
+      <EmptyState
+        title="Architect status needs backend sync"
+        detail="Architect endpoints are missing, stale, or unreachable. Check Settings > Endpoint Health Matrix."
+      />
+    );
   }
 
   if (!review) {
@@ -1986,6 +2026,83 @@ function KnowledgeGraphSummaryCard({ knowledgeOverview }: { knowledgeOverview: K
   );
 }
 
+function ArchitectSummaryCard({ review }: { review: ArchitectureReview | null }) {
+  if (!review) {
+    return (
+      <EmptyState
+        title="Architect review not recorded yet"
+        detail="Run the rule-based Architect review demo or record a review to populate this PM guardrail summary."
+        muted
+      />
+    );
+  }
+
+  return (
+    <div className="grid gap-3 md:grid-cols-3">
+      <RuntimeMetric label="Architect status" value={review.status} />
+      <RuntimeMetric label="Findings" value={String(review.findings.length)} />
+      <RuntimeMetric label="Recommendations" value={String(review.recommendations.length)} />
+      <div className="md:col-span-3">
+        <p className="line-clamp-2 text-sm leading-6 text-slate-300" title={review.summary ?? ""}>
+          {review.summary ?? "No architecture summary."}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PortfolioSnapshotCard({
+  readiness,
+  endpointHealth,
+  knowledgeOverview,
+  kpiOverview,
+  meshOverview,
+  latestDailyReport,
+  publicAccessStatus,
+}: {
+  readiness: PlatformReadiness | null;
+  endpointHealth: EndpointHealth | null;
+  knowledgeOverview: KnowledgeOverview | null;
+  kpiOverview: KpiOverview | null;
+  meshOverview: MeshOverview | null;
+  latestDailyReport: DailyReport | null;
+  publicAccessStatus: PublicAccessStatus | null;
+}) {
+  const implementedModules = [
+    "Runtime",
+    "Decisions",
+    "Operators",
+    "Timeline",
+    "Knowledge",
+    "Mesh",
+    "KPI",
+    "Batches",
+    "Historian",
+    "Architect",
+  ];
+  const enabledModules = [
+    Boolean(endpointHealth),
+    Boolean(knowledgeOverview),
+    Boolean(meshOverview),
+    Boolean(kpiOverview),
+    Boolean(latestDailyReport),
+    Boolean(publicAccessStatus),
+  ].filter(Boolean).length;
+
+  return (
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <RuntimeMetric label="Implemented modules" value={String(implementedModules.length)} />
+      <RuntimeMetric label="Enabled signals" value={`${enabledModules}/6`} />
+      <RuntimeMetric label="Endpoint health" value={endpointHealth ? `${endpointHealth.summary.ok}/${endpointHealth.summary.total}` : "unknown"} />
+      <RuntimeMetric label="Readiness" value={readiness ? `${readiness.score} ${readiness.grade}` : "unknown"} />
+      <RuntimeMetric label="Knowledge graph" value={`${knowledgeOverview?.totalNodes ?? 0} nodes / ${knowledgeOverview?.totalEdges ?? 0} edges`} />
+      <RuntimeMetric label="KPI available" value={kpiOverview ? "yes" : "no"} />
+      <RuntimeMetric label="Daily report" value={latestDailyReport?.status ?? "none"} />
+      <RuntimeMetric label="Mesh health" value={meshOverview?.health.status ?? "unknown"} />
+    </div>
+  );
+}
+
 function KpiView({
   kpiOverview,
   range,
@@ -2000,7 +2117,10 @@ function KpiView({
   if (error) {
     return (
       <Panel title="KPI Dashboard">
-        <EmptyState title="KPI unavailable" detail={error} />
+        <EmptyState
+          title="KPI data needs backend sync"
+          detail="KPI endpoint is missing, stale, or unreachable. Check Settings > Endpoint Health Matrix."
+        />
       </Panel>
     );
   }
@@ -2166,7 +2286,10 @@ function MeshView({
   if (error) {
     return (
       <Panel title="Agent Mesh">
-        <EmptyState title="Agent mesh unavailable" detail={error} />
+        <EmptyState
+          title="Agent Mesh needs backend sync"
+          detail="Mesh endpoint is missing, stale, or unreachable. Check Settings > Endpoint Health Matrix."
+        />
       </Panel>
     );
   }
@@ -2375,6 +2498,10 @@ function SettingsView({
   historianStatus,
   historianError,
   batchStatusError,
+  endpointHealth,
+  platformReadiness,
+  publicAccessStatus,
+  platformHealthError,
 }: {
   backendReachability: ConsistencyStatus;
   commandRunsReachability: ConsistencyStatus;
@@ -2384,13 +2511,18 @@ function SettingsView({
   historianStatus: HistorianStatus | null;
   historianError: string | null;
   batchStatusError: string | null;
+  endpointHealth: EndpointHealth | null;
+  platformReadiness: PlatformReadiness | null;
+  publicAccessStatus: PublicAccessStatus | null;
+  platformHealthError: string | null;
 }) {
   const supabaseConfigured = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
   const currentFrontendUrl = typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:5173";
   const remoteFrontendUrl = (import.meta.env.VITE_REMOTE_FRONTEND_URL as string | undefined) ?? currentFrontendUrl;
   const remoteBackendUrl = (import.meta.env.VITE_REMOTE_BACKEND_URL as string | undefined) ?? configuredBackendUrl;
   const frontendIsRemote = /^https:\/\//.test(remoteFrontendUrl) && !remoteFrontendUrl.includes("127.0.0.1") && !remoteFrontendUrl.includes("localhost");
-  const backendIsRemote = /^https:\/\//.test(remoteBackendUrl) && !remoteBackendUrl.includes("127.0.0.1") && !remoteBackendUrl.includes("localhost");
+  const currentLocationIsRemote = /^https:\/\//.test(currentFrontendUrl) && !currentFrontendUrl.includes("127.0.0.1") && !currentFrontendUrl.includes("localhost");
+  const frontendUsesLocalBackend = /^(http:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?/i.test(configuredBackendUrl);
 
   return (
     <div className="grid gap-5">
@@ -2405,16 +2537,28 @@ function SettingsView({
           <div className="grid gap-3 md:grid-cols-2">
             <RemoteAccessCard
               label="Frontend URL"
-              value={remoteFrontendUrl}
-              status={currentFrontendUrl ? "online" : "offline"}
-              detail={frontendIsRemote ? "Remote HTTPS frontend URL is configured." : "Local URL shown. Set VITE_REMOTE_FRONTEND_URL to display the ngrok frontend URL."}
+              value={publicAccessStatus?.frontendPublicUrl ?? remoteFrontendUrl}
+              status={publicAccessStatus?.frontendPublicUrlConfigured || frontendIsRemote ? "online" : "not configured"}
+              detail={publicAccessStatus?.frontendPublicUrlConfigured ? "ARCHIVEOS_PUBLIC_URL is configured on backend." : "Set ARCHIVEOS_PUBLIC_URL to display the latest ngrok frontend URL."}
             />
             <RemoteAccessCard
               label="Backend URL"
-              value={remoteBackendUrl}
+              value={publicAccessStatus?.backendPublicUrl ?? remoteBackendUrl}
               status={backendReachability === "matched" ? "online" : "offline"}
-              detail={backendIsRemote ? "Remote HTTPS backend URL is configured." : "Local backend URL shown. Set VITE_REMOTE_BACKEND_URL if the phone must call the backend through ngrok."}
+              detail={publicAccessStatus?.backendBaseUrlConfigured ? "ARCHIVEOS_BACKEND_PUBLIC_URL is configured on backend." : "Set ARCHIVEOS_BACKEND_PUBLIC_URL when mobile/ngrok must call backend directly."}
             />
+          </div>
+          <div className="grid gap-2">
+            {currentLocationIsRemote && frontendUsesLocalBackend ? (
+              <p className="rounded border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+                Current frontend is remote, but VITE_BACKEND_URL resolves to localhost. Restart frontend with the backend ngrok URL.
+              </p>
+            ) : null}
+            {platformHealthError ? (
+              <p className="rounded border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+                Endpoint health is not reachable. Restart backend from latest main before using mobile/ngrok.
+              </p>
+            ) : null}
           </div>
         </div>
       </Panel>
@@ -2434,6 +2578,20 @@ function SettingsView({
           <ConsistencyMini label="command_runs" status={commandRunsReachability} />
           <ConsistencyMini label="MCP queue" status={runtimeStatus?.queue.path ? "matched" : "unknown"} />
         </div>
+      </Panel>
+      <Panel title="Endpoint Health Matrix">
+        <EndpointHealthMatrix endpointHealth={endpointHealth} />
+      </Panel>
+      <Panel title="Portfolio Snapshot">
+        <PortfolioSnapshotCard
+          readiness={platformReadiness}
+          endpointHealth={endpointHealth}
+          knowledgeOverview={null}
+          kpiOverview={null}
+          meshOverview={null}
+          latestDailyReport={latestDailyReport}
+          publicAccessStatus={publicAccessStatus}
+        />
       </Panel>
       <Panel title="Batch Settings">
         <div className="grid gap-4">
@@ -3019,7 +3177,10 @@ function EventTimeline({
       </div>
 
       {error ? (
-        <EmptyState title="Event timeline unavailable" detail={error} />
+        <EmptyState
+          title="Event timeline needs backend sync"
+          detail="Runtime event endpoint is missing, stale, or unreachable. Check Settings > Endpoint Health Matrix."
+        />
       ) : todayEvents.length ? (
         <div className="grid gap-4">
           {groupedEvents.map((group) => (
@@ -3412,6 +3573,39 @@ function RemoteAccessCard({
         <StatusBadge className={remoteAccessStatusStyles[status]}>{status}</StatusBadge>
       </div>
       <p className="mt-3 text-xs leading-5 text-slate-500">{detail}</p>
+    </div>
+  );
+}
+
+function EndpointHealthMatrix({ endpointHealth }: { endpointHealth: EndpointHealth | null }) {
+  if (!endpointHealth) {
+    return <EmptyState title="Endpoint health not loaded" detail="Restart backend from latest main and refresh Settings." muted />;
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-3 md:grid-cols-4">
+        <RuntimeMetric label="Checked" value={formatRelativeTime(endpointHealth.checkedAt)} />
+        <RuntimeMetric label="OK" value={String(endpointHealth.summary.ok)} />
+        <RuntimeMetric label="Error" value={String(endpointHealth.summary.error)} />
+        <RuntimeMetric label="Missing" value={String(endpointHealth.summary.missing)} />
+      </div>
+      <div className="grid gap-2">
+        {endpointHealth.endpoints.map((endpoint) => (
+          <article key={`${endpoint.method}-${endpoint.path}`} className="grid gap-2 rounded-md border border-white/10 bg-black/20 p-3 md:grid-cols-[1fr_auto] md:items-center">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-white">{endpoint.name}</span>
+                <span className="rounded bg-white/5 px-2 py-0.5 text-xs text-slate-400">{endpoint.service}</span>
+                <span className="rounded bg-white/5 px-2 py-0.5 text-xs text-slate-400">{endpoint.httpStatus ?? "n/a"}</span>
+              </div>
+              <CompactValue value={`${endpoint.method} ${endpoint.path}`} className="mt-2 text-xs text-slate-400" copyable />
+              <p className="mt-1 text-xs leading-5 text-slate-500">{endpoint.message}</p>
+            </div>
+            <StatusBadge className={getEndpointStatusStyle(endpoint.status)}>{endpoint.status}</StatusBadge>
+          </article>
+        ))}
+      </div>
     </div>
   );
 }
@@ -4177,6 +4371,13 @@ function getBatchStatusStyle(status: string) {
 
 function getArchitectStatusStyle(status: ArchitectureReview["status"]) {
   return architectStatusStyles[status] ?? architectStatusStyles.pending;
+}
+
+function getEndpointStatusStyle(status: EndpointHealth["endpoints"][number]["status"]) {
+  if (status === "ok") return "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25";
+  if (status === "missing") return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
+  if (status === "unknown") return "bg-slate-500/15 text-slate-200 ring-slate-400/20";
+  return "bg-rose-500/15 text-rose-200 ring-rose-400/25";
 }
 
 function getArchitectStatusLabel(review: ArchitectureReview | null) {

@@ -72,6 +72,7 @@ type HealthServiceKey =
   | "dailyReport";
 
 type EndpointRegistration = {
+  name: string;
   method: "GET" | "POST";
   path: string;
   service: HealthServiceKey;
@@ -79,38 +80,39 @@ type EndpointRegistration = {
 };
 
 const endpointRegistry: EndpointRegistration[] = [
-  { method: "GET", path: "/health", service: "backend", description: "Legacy backend liveness check." },
-  { method: "GET", path: "/api/health", service: "backend", description: "ArchiveOS service health summary." },
-  { method: "GET", path: "/api/health/endpoints", service: "backend", description: "Registered endpoint coverage." },
-  { method: "GET", path: "/api/dashboard", service: "dailyReport", description: "Supabase dashboard data." },
-  { method: "GET", path: "/api/work-logs/recent", service: "dailyReport", description: "Recent work logs." },
-  { method: "POST", path: "/api/work-logs", service: "dailyReport", description: "Recording-only work log write." },
-  { method: "GET", path: "/api/commands/recent", service: "dailyReport", description: "Recent recorded commands." },
-  { method: "POST", path: "/api/commands", service: "dailyReport", description: "Recording-only command write." },
-  { method: "GET", path: "/api/local-actions/projects", service: "backend", description: "Allowlisted local project registry." },
-  { method: "POST", path: "/api/local-actions/run", service: "backend", description: "Allowlisted diagnostics endpoint." },
-  { method: "GET", path: "/api/local-runtime/status", service: "runtime", description: "Local MCP runtime status." },
-  { method: "GET", path: "/api/runtime/events/recent", service: "runtime", description: "Derived runtime events." },
-  { method: "GET", path: "/api/batches/recent", service: "dailyReport", description: "Recent batch runs." },
-  { method: "GET", path: "/api/batches/latest", service: "dailyReport", description: "Latest nightly/daily batch state." },
-  { method: "POST", path: "/api/batches/nightly-review/run", service: "dailyReport", description: "Manual nightly batch trigger." },
-  { method: "POST", path: "/api/batches/daily-report/run", service: "dailyReport", description: "Manual daily report trigger." },
-  { method: "GET", path: "/api/reports/daily/latest", service: "dailyReport", description: "Latest daily report." },
-  { method: "GET", path: "/api/reports/daily/recent", service: "dailyReport", description: "Recent daily reports." },
-  { method: "GET", path: "/api/runtime/snapshots/recent", service: "runtime", description: "Recent runtime snapshots." },
-  { method: "GET", path: "/api/historian/status", service: "knowledge", description: "Historian export status." },
-  { method: "GET", path: "/api/knowledge/overview", service: "knowledge", description: "Knowledge Graph overview." },
-  { method: "GET", path: "/api/knowledge/recent", service: "knowledge", description: "Recent knowledge nodes." },
-  { method: "GET", path: "/api/knowledge/search", service: "knowledge", description: "Knowledge text search." },
-  { method: "GET", path: "/api/knowledge/related", service: "knowledge", description: "Related knowledge lookup." },
-  { method: "GET", path: "/api/knowledge/graph", service: "knowledge", description: "Knowledge Graph visualization data." },
-  { method: "GET", path: "/api/knowledge/node/:id", service: "knowledge", description: "Knowledge node detail." },
-  { method: "POST", path: "/api/architect/review", service: "architect", description: "Rule-based Architect review recorder." },
-  { method: "GET", path: "/api/architect/reviews/recent", service: "architect", description: "Recent Architect reviews." },
-  { method: "GET", path: "/api/architect/reviews/latest", service: "architect", description: "Latest Architect review." },
-  { method: "GET", path: "/api/mesh/overview", service: "mesh", description: "Agent Mesh overview." },
-  { method: "GET", path: "/api/kpi/overview", service: "kpi", description: "KPI overview." },
-  { method: "GET", path: "/api/platform/readiness", service: "backend", description: "Portfolio readiness score." },
+  { name: "Health", method: "GET", path: "/health", service: "backend", description: "Legacy backend liveness check." },
+  { name: "API Health", method: "GET", path: "/api/health", service: "backend", description: "ArchiveOS service health summary." },
+  { name: "Endpoint Matrix", method: "GET", path: "/api/health/endpoints", service: "backend", description: "Registered endpoint coverage." },
+  { name: "Dashboard", method: "GET", path: "/api/dashboard", service: "dailyReport", description: "Supabase dashboard data." },
+  { name: "Work Logs", method: "GET", path: "/api/work-logs/recent", service: "dailyReport", description: "Recent work logs." },
+  { name: "Record Work Log", method: "POST", path: "/api/work-logs", service: "dailyReport", description: "Recording-only work log write." },
+  { name: "Commands", method: "GET", path: "/api/commands/recent", service: "dailyReport", description: "Recent recorded commands." },
+  { name: "Record Command", method: "POST", path: "/api/commands", service: "dailyReport", description: "Recording-only command write." },
+  { name: "Local Projects", method: "GET", path: "/api/local-actions/projects", service: "backend", description: "Allowlisted local project registry." },
+  { name: "Local Diagnostics", method: "POST", path: "/api/local-actions/run", service: "backend", description: "Allowlisted diagnostics endpoint." },
+  { name: "Runtime Status", method: "GET", path: "/api/local-runtime/status", service: "runtime", description: "Local MCP runtime status." },
+  { name: "Runtime Events", method: "GET", path: "/api/runtime/events/recent", service: "runtime", description: "Derived runtime events." },
+  { name: "Public Access", method: "GET", path: "/api/runtime/public-access", service: "backend", description: "Remote/ngrok runtime URL configuration." },
+  { name: "Batch Runs", method: "GET", path: "/api/batches/recent", service: "dailyReport", description: "Recent batch runs." },
+  { name: "Latest Batch", method: "GET", path: "/api/batches/latest", service: "dailyReport", description: "Latest nightly/daily batch state." },
+  { name: "Run Nightly Review", method: "POST", path: "/api/batches/nightly-review/run", service: "dailyReport", description: "Manual nightly batch trigger." },
+  { name: "Run Daily Report", method: "POST", path: "/api/batches/daily-report/run", service: "dailyReport", description: "Manual daily report trigger." },
+  { name: "Latest Daily Report", method: "GET", path: "/api/reports/daily/latest", service: "dailyReport", description: "Latest daily report." },
+  { name: "Recent Daily Reports", method: "GET", path: "/api/reports/daily/recent", service: "dailyReport", description: "Recent daily reports." },
+  { name: "Runtime Snapshots", method: "GET", path: "/api/runtime/snapshots/recent", service: "runtime", description: "Recent runtime snapshots." },
+  { name: "Historian", method: "GET", path: "/api/historian/status", service: "knowledge", description: "Historian export status." },
+  { name: "Knowledge Overview", method: "GET", path: "/api/knowledge/overview", service: "knowledge", description: "Knowledge Graph overview." },
+  { name: "Recent Knowledge", method: "GET", path: "/api/knowledge/recent", service: "knowledge", description: "Recent knowledge nodes." },
+  { name: "Knowledge Search", method: "GET", path: "/api/knowledge/search", service: "knowledge", description: "Knowledge text search." },
+  { name: "Related Knowledge", method: "GET", path: "/api/knowledge/related", service: "knowledge", description: "Related knowledge lookup." },
+  { name: "Knowledge Graph", method: "GET", path: "/api/knowledge/graph", service: "knowledge", description: "Knowledge Graph visualization data." },
+  { name: "Knowledge Node", method: "GET", path: "/api/knowledge/node/:id", service: "knowledge", description: "Knowledge node detail." },
+  { name: "Architect Review", method: "POST", path: "/api/architect/review", service: "architect", description: "Rule-based Architect review recorder." },
+  { name: "Architect Reviews", method: "GET", path: "/api/architect/reviews/recent", service: "architect", description: "Recent Architect reviews." },
+  { name: "Latest Architect", method: "GET", path: "/api/architect/reviews/latest", service: "architect", description: "Latest Architect review." },
+  { name: "Agent Mesh", method: "GET", path: "/api/mesh/overview", service: "mesh", description: "Agent Mesh overview." },
+  { name: "KPI", method: "GET", path: "/api/kpi/overview", service: "kpi", description: "KPI overview." },
+  { name: "Readiness", method: "GET", path: "/api/platform/readiness", service: "backend", description: "Portfolio readiness score." },
 ];
 
 function parseCsvEnv(value: string | undefined) {
@@ -119,6 +121,11 @@ function parseCsvEnv(value: string | undefined) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function readOptionalUrlEnv(name: string) {
+  const value = process.env[name]?.trim();
+  return value ? value : null;
 }
 
 app.use(
@@ -163,6 +170,30 @@ app.get("/api/health/endpoints", async (_request, response) => {
 
 app.get("/api/platform/readiness", async (_request, response) => {
   response.json({ data: await getPlatformReadiness() });
+});
+
+app.get("/api/runtime/public-access", (request, response) => {
+  const forwardedProto = request.header("x-forwarded-proto");
+  const forwardedHost = request.header("x-forwarded-host");
+  const requestOrigin =
+    forwardedProto && forwardedHost
+      ? `${forwardedProto}://${forwardedHost}`
+      : request.get("host")
+        ? `${request.protocol}://${request.get("host")}`
+        : null;
+  const frontendPublicUrl = readOptionalUrlEnv("ARCHIVEOS_PUBLIC_URL");
+  const backendPublicUrl = readOptionalUrlEnv("ARCHIVEOS_BACKEND_PUBLIC_URL");
+
+  response.json({
+    data: {
+      backendBaseUrlConfigured: Boolean(backendPublicUrl),
+      frontendPublicUrlConfigured: Boolean(frontendPublicUrl),
+      backendUrlSource: backendPublicUrl ? "env" : requestOrigin ? "request" : "unknown",
+      frontendPublicUrl,
+      backendPublicUrl: backendPublicUrl ?? requestOrigin,
+      checkedAt: new Date().toISOString(),
+    },
+  });
 });
 
 app.get("/api/work-logs/recent", async (_request, response) => {
@@ -723,16 +754,16 @@ async function getEndpointHealthSnapshot() {
     const online = services[endpoint.service];
     return {
       ...endpoint,
-      status: online ? "online" : "failed",
+      status: online ? "ok" : "error",
+      httpStatus: online ? 200 : 503,
       message: online
         ? "Registered and service dependency check passed."
         : `${endpoint.service} dependency check failed.`,
     };
   });
-  const failed = endpoints.filter((endpoint) => endpoint.status === "failed").length;
+  const failed = endpoints.filter((endpoint) => endpoint.status === "error").length;
 
   return {
-    status: failed > 0 ? "warning" : "ok",
     checkedAt,
     endpoints,
     summary: {
@@ -740,6 +771,9 @@ async function getEndpointHealthSnapshot() {
       online: endpoints.length - failed,
       failed,
       missing: 0,
+      ok: endpoints.length - failed,
+      error: failed,
+      unknown: 0,
     },
   };
 }
@@ -765,7 +799,7 @@ async function getPlatformReadiness() {
   }
 
   const dashboardCoverage = averageScore([
-    endpointHealth.endpoints.some((endpoint) => endpoint.path === "/api/local-runtime/status" && endpoint.status === "online") ? 100 : 0,
+    endpointHealth.endpoints.some((endpoint) => endpoint.path === "/api/local-runtime/status" && endpoint.status === "ok") ? 100 : 0,
     latestDailyReport ? 100 : 70,
     mesh ? 100 : 0,
     kpi ? 100 : 0,
@@ -798,7 +832,7 @@ async function getPlatformReadiness() {
   }
 
   const architectCoverage = latestArchitect ? 100 : endpointHealth.endpoints.some(
-    (endpoint) => endpoint.service === "architect" && endpoint.status === "online",
+    (endpoint) => endpoint.service === "architect" && endpoint.status === "ok",
   )
     ? 65
     : 0;

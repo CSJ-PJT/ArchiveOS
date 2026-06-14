@@ -37,17 +37,18 @@ export type PlatformHealth = {
   };
 };
 
-export type EndpointHealthStatus = "online" | "failed" | "missing";
+export type EndpointHealthStatus = "ok" | "missing" | "error" | "unknown";
 
 export type EndpointHealth = {
-  status: "ok" | "warning";
   checkedAt: string;
   endpoints: Array<{
+    name: string;
     method: "GET" | "POST";
     path: string;
     service: string;
     description: string;
     status: EndpointHealthStatus;
+    httpStatus: number | null;
     message: string;
   }>;
   summary: {
@@ -55,7 +56,19 @@ export type EndpointHealth = {
     online: number;
     failed: number;
     missing: number;
+    ok: number;
+    error: number;
+    unknown: number;
   };
+};
+
+export type PublicAccessStatus = {
+  backendBaseUrlConfigured: boolean;
+  frontendPublicUrlConfigured: boolean;
+  backendUrlSource: "env" | "request" | "unknown";
+  frontendPublicUrl: string | null;
+  backendPublicUrl: string | null;
+  checkedAt: string;
 };
 
 export type PlatformReadiness = {
@@ -395,6 +408,11 @@ export async function getPlatformHealth() {
 
 export async function getEndpointHealth() {
   return request<EndpointHealth>("/api/health/endpoints");
+}
+
+export async function getPublicAccessStatus() {
+  const response = await request<ApiEnvelope<PublicAccessStatus>>("/api/runtime/public-access");
+  return response.data;
 }
 
 export async function getPlatformReadiness() {

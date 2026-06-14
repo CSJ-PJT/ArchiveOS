@@ -1,5 +1,7 @@
 # ArchiveOS
 
+v1.0 하드닝, Endpoint Health, ngrok 런타임 동기화 절차는 [docs/ARCHIVEOS_V1_HARDENING.md](docs/ARCHIVEOS_V1_HARDENING.md)를 기준으로 확인합니다.
+
 ArchiveOS는 AI 에이전트 작업을 PM 관점에서 관찰하고 기록하기 위한 운영 대시보드입니다. React, Vite, TypeScript, Tailwind CSS, Supabase, Express 기반으로 구성되어 있습니다.
 
 현재 단계의 핵심 방향은 **실행 콘솔이 아니라 읽기 전용 PM 가시화 대시보드**입니다. OpenAI API 호출, GitHub Webhook 자동화, MCP 직접 실행 제어, Codex 직접 제어는 아직 포함하지 않습니다.
