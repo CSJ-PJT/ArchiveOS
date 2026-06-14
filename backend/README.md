@@ -424,3 +424,22 @@ ARCHIVEOS_BACKEND_PUBLIC_URL=
 ```
 
 These values are exposed only as configured yes/no or public URL status. Secrets, service role keys, Discord webhook values, and absolute Obsidian vault paths remain backend-only.
+## Knowledge Graph Importance Insights
+
+The backend enriches Knowledge Graph responses with rule-based importance metadata.
+
+Endpoints:
+
+```bash
+GET /api/knowledge/graph?limit=100
+GET /api/knowledge/graph/insights?limit=100
+```
+
+The importance layer is computed from existing Supabase rows only:
+
+- node degree, in-degree, and out-degree
+- recent node/edge references
+- node type weighting for decisions, architecture reviews, incidents, daily reports, and nightly reviews
+- links to decision, Architect, and incident context
+
+This is not vector search, not embeddings, not a graph database, and not LLM reasoning. It is read-only metadata for PM traceability and portfolio visualization.
