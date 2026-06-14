@@ -1220,7 +1220,7 @@ function DailyReportStatusCard({
               <p className="mt-1 text-xs text-slate-500">target {latestDailyReport.target_date} / {formatDate(latestDailyReport.created_at)}</p>
             </div>
             <StatusBadge className={operationStatusStyles[latestDailyReport.status]}>
-              {getOperationStatusLabel(latestDailyReport.status)}
+              {getOperationStatusLabelKo(latestDailyReport.status)}
             </StatusBadge>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -5239,6 +5239,12 @@ function formatKpiPercent(value: number | null) {
 function formatKpiMetric(value: string | number | null) {
   if (typeof value === "string") return value;
   return formatKpiValue(value);
+}
+
+function getOperationStatusLabelKo(status: DailyReport["status"]) {
+  if (status === "problem") return "문제";
+  if (status === "warning") return "주의";
+  return "정상";
 }
 
 function getOperationStatusLabel(status: DailyReport["status"]) {
