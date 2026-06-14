@@ -408,3 +408,19 @@ GET /api/knowledge/graph?limit=100
 - recursive traversal 없음
 - Obsidian 양방향 sync 없음
 - 절대 vault path 노출 없음
+## ArchiveOS v1.0 Hardening Reference
+
+Endpoint Health, Public Access/ngrok runtime sync, and portfolio readiness documentation:
+
+```text
+../docs/ARCHIVEOS_V1_HARDENING.md
+```
+
+Backend-only environment variables used by this layer:
+
+```bash
+ARCHIVEOS_PUBLIC_URL=
+ARCHIVEOS_BACKEND_PUBLIC_URL=
+```
+
+These values are exposed only as configured yes/no or public URL status. Secrets, service role keys, Discord webhook values, and absolute Obsidian vault paths remain backend-only.
