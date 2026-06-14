@@ -443,3 +443,14 @@ The importance layer is computed from existing Supabase rows only:
 - links to decision, Architect, and incident context
 
 This is not vector search, not embeddings, not a graph database, and not LLM reasoning. It is read-only metadata for PM traceability and portfolio visualization.
+
+## Public URL / ngrok Alias
+
+For mobile and portfolio demos, the backend reports the public frontend URL from:
+
+```bash
+ARCHIVEOS_PUBLIC_URL=
+ARCHIVEOS_NGROK_URL=
+```
+
+`ARCHIVEOS_PUBLIC_URL` takes priority. `ARCHIVEOS_NGROK_URL` is accepted as a convenience alias for the latest frontend ngrok URL. Backend public URL still uses `ARCHIVEOS_BACKEND_PUBLIC_URL`.
