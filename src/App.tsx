@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   configuredBackendUrl,
   createCommandRun,
+  createWorkLog,
   getDashboardData,
   getBackendHealth,
   getEndpointHealth,
@@ -230,33 +231,37 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadDashboard() {
+  const loadDashboard = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (!options.silent) {
       setLoading(true);
-      setError(null);
+    }
+    setError(null);
 
-      try {
-        const dashboardData = await getDashboardData();
-        const agents = dashboardData.agents.filter((agent) => !seedAgentIds.has(agent.id));
-        const tasks = dashboardData.tasks.filter((task) => !seedTaskIds.has(task.id));
-        const logs = dashboardData.logs.filter((log) => !seedWorkLogIds.has(log.id));
-        const decisions = dashboardData.decisions.filter((log) => !seedWorkLogIds.has(log.id));
+    try {
+      const dashboardData = await getDashboardData();
+      const agents = dashboardData.agents.filter((agent) => !seedAgentIds.has(agent.id));
+      const tasks = dashboardData.tasks.filter((task) => !seedTaskIds.has(task.id));
+      const logs = dashboardData.logs.filter((log) => !seedWorkLogIds.has(log.id));
+      const decisions = dashboardData.decisions.filter((log) => !seedWorkLogIds.has(log.id));
 
-        setData({
-          agents,
-          tasks,
-          logs,
-          decisions,
-        });
-      } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : "Failed to load dashboard data.");
-      }
-
-      setLoading(false);
+      setData({
+        agents,
+        tasks,
+        logs,
+        decisions,
+      });
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load dashboard data.");
     }
 
-    loadDashboard();
+    if (!options.silent) {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
 
   const taskCounts = useMemo(
     () =>
@@ -305,7 +310,13 @@ function App() {
             Loading operations data...
           </section>
         ) : (
-          <OperationsLayout data={data} taskCounts={taskCounts} view={view} setView={setView} />
+          <OperationsLayout
+            data={data}
+            taskCounts={taskCounts}
+            view={view}
+            setView={setView}
+            reloadDashboard={loadDashboard}
+          />
         )}
       </div>
     </main>
@@ -317,11 +328,13 @@ function OperationsLayout({
   taskCounts,
   view,
   setView,
+  reloadDashboard,
 }: {
   data: DashboardData;
   taskCounts: { status: TaskStatus; label: string; count: number }[];
   view: AppView;
   setView: (view: AppView) => void;
+  reloadDashboard: (options?: { silent?: boolean }) => void;
 }) {
   const [runtimeStatus, setRuntimeStatus] = useState<LocalRuntimeStatus | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
@@ -601,7 +614,10 @@ function OperationsLayout({
           decisions={data.decisions}
           runtimeStatus={runtimeStatus}
           latestArchitectureReview={latestArchitectureReview}
-          onRecorded={refreshRuntimeEvents}
+          onRecorded={() => {
+            refreshRuntimeEvents({ silent: true });
+            reloadDashboard({ silent: true });
+          }}
         />
       ) : null}
 
@@ -934,12 +950,15 @@ function DecisionsView({
 
   return (
     <div className="grid gap-5">
-      <Panel title="Decision Recorder">
-        <SourceLabel label="Supabase recorded command_runs. Recording-only." />
+      <Panel title="PM Decision Console">
+        <SourceLabel label="Writes real PM decisions to Supabase work_logs with log_type=decision. No agent execution is triggered." />
         <div className="mt-4 grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
           <div className="rounded-md border border-white/10 bg-black/20 p-4">
-            <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Decision count</p>
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Recorded PM decisions</p>
             <p className="mt-2 text-3xl font-semibold text-white">{decisions.length}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Approve or reject the current runtime target. The decision is stored as operational memory and appears in the decision archive.
+            </p>
             <CompactValue value={targetTask ?? "No linked runtime task"} className="mt-3 text-sm text-slate-300" copyable={Boolean(targetTask)} />
             <CompactValue value={runtimeStatus?.latest.outbox?.name ?? "No linked result file"} className="mt-3 text-xs text-slate-500" copyable={Boolean(runtimeStatus?.latest.outbox?.name)} />
             <CompactValue value={runtimeStatus?.latest.review?.name ?? "No linked review file"} className="mt-2 text-xs text-slate-500" copyable={Boolean(runtimeStatus?.latest.review?.name)} />
@@ -3022,6 +3041,7 @@ function ApprovalRecorder({
   onRecorded: (options?: { silent?: boolean }) => void;
 }) {
   const [rejectReason, setRejectReason] = useState("");
+  const [approvalNote, setApprovalNote] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -3030,14 +3050,32 @@ function ApprovalRecorder({
     setMessage(null);
 
     try {
-      const reason = action === "reject" && rejectReason.trim() ? ` Reason: ${rejectReason.trim()}` : "";
+      const note = action === "approve" ? approvalNote.trim() : rejectReason.trim();
+      const reason = note ? `\nReason: ${note}` : "";
+      const target = targetTask ?? "current-runtime-state";
+      const decisionLabel = action === "approve" ? "APPROVED" : "REJECTED";
+      const content = [
+        `PM Decision: ${decisionLabel}`,
+        `Target: ${target}`,
+        `Source: ArchiveOS Decisions tab`,
+        reason.trim(),
+      ].filter(Boolean).join("\n");
+
+      await createWorkLog({
+        task_id: null,
+        agent_id: null,
+        log_type: "decision",
+        content,
+      });
+
       await createCommandRun({
-        command: `${action} ${targetTask ?? "current-runtime-state"}`,
+        command: `${action} ${target}`,
         command_type: `pm_${action}`,
         status: "succeeded",
-        result: `Recording-only ${action} from PM dashboard. Target: ${targetTask ?? "unknown"}.${reason}`,
+        result: `PM decision saved to work_logs. Target: ${target}.${reason ? ` ${reason.replace(/\s+/g, " ").trim()}` : ""}`,
       });
-      setMessage(action === "approve" ? "Approval recorded." : "Rejection recorded.");
+      setMessage(action === "approve" ? "Approval decision saved." : "Rejection decision saved.");
+      setApprovalNote("");
       if (action === "reject") {
         setRejectReason("");
       }
@@ -3051,6 +3089,10 @@ function ApprovalRecorder({
 
   return (
     <div className="grid min-w-64 gap-2">
+      <div className="rounded border border-white/10 bg-black/20 p-3">
+        <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Decision target</p>
+        <CompactValue value={targetTask ?? "current-runtime-state"} className="mt-2 text-sm text-slate-200" copyable={Boolean(targetTask)} />
+      </div>
       <div className="flex flex-wrap gap-2">
         <button
           className="rounded border border-emerald-300/30 bg-emerald-300/[0.08] px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-300/15 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3058,7 +3100,7 @@ function ApprovalRecorder({
           onClick={() => record("approve")}
           type="button"
         >
-          Record Approval
+          Approve Decision
         </button>
         <button
           className="rounded border border-rose-300/30 bg-rose-300/[0.08] px-3 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-300/15 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3066,9 +3108,15 @@ function ApprovalRecorder({
           onClick={() => record("reject")}
           type="button"
         >
-          Record Rejection
+          Reject Decision
         </button>
       </div>
+      <textarea
+        className="min-h-16 rounded border border-white/10 bg-black/20 px-3 py-2 text-xs leading-5 text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-emerald-300/60"
+        value={approvalNote}
+        onChange={(event) => setApprovalNote(event.target.value)}
+        placeholder="Optional approval note"
+      />
       <textarea
         className="min-h-16 rounded border border-white/10 bg-black/20 px-3 py-2 text-xs leading-5 text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/60"
         value={rejectReason}
