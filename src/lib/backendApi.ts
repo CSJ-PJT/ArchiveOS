@@ -460,6 +460,28 @@ export async function createCommandRun(input: {
   return response.data;
 }
 
+export async function createWorkLog(input: {
+  task_id?: string | null;
+  agent_id?: string | null;
+  log_type: "summary" | "decision" | "error" | "review";
+  content: string;
+}) {
+  const response = await request<ApiEnvelope<WorkLog>>("/api/work-logs", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      task_id: input.task_id ?? null,
+      agent_id: input.agent_id ?? null,
+      log_type: input.log_type,
+      content: input.content,
+    }),
+  });
+
+  return response.data;
+}
+
 export async function getLocalActionProjects() {
   const response = await request<ApiEnvelope<LocalActionProject[]>>("/api/local-actions/projects");
   return response.data;
