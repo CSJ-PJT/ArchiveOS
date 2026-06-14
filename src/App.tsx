@@ -12,6 +12,7 @@ import {
   getPlatformHealth,
   getPlatformReadiness,
   getPublicAccessStatus,
+  getRuntimeVersion,
   getRelatedKnowledge,
   getLatestBatchStatus,
   getLatestDailyReport,
@@ -47,6 +48,7 @@ import {
   type PlatformHealth,
   type PlatformReadiness,
   type PublicAccessStatus,
+  type RuntimeVersion,
   type RuntimeEvent,
 } from "./lib/backendApi";
 import type {
@@ -68,7 +70,7 @@ type DashboardData = {
   decisions: WorkLog[];
 };
 
-type AppView = "dashboard" | "decisions" | "operators" | "timeline" | "github" | "knowledge" | "mesh" | "kpi" | "settings";
+type AppView = "dashboard" | "decisions" | "operators" | "timeline" | "knowledge" | "mesh" | "kpi" | "settings";
 
 type PipelineStage = {
   id: string;
@@ -211,6 +213,12 @@ const seedCommandRunIds = new Set([
   "20000000-0000-4000-8000-000000000002",
 ]);
 
+const frontendBuildMetadata = {
+  buildTime: __ARCHIVEOS_BUILD_TIME__ || "unknown",
+  commitSha: __ARCHIVEOS_COMMIT_SHA__ || null,
+  version: __ARCHIVEOS_FRONTEND_VERSION__ || null,
+};
+
 function App() {
   const [view, setView] = useState<AppView>("dashboard");
   const [data, setData] = useState<DashboardData>({
@@ -344,6 +352,7 @@ function OperationsLayout({
   const [endpointHealth, setEndpointHealth] = useState<EndpointHealth | null>(null);
   const [platformReadiness, setPlatformReadiness] = useState<PlatformReadiness | null>(null);
   const [publicAccessStatus, setPublicAccessStatus] = useState<PublicAccessStatus | null>(null);
+  const [runtimeVersion, setRuntimeVersion] = useState<RuntimeVersion | null>(null);
   const [platformHealthError, setPlatformHealthError] = useState<string | null>(null);
   const [focusMode, setFocusMode] = useState(false);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
@@ -532,7 +541,12 @@ function OperationsLayout({
       setPlatformHealth(health);
       setEndpointHealth(endpoints);
       setPlatformReadiness(readiness);
-      setPublicAccessStatus(await getPublicAccessStatus());
+      const [publicAccess, version] = await Promise.all([
+        getPublicAccessStatus(),
+        getRuntimeVersion(),
+      ]);
+      setPublicAccessStatus(publicAccess);
+      setRuntimeVersion(version);
     } catch (error) {
       setPlatformHealthError(error instanceof Error ? error.message : "Platform health is not reachable.");
     }
@@ -616,8 +630,6 @@ function OperationsLayout({
         />
       ) : null}
 
-      {view === "github" ? <GitHubView runtimeStatus={runtimeStatus} /> : null}
-
       {view === "knowledge" ? (
         <KnowledgeView
           historianStatus={historianStatus}
@@ -660,6 +672,7 @@ function OperationsLayout({
           platformReadiness={platformReadiness}
           publicAccessStatus={publicAccessStatus}
           platformHealthError={platformHealthError}
+          runtimeVersion={runtimeVersion}
         />
       ) : null}
     </div>
@@ -684,7 +697,6 @@ function OperationsNav({
     { id: "decisions", label: "Decisions" },
     { id: "operators", label: "Operators" },
     { id: "timeline", label: "Timeline" },
-    { id: "github", label: "GitHub" },
     { id: "knowledge", label: "Knowledge" },
     { id: "mesh", label: "Mesh" },
     { id: "kpi", label: "KPI" },
@@ -844,8 +856,6 @@ function DashboardView({
               publicAccessStatus={publicAccessStatus}
             />
           </Panel>
-
-          <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
 
           <div className="grid gap-5 xl:grid-cols-2">
             <Panel title="Latest Builder Result">
@@ -1245,6 +1255,8 @@ function OperatorsView({
       <Panel title="Architect">
         <ArchitectStatusCard review={latestArchitectureReview} error={architectureReviewError} />
       </Panel>
+
+      <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
 
       <QueueDetailsPanel runtimeStatus={runtimeStatus} taskCounts={taskCounts} />
 
@@ -2466,26 +2478,53 @@ function MeshInteractionList({ interactions }: { interactions: MeshOverview["rec
   );
 }
 
-function GitHubView({ runtimeStatus }: { runtimeStatus: LocalRuntimeStatus | null }) {
+function GitHubIntegrationCard({
+  runtimeStatus,
+  runtimeVersion,
+}: {
+  runtimeStatus: LocalRuntimeStatus | null;
+  runtimeVersion: RuntimeVersion | null;
+}) {
   return (
-    <Panel title="GitHub">
-      <div className="grid gap-4">
-        <EmptyState
-          title="GitHub integration not configured yet"
-          detail="This panel is intentionally read-only and does not call the GitHub API yet."
-        />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          <RuntimeMetric label="Repo" value="CSJ-PJT/ArchiveOS" copyable />
-          <RuntimeMetric label="Branch" value="main" />
-          <RuntimeMetric label="Latest commit" value="not connected" />
-          <RuntimeMetric label="Recent PRs" value="not connected" />
-          <RuntimeMetric label="CI status" value="not connected" />
+    <article className="rounded-md border border-white/10 bg-black/20 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-white">GitHub</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Read-only integration placeholder. No GitHub API write actions are enabled.</p>
         </div>
-        <p className="rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-500">
-          Runtime source remains local MCP/backend. Latest MCP result: {runtimeStatus?.latest.outbox?.name ?? "none"}.
-        </p>
+        <StatusBadge className="bg-slate-500/15 text-slate-200 ring-slate-400/20">not_configured</StatusBadge>
       </div>
-    </Panel>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <RuntimeMetric label="Repository" value="CSJ-PJT/ArchiveOS" copyable />
+        <RuntimeMetric label="Branch" value={runtimeVersion?.branch ?? "main"} />
+        <RuntimeMetric label="Latest commit" value={runtimeVersion?.commitSha ?? "not connected"} copyable={Boolean(runtimeVersion?.commitSha)} />
+        <RuntimeMetric label="Recent PR count" value="not connected" />
+        <RuntimeMetric label="CI status" value="not connected" />
+      </div>
+      <p className="mt-3 rounded border border-white/10 bg-white/[0.03] p-3 text-xs leading-5 text-slate-500">
+        Runtime source remains local MCP/backend. Latest MCP result: {runtimeStatus?.latest.outbox?.name ?? "none"}.
+      </p>
+    </article>
+  );
+}
+
+function IntegrationCard({
+  title,
+  status,
+  detail,
+}: {
+  title: string;
+  status: "configured" | "not_configured" | "unknown";
+  detail: string;
+}) {
+  return (
+    <article className="rounded-md border border-white/10 bg-black/20 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-white">{title}</p>
+        <StatusBadge className={getIntegrationStatusStyle(status)}>{status}</StatusBadge>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-slate-500">{detail}</p>
+    </article>
   );
 }
 
@@ -2502,6 +2541,7 @@ function SettingsView({
   platformReadiness,
   publicAccessStatus,
   platformHealthError,
+  runtimeVersion,
 }: {
   backendReachability: ConsistencyStatus;
   commandRunsReachability: ConsistencyStatus;
@@ -2515,6 +2555,7 @@ function SettingsView({
   platformReadiness: PlatformReadiness | null;
   publicAccessStatus: PublicAccessStatus | null;
   platformHealthError: string | null;
+  runtimeVersion: RuntimeVersion | null;
 }) {
   const supabaseConfigured = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
   const currentFrontendUrl = typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:5173";
@@ -2523,9 +2564,32 @@ function SettingsView({
   const frontendIsRemote = /^https:\/\//.test(remoteFrontendUrl) && !remoteFrontendUrl.includes("127.0.0.1") && !remoteFrontendUrl.includes("localhost");
   const currentLocationIsRemote = /^https:\/\//.test(currentFrontendUrl) && !currentFrontendUrl.includes("127.0.0.1") && !currentFrontendUrl.includes("localhost");
   const frontendUsesLocalBackend = /^(http:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?/i.test(configuredBackendUrl);
+  const versionSyncStatus = getVersionSyncStatus(runtimeVersion);
 
   return (
     <div className="grid gap-5">
+      <Panel title="Runtime & URLs">
+        <div className="grid gap-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <RuntimeMetric label="Frontend origin" value={currentFrontendUrl} copyable />
+            <RuntimeMetric label="Backend origin" value={publicAccessStatus?.backendPublicUrl ?? configuredBackendUrl} copyable />
+            <RuntimeMetric label="Current VITE_BACKEND_URL" value={configuredBackendUrl} copyable />
+            <RuntimeMetric label="Frontend public URL" value={publicAccessStatus?.frontendPublicUrl ?? "not configured"} copyable={Boolean(publicAccessStatus?.frontendPublicUrl)} />
+            <RuntimeMetric label="Backend public URL" value={publicAccessStatus?.backendPublicUrl ?? "not configured"} copyable={Boolean(publicAccessStatus?.backendPublicUrl)} />
+            <RuntimeMetric label="Backend checkedAt" value={publicAccessStatus?.checkedAt ?? runtimeVersion?.checkedAt ?? "unknown"} copyable={Boolean(publicAccessStatus?.checkedAt ?? runtimeVersion?.checkedAt)} />
+            <RuntimeMetric label="Frontend build time" value={frontendBuildMetadata.buildTime} copyable />
+            <RuntimeMetric label="Frontend version" value={frontendBuildMetadata.version ?? "unknown"} />
+            <RuntimeMetric label="Backend version" value={runtimeVersion?.backendVersion ?? "unknown"} />
+            <RuntimeMetric label="Frontend commit" value={frontendBuildMetadata.commitSha ?? "unknown"} copyable={Boolean(frontendBuildMetadata.commitSha)} />
+            <RuntimeMetric label="Backend commit" value={runtimeVersion?.commitSha ?? "unknown"} copyable={Boolean(runtimeVersion?.commitSha)} />
+            <RuntimeMetric label="Version sync" value={versionSyncStatus} />
+          </div>
+          <p className="text-sm leading-6 text-slate-400">
+            Version sync compares frontend build metadata and backend git metadata when both are available. Unknown means one side did not expose commit metadata.
+          </p>
+        </div>
+      </Panel>
+
       <Panel title="Remote Access">
         <div className="grid gap-4">
           <div>
@@ -2562,38 +2626,35 @@ function SettingsView({
           </div>
         </div>
       </Panel>
-      <Panel title="Runtime Configuration">
-        <div className="grid gap-3 md:grid-cols-2">
-          <RuntimeMetric label="Frontend URL" value="http://127.0.0.1:5173" copyable />
-          <RuntimeMetric label="Backend URL" value={configuredBackendUrl} copyable />
-          <RuntimeMetric label="Supabase" value={supabaseConfigured ? "configured via frontend env" : "unknown / env missing"} />
-          <RuntimeMetric label="ARCHIVEOS_PROJECT_PATH" value="backend env, optional local path override" />
-          <RuntimeMetric label="CODEX_IMPLEMENTER_PID" value="backend/runtime env hint; do not expose secrets" />
-          <RuntimeMetric label="CODEX_REVIEWER_PID" value="backend/runtime env hint; do not expose secrets" />
+
+      <Panel title="Integrations">
+        <div className="grid gap-4">
+          <GitHubIntegrationCard runtimeStatus={runtimeStatus} runtimeVersion={runtimeVersion} />
+          <div className="grid gap-3 md:grid-cols-3">
+            <IntegrationCard
+              title="Discord"
+              status={batchStatus?.discord_webhook_configured ? "configured" : "not_configured"}
+              detail="Korean daily reports use backend-only DISCORD_WEBHOOK_URL."
+            />
+            <IntegrationCard
+              title="Supabase"
+              status={supabaseConfigured ? "configured" : "unknown"}
+              detail="Frontend uses publishable key. Service role remains backend-only."
+            />
+            <IntegrationCard
+              title="Obsidian"
+              status={historianStatus?.configured ? "configured" : "not_configured"}
+              detail="Historian exports relative Markdown note paths only."
+            />
+          </div>
         </div>
       </Panel>
-      <Panel title="Status Checks">
-        <div className="grid gap-3 md:grid-cols-3">
-          <ConsistencyMini label="Backend" status={backendReachability} />
-          <ConsistencyMini label="command_runs" status={commandRunsReachability} />
-          <ConsistencyMini label="MCP queue" status={runtimeStatus?.queue.path ? "matched" : "unknown"} />
-        </div>
-      </Panel>
+
       <Panel title="Endpoint Health Matrix">
         <EndpointHealthMatrix endpointHealth={endpointHealth} />
       </Panel>
-      <Panel title="Portfolio Snapshot">
-        <PortfolioSnapshotCard
-          readiness={platformReadiness}
-          endpointHealth={endpointHealth}
-          knowledgeOverview={null}
-          kpiOverview={null}
-          meshOverview={null}
-          latestDailyReport={latestDailyReport}
-          publicAccessStatus={publicAccessStatus}
-        />
-      </Panel>
-      <Panel title="Batch Settings">
+
+      <Panel title="Environment & Rules">
         <div className="grid gap-4">
           {batchStatusError ? (
             <p className="rounded border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">
@@ -2604,6 +2665,14 @@ function SettingsView({
             <RuntimeMetric
               label="Discord webhook"
               value={batchStatus?.discord_webhook_configured ? "configured: yes" : "configured: no"}
+            />
+            <RuntimeMetric
+              label="Obsidian export"
+              value={historianStatus?.configured ? "configured: yes" : "configured: no"}
+            />
+            <RuntimeMetric
+              label="Supabase"
+              value={supabaseConfigured ? "configured: yes" : "unknown / env missing"}
             />
             <RuntimeMetric
               label="ArchiveOS public URL"
@@ -2617,6 +2686,8 @@ function SettingsView({
               label="Holiday list years"
               value={batchStatus?.holiday_years?.join(", ") || "2026"}
             />
+            <RuntimeMetric label="Timezone" value="Asia/Seoul" />
+            <RuntimeMetric label="Batch schedule" value="Nightly 23:50 / Daily 09:00 KST" />
             <RuntimeMetric
               label="Last batch run"
               value={batchStatus?.daily_report?.created_at ?? batchStatus?.nightly_review?.created_at ?? "none"}
@@ -2633,37 +2704,7 @@ function SettingsView({
           </p>
         </div>
       </Panel>
-      <Panel title="Knowledge Vault">
-        <div className="grid gap-4">
-          {historianError ? (
-            <p className="rounded border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">
-              {historianError}
-            </p>
-          ) : null}
-          <div className="grid gap-3 md:grid-cols-2">
-            <RuntimeMetric
-              label="Obsidian export"
-              value={historianStatus?.configured ? "configured: yes" : "configured: no"}
-            />
-            <RuntimeMetric
-              label="Last note"
-              value={historianStatus?.lastExport?.notePath ?? "none"}
-              copyable={Boolean(historianStatus?.lastExport?.notePath)}
-            />
-            <RuntimeMetric
-              label="Env variable"
-              value="ARCHIVEOS_OBSIDIAN_VAULT_PATH"
-            />
-            <RuntimeMetric
-              label="Path exposure"
-              value="absolute path hidden"
-            />
-          </div>
-          <p className="text-sm leading-6 text-slate-400">
-            Historian exports Markdown files from backend/local-worker batches only. The frontend never receives the absolute vault path and does not browse or edit local files.
-          </p>
-        </div>
-      </Panel>
+
       <Panel title="Security Principles">
         <ul className="grid gap-2 text-sm leading-6 text-slate-400">
           <li>Service role key stays backend-only and is never exposed in frontend UI.</li>
@@ -4378,6 +4419,20 @@ function getEndpointStatusStyle(status: EndpointHealth["endpoints"][number]["sta
   if (status === "missing") return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
   if (status === "unknown") return "bg-slate-500/15 text-slate-200 ring-slate-400/20";
   return "bg-rose-500/15 text-rose-200 ring-rose-400/25";
+}
+
+function getIntegrationStatusStyle(status: "configured" | "not_configured" | "unknown") {
+  if (status === "configured") return "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25";
+  if (status === "not_configured") return "bg-slate-500/15 text-slate-200 ring-slate-400/20";
+  return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
+}
+
+function getVersionSyncStatus(runtimeVersion: RuntimeVersion | null) {
+  if (!runtimeVersion?.commitSha || !frontendBuildMetadata.commitSha) {
+    return "unknown";
+  }
+
+  return runtimeVersion.commitSha === frontendBuildMetadata.commitSha ? "synced" : "version mismatch";
 }
 
 function getArchitectStatusLabel(review: ArchitectureReview | null) {

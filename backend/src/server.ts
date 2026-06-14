@@ -1,6 +1,7 @@
 import "dotenv/config";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import path from "node:path";
+import { promisify } from "node:util";
 import cors from "cors";
 import express from "express";
 import {
@@ -35,6 +36,8 @@ import { supabaseAdmin } from "./lib/supabaseAdmin.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
+const startedAt = new Date().toISOString();
+const execFileAsync = promisify(execFile);
 const allowedOrigins = new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -92,6 +95,7 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Local Diagnostics", method: "POST", path: "/api/local-actions/run", service: "backend", description: "Allowlisted diagnostics endpoint." },
   { name: "Runtime Status", method: "GET", path: "/api/local-runtime/status", service: "runtime", description: "Local MCP runtime status." },
   { name: "Runtime Events", method: "GET", path: "/api/runtime/events/recent", service: "runtime", description: "Derived runtime events." },
+  { name: "Runtime Version", method: "GET", path: "/api/runtime/version", service: "backend", description: "Backend git/runtime version." },
   { name: "Public Access", method: "GET", path: "/api/runtime/public-access", service: "backend", description: "Remote/ngrok runtime URL configuration." },
   { name: "Batch Runs", method: "GET", path: "/api/batches/recent", service: "dailyReport", description: "Recent batch runs." },
   { name: "Latest Batch", method: "GET", path: "/api/batches/latest", service: "dailyReport", description: "Latest nightly/daily batch state." },
@@ -170,6 +174,10 @@ app.get("/api/health/endpoints", async (_request, response) => {
 
 app.get("/api/platform/readiness", async (_request, response) => {
   response.json({ data: await getPlatformReadiness() });
+});
+
+app.get("/api/runtime/version", async (_request, response) => {
+  response.json({ data: await getRuntimeVersion() });
 });
 
 app.get("/api/runtime/public-access", (request, response) => {
@@ -776,6 +784,35 @@ async function getEndpointHealthSnapshot() {
       unknown: 0,
     },
   };
+}
+
+async function getRuntimeVersion() {
+  const [commitSha, branch] = await Promise.all([
+    readGitValue(["rev-parse", "--short", "HEAD"]),
+    readGitValue(["branch", "--show-current"]),
+  ]);
+
+  return {
+    commitSha,
+    branch,
+    startedAt,
+    backendVersion: process.env.npm_package_version ?? null,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+async function readGitValue(args: string[]) {
+  try {
+    const result = await execFileAsync("git", args, {
+      cwd: process.cwd(),
+      windowsHide: true,
+      timeout: 5000,
+    });
+    const value = result.stdout.trim();
+    return value.length ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 async function getPlatformReadiness() {

@@ -23,6 +23,7 @@ GET /api/health
 GET /api/health/endpoints
 GET /api/platform/readiness
 GET /api/runtime/public-access
+GET /api/runtime/version
 ```
 
 Dashboard는 요약만 보여주고, Settings의 `Endpoint Health Matrix`에서 전체 endpoint 상태를 확인합니다. 오래된 backend process가 떠 있으면 `/api/health/endpoints`가 404가 될 수 있으므로 backend를 최신 main으로 재시작해야 합니다.
@@ -60,3 +61,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools/runtime/check-ngr
 ```
 
 이 스크립트는 프로세스를 시작하거나 종료하지 않습니다. 현재 `.env`와 `backend/.env`의 URL 설정만 읽고 경고를 출력합니다.
+
+실제 local/public runtime sync를 확인하려면:
+
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools/runtime/check-public-sync.ps1"
+```
+
+이 스크립트도 프로세스를 시작하거나 종료하지 않습니다. local frontend/backend URL, public URL env, `/api/runtime/version`, `/api/health/endpoints`를 읽어서 commit/version mismatch와 endpoint health summary를 출력합니다.

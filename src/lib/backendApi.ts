@@ -71,6 +71,14 @@ export type PublicAccessStatus = {
   checkedAt: string;
 };
 
+export type RuntimeVersion = {
+  commitSha: string | null;
+  branch: string | null;
+  startedAt: string;
+  backendVersion: string | null;
+  checkedAt: string;
+};
+
 export type PlatformReadiness = {
   score: number;
   grade: string;
@@ -412,6 +420,11 @@ export async function getEndpointHealth() {
 
 export async function getPublicAccessStatus() {
   const response = await request<ApiEnvelope<PublicAccessStatus>>("/api/runtime/public-access");
+  return response.data;
+}
+
+export async function getRuntimeVersion() {
+  const response = await request<ApiEnvelope<RuntimeVersion>>("/api/runtime/version");
   return response.data;
 }
 
