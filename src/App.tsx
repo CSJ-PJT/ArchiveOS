@@ -1675,6 +1675,7 @@ function KnowledgeGraphPanel() {
   const [hideLowImportance, setHideLowImportance] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1723,6 +1724,7 @@ function KnowledgeGraphPanel() {
     [graph, nodeType, edgeType, query, importanceFilter, recentOnly, decisionPathOnly, architectPathOnly, incidentPathOnly, hideLowImportance],
   );
   const selectedNode = filtered.nodes.find((node) => node.id === selectedNodeId) ?? filtered.nodes[0] ?? null;
+  const selectedEdge = filtered.edges.find((edge) => edge.id === selectedEdgeId) ?? null;
   const selectedEdges = selectedNode ? filtered.edges.filter((edge) => edge.from === selectedNode.id || edge.to === selectedNode.id) : [];
   const topTypes = Object.entries(graph?.stats.types ?? {})
     .sort((left, right) => right[1] - left[1])
@@ -1737,8 +1739,6 @@ function KnowledgeGraphPanel() {
           <RuntimeMetric label="Visible nodes" value={String(filtered.nodes.length)} />
           <RuntimeMetric label="Top types" value={topTypes.map(([type, count]) => `${type} ${count}`).join(", ") || "none"} />
         </div>
-
-        <KnowledgeGraphInsightsPanel insights={insights} />
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <select className="min-h-11 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none" onChange={(event) => setNodeType(event.target.value)} value={nodeType}>
@@ -1788,17 +1788,36 @@ function KnowledgeGraphPanel() {
             muted
           />
         ) : (
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(18rem,0.7fr)]">
-            <div className="overflow-x-auto rounded-md border border-white/10 bg-[#070d14] p-3">
-              <KnowledgeGraphSvg graph={filtered} selectedNodeId={selectedNode?.id ?? null} onSelectNode={setSelectedNodeId} />
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,0.34fr)]">
+            <div className="overflow-x-auto rounded-lg border border-cyan-300/20 bg-[#050b13] p-3 shadow-[0_0_60px_rgba(34,211,238,0.08)]">
+              <KnowledgeGraphSvg
+                graph={filtered}
+                selectedEdgeId={selectedEdge?.id ?? null}
+                selectedNodeId={selectedNode?.id ?? null}
+                onSelectEdge={setSelectedEdgeId}
+                onSelectNode={(id) => {
+                  setSelectedNodeId(id);
+                  setSelectedEdgeId(null);
+                }}
+              />
             </div>
-            <KnowledgeGraphNodeDetail node={selectedNode} edges={selectedEdges} nodes={filtered.nodes} />
+            <div className="grid content-start gap-4">
+              <KnowledgeGraphNodeDetail node={selectedNode} edges={selectedEdges} nodes={filtered.nodes} />
+              <KnowledgeGraphEdgeDetail edge={selectedEdge} nodes={filtered.nodes} />
+            </div>
           </div>
         )}
 
+        <KnowledgeGraphInsightsPanel insights={insights} />
+
         <DecisionChainsPanel insights={insights} />
 
-        <KnowledgeGraphEdgeList edges={filtered.edges} nodes={filtered.nodes} />
+        <details className="rounded-md border border-white/10 bg-black/20 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-white">Edge table fallback</summary>
+          <div className="mt-4">
+            <KnowledgeGraphEdgeList edges={filtered.edges} nodes={filtered.nodes} />
+          </div>
+        </details>
       </div>
     </Panel>
   );
@@ -1922,43 +1941,106 @@ function ChainRow({ label, nodes }: { label: string; nodes: Array<{ id: string; 
 
 function KnowledgeGraphSvg({
   graph,
+  selectedEdgeId,
   selectedNodeId,
+  onSelectEdge,
   onSelectNode,
 }: {
   graph: Pick<KnowledgeGraph, "nodes" | "edges">;
+  selectedEdgeId: string | null;
   selectedNodeId: string | null;
+  onSelectEdge: (id: string) => void;
   onSelectNode: (id: string) => void;
 }) {
-  const width = 920;
-  const height = 560;
-  const positions = useMemo(() => layoutGraphNodes(graph.nodes, width, height), [graph.nodes]);
+  const width = 1180;
+  const height = 700;
+  const positions = useMemo(() => layoutForceGraphNodes(graph.nodes, graph.edges, width, height), [graph.nodes, graph.edges]);
 
   return (
-    <svg className="min-w-[56rem] max-w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Knowledge Graph visualization">
+    <svg className="min-w-[62rem] max-w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Knowledge Graph visualization">
       <defs>
         <marker id="kg-arrow" markerHeight="8" markerWidth="8" orient="auto" refX="8" refY="4">
           <path d="M0,0 L8,4 L0,8 Z" fill="rgba(148,163,184,0.75)" />
         </marker>
+        <radialGradient id="kg-bg" cx="50%" cy="42%" r="72%">
+          <stop offset="0%" stopColor="rgba(34,211,238,0.18)" />
+          <stop offset="42%" stopColor="rgba(15,23,42,0.58)" />
+          <stop offset="100%" stopColor="rgba(2,6,23,0.98)" />
+        </radialGradient>
+        <filter id="kg-glow" height="260%" width="260%" x="-80%" y="-80%">
+          <feGaussianBlur stdDeviation="8" result="blur" />
+          <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.25 0 0 0 0 0.92 0 0 0 0 1 0 0 0 0.72 0" result="coloredBlur" />
+          <feMerge>
+            <feMergeNode in="coloredBlur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <filter id="kg-critical-glow" height="300%" width="300%" x="-100%" y="-100%">
+          <feGaussianBlur stdDeviation="10" result="blur" />
+          <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0.95 0 0 0 0 0.25 0 0 0 0 0.38 0 0 0 0.85 0" result="coloredBlur" />
+          <feMerge>
+            <feMergeNode in="coloredBlur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
       </defs>
-      <rect width={width} height={height} rx="10" fill="rgba(2,6,23,0.55)" />
+      <rect width={width} height={height} rx="18" fill="url(#kg-bg)" />
+      <g opacity="0.42">
+        {[0, 1, 2, 3].map((index) => (
+          <circle
+            key={index}
+            cx={width / 2}
+            cy={height / 2}
+            fill="none"
+            r={120 + index * 95}
+            stroke="rgba(148,163,184,0.12)"
+            strokeDasharray={index % 2 ? "10 14" : "2 18"}
+            strokeWidth="1"
+          />
+        ))}
+      </g>
       {graph.edges.map((edge) => {
         const from = positions.get(edge.from);
         const to = positions.get(edge.to);
         if (!from || !to) return null;
+        const selected = edge.id === selectedEdgeId;
         return (
-          <line
-            key={edge.id}
-            markerEnd="url(#kg-arrow)"
-            stroke={getKnowledgeEdgeColor(edge)}
-            strokeOpacity={edge.importanceLevel === "low" ? 0.35 : 0.72}
-            strokeWidth={getKnowledgeEdgeWidth(edge)}
-            x1={from.x}
-            x2={to.x}
-            y1={from.y}
-            y2={to.y}
-          >
-            <title>{edge.type}: {edge.label} / importance {edge.importanceScore}</title>
-          </line>
+          <g key={edge.id} className="cursor-pointer" onClick={() => onSelectEdge(edge.id)}>
+            <line
+              stroke="transparent"
+              strokeWidth={Math.max(12, getKnowledgeEdgeWidth(edge) + 8)}
+              x1={from.x}
+              x2={to.x}
+              y1={from.y}
+              y2={to.y}
+            />
+            <line
+              markerEnd="url(#kg-arrow)"
+              stroke={getKnowledgeEdgeColor(edge)}
+              strokeDasharray={edge.isRecent || selected ? "10 8" : undefined}
+              strokeLinecap="round"
+              strokeOpacity={selected ? 0.98 : edge.importanceLevel === "low" ? 0.28 : 0.74}
+              strokeWidth={selected ? getKnowledgeEdgeWidth(edge) + 2.2 : getKnowledgeEdgeWidth(edge)}
+              x1={from.x}
+              x2={to.x}
+              y1={from.y}
+              y2={to.y}
+            >
+              {(edge.isRecent || selected) ? <animate attributeName="stroke-dashoffset" dur="1.8s" from="18" repeatCount="indefinite" to="0" /> : null}
+              <title>{edge.type}: {edge.label} / importance {edge.importanceScore}</title>
+            </line>
+            {selected || edge.importanceLevel === "critical" || edge.importanceLevel === "high" ? (
+              <text
+                fill="rgba(226,232,240,0.86)"
+                fontSize="11"
+                textAnchor="middle"
+                x={(from.x + to.x) / 2}
+                y={(from.y + to.y) / 2 - 8}
+              >
+                {edge.type}
+              </text>
+            ) : null}
+          </g>
         );
       })}
       {graph.nodes.map((node) => {
@@ -1966,10 +2048,25 @@ function KnowledgeGraphSvg({
         if (!position) return null;
         const selected = node.id === selectedNodeId;
         const radius = getKnowledgeNodeRadius(node, selected);
+        const critical = node.importanceLevel === "critical";
         return (
-          <g key={node.id} className="cursor-pointer" onClick={() => onSelectNode(node.id)} role="button" tabIndex={0}>
-            {node.importanceLevel === "critical" || node.isRecent ? (
-              <circle cx={position.x} cy={position.y} fill={getKnowledgeNodeColor(node.type)} opacity={node.importanceLevel === "critical" ? 0.16 : 0.1} r={radius + 10} />
+          <g
+            key={node.id}
+            className="cursor-pointer"
+            filter={critical || node.isRecent || selected ? (critical ? "url(#kg-critical-glow)" : "url(#kg-glow)") : undefined}
+            onClick={() => onSelectNode(node.id)}
+            role="button"
+            tabIndex={0}
+          >
+            {critical || node.isRecent || selected ? (
+              <circle cx={position.x} cy={position.y} fill={getKnowledgeNodeColor(node.type)} opacity={critical ? 0.2 : 0.12} r={radius + 13}>
+                {critical ? (
+                  <>
+                    <animate attributeName="r" dur="1.7s" repeatCount="indefinite" values={`${radius + 9};${radius + 20};${radius + 9}`} />
+                    <animate attributeName="opacity" dur="1.7s" repeatCount="indefinite" values="0.24;0.06;0.24" />
+                  </>
+                ) : null}
+              </circle>
             ) : null}
             <circle
               cx={position.x}
@@ -1980,9 +2077,15 @@ function KnowledgeGraphSvg({
               stroke={selected ? "white" : getKnowledgeNodeStroke(node)}
               strokeWidth={selected ? 3.5 : getKnowledgeNodeStrokeWidth(node)}
             />
+            <circle
+              cx={position.x - radius * 0.28}
+              cy={position.y - radius * 0.34}
+              fill="rgba(255,255,255,0.28)"
+              r={Math.max(3, radius * 0.16)}
+            />
             <text fill="white" fontSize="11" fontWeight="700" textAnchor="middle" x={position.x} y={position.y - radius - 11}>{node.type}</text>
             <text fill="rgba(226,232,240,0.92)" fontSize="12" textAnchor="middle" x={position.x} y={position.y + radius + 18}>{truncateGraphLabel(node.label, 18)}</text>
-            <title>{node.title} / {node.importanceLevel} / score {node.importanceScore}</title>
+            <title>{node.title} / importance {node.importanceLevel} / score {node.importanceScore}</title>
           </g>
         );
       })}
@@ -2030,6 +2133,42 @@ function KnowledgeGraphNodeDetail({ node, edges, nodes }: { node: KnowledgeGraph
           }) : <p className="text-sm text-slate-500">No related edges in current filters.</p>}
         </div>
       </div>
+    </aside>
+  );
+}
+
+function KnowledgeGraphEdgeDetail({ edge, nodes }: { edge: KnowledgeGraphEdge | null; nodes: KnowledgeGraphNode[] }) {
+  if (!edge) {
+    return (
+      <aside className="rounded-md border border-white/10 bg-black/20 p-4">
+        <p className="text-sm font-semibold text-white">Selected Relationship</p>
+        <p className="mt-2 text-sm leading-6 text-slate-500">Click an edge to inspect why two memory items are connected.</p>
+      </aside>
+    );
+  }
+
+  const from = nodes.find((node) => node.id === edge.from);
+  const to = nodes.find((node) => node.id === edge.to);
+
+  return (
+    <aside className="rounded-md border border-cyan-300/20 bg-cyan-300/[0.04] p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge className="bg-violet-500/15 text-violet-200 ring-violet-400/25">{edge.type}</StatusBadge>
+        <StatusBadge className={getImportanceBadgeStyle(edge.importanceLevel)}>{edge.importanceLevel} {edge.importanceScore}</StatusBadge>
+        {edge.isRecent ? <StatusBadge className="bg-emerald-500/15 text-emerald-200 ring-emerald-400/25">recent</StatusBadge> : null}
+      </div>
+      <p className="mt-3 text-sm font-semibold text-white">Relationship Detail</p>
+      <div className="mt-3 grid gap-2 text-sm leading-6">
+        <p className="text-cyan-100" title={from?.title ?? edge.from}>{from?.label ?? edge.from}</p>
+        <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{edge.type}</p>
+        <p className="text-emerald-100" title={to?.title ?? edge.to}>{to?.label ?? edge.to}</p>
+      </div>
+      <p className="mt-3 rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-300" title={readEdgeReason(edge)}>
+        {readEdgeReason(edge)}
+      </p>
+      <p className="mt-2 text-xs text-slate-500" title={formatExactDate(edge.createdAt)}>
+        Created {formatRelativeTime(edge.createdAt)}
+      </p>
     </aside>
   );
 }
@@ -5212,16 +5351,123 @@ function clampGraphPosition(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function layoutForceGraphNodes(nodes: KnowledgeGraphNode[], edges: KnowledgeGraphEdge[], width: number, height: number) {
+  const positions = new Map<string, { x: number; y: number; vx: number; vy: number }>();
+  const typeAnchors = getGraphTypeAnchors(width, height);
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const sorted = nodes
+    .slice()
+    .sort((left, right) => right.importanceScore - left.importanceScore || left.type.localeCompare(right.type));
+
+  sorted.forEach((node, index) => {
+    const anchor = typeAnchors[node.type] ?? { x: centerX, y: centerY };
+    const angle = (Math.PI * 2 * index) / Math.max(1, sorted.length) + hashGraphValue(node.id) * Math.PI;
+    const spread = 42 + (index % 5) * 18;
+    positions.set(node.id, {
+      x: anchor.x + Math.cos(angle) * spread,
+      y: anchor.y + Math.sin(angle) * spread,
+      vx: 0,
+      vy: 0,
+    });
+  });
+
+  for (let tick = 0; tick < 92; tick += 1) {
+    const cooling = 1 - tick / 110;
+    for (let leftIndex = 0; leftIndex < sorted.length; leftIndex += 1) {
+      const left = sorted[leftIndex];
+      const leftPosition = positions.get(left.id);
+      if (!leftPosition) continue;
+
+      for (let rightIndex = leftIndex + 1; rightIndex < sorted.length; rightIndex += 1) {
+        const right = sorted[rightIndex];
+        const rightPosition = positions.get(right.id);
+        if (!rightPosition) continue;
+        const dx = leftPosition.x - rightPosition.x || 0.01;
+        const dy = leftPosition.y - rightPosition.y || 0.01;
+        const distanceSquared = Math.max(72, dx * dx + dy * dy);
+        const force = (2600 / distanceSquared) * cooling;
+        const fx = dx * force;
+        const fy = dy * force;
+        leftPosition.vx += fx;
+        leftPosition.vy += fy;
+        rightPosition.vx -= fx;
+        rightPosition.vy -= fy;
+      }
+    }
+
+    edges.forEach((edge) => {
+      const from = positions.get(edge.from);
+      const to = positions.get(edge.to);
+      if (!from || !to) return;
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+      const desired = edge.isDecisionPath || edge.isArchitectPath ? 130 : 165;
+      const strength = 0.012 + (edge.confidence ?? 0.7) * 0.014 + edge.importanceScore * 0.0008;
+      const force = (distance - desired) * strength * cooling;
+      const fx = (dx / distance) * force;
+      const fy = (dy / distance) * force;
+      from.vx += fx;
+      from.vy += fy;
+      to.vx -= fx;
+      to.vy -= fy;
+    });
+
+    sorted.forEach((node) => {
+      const position = positions.get(node.id);
+      if (!position) return;
+      const anchor = typeAnchors[node.type] ?? { x: centerX, y: centerY };
+      const anchorWeight = node.importanceLevel === "critical" ? 0.006 : 0.011;
+      position.vx += (anchor.x - position.x) * anchorWeight * cooling;
+      position.vy += (anchor.y - position.y) * anchorWeight * cooling;
+      position.x = clampGraphPosition(position.x + position.vx, 72, width - 72);
+      position.y = clampGraphPosition(position.y + position.vy, 72, height - 72);
+      position.vx *= 0.62;
+      position.vy *= 0.62;
+    });
+  }
+
+  const finalPositions = new Map<string, { x: number; y: number }>();
+  positions.forEach((position, id) => {
+    finalPositions.set(id, { x: position.x, y: position.y });
+  });
+  return finalPositions;
+}
+
+function getGraphTypeAnchors(width: number, height: number): Record<string, { x: number; y: number }> {
+  return {
+    decision: { x: width * 0.48, y: height * 0.38 },
+    reviewer_result: { x: width * 0.66, y: height * 0.44 },
+    builder_result: { x: width * 0.32, y: height * 0.44 },
+    architecture_review: { x: width * 0.5, y: height * 0.2 },
+    incident: { x: width * 0.78, y: height * 0.26 },
+    command: { x: width * 0.2, y: height * 0.64 },
+    daily_report: { x: width * 0.56, y: height * 0.72 },
+    nightly_review: { x: width * 0.42, y: height * 0.74 },
+    obsidian_note: { x: width * 0.76, y: height * 0.72 },
+    task: { x: width * 0.22, y: height * 0.32 },
+  };
+}
+
+function hashGraphValue(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) % 997;
+  }
+  return hash / 997;
+}
+
 function getKnowledgeNodeColor(type: string) {
   const colors: Record<string, string> = {
-    decision: "#22c55e",
-    incident: "#f97316",
+    decision: "#22d3ee",
+    incident: "#fb7185",
     daily_report: "#38bdf8",
-    nightly_review: "#0ea5e9",
-    architecture_review: "#a855f7",
+    nightly_review: "#60a5fa",
+    architecture_review: "#f59e0b",
     obsidian_note: "#8b5cf6",
     builder_result: "#06b6d4",
-    reviewer_result: "#f59e0b",
+    reviewer_result: "#22c55e",
     command: "#64748b",
     task: "#14b8a6",
   };
@@ -5230,13 +5476,24 @@ function getKnowledgeNodeColor(type: string) {
 }
 
 function getKnowledgeNodeRadius(node: KnowledgeGraphNode, selected: boolean) {
-  const sizes: Record<ImportanceLevel, number> = {
-    low: 17,
-    medium: 22,
-    high: 28,
-    critical: 34,
+  const importanceBase: Record<ImportanceLevel, number> = {
+    low: 15,
+    medium: 20,
+    high: 27,
+    critical: 35,
   };
-  return sizes[node.importanceLevel] + (selected ? 4 : 0);
+  const typeWeight: Record<string, number> = {
+    decision: 10,
+    architecture_review: 7,
+    incident: 7,
+    reviewer_result: 4,
+    daily_report: 3,
+    nightly_review: 3,
+    builder_result: 2,
+    command: -2,
+  };
+  const scoreBoost = Math.min(9, Math.max(0, Math.round(node.importanceScore / 12)));
+  return importanceBase[node.importanceLevel] + (typeWeight[node.type] ?? 0) + scoreBoost + (selected ? 4 : 0);
 }
 
 function getKnowledgeNodeStroke(node: KnowledgeGraphNode) {
