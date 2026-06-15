@@ -36,6 +36,7 @@ import {
   type HistorianStatus,
   type ArchitectureReview,
   type KnowledgeNode,
+  type KnowledgeEdge,
   type KnowledgeGraph,
   type KnowledgeGraphNode,
   type KnowledgeGraphEdge,
@@ -1592,7 +1593,7 @@ function KnowledgeView({
         )}
       </Panel>
 
-      <KnowledgeGraphPanel />
+      <KnowledgeGraphPanel overview={knowledgeOverview} />
 
       <KnowledgeSearchPanel />
 
@@ -1659,7 +1660,7 @@ function KnowledgeNodeList({ nodes }: { nodes: KnowledgeNode[] }) {
   );
 }
 
-function KnowledgeGraphPanel() {
+function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview | null }) {
   const [graph, setGraph] = useState<KnowledgeGraph | null>(null);
   const [insights, setInsights] = useState<KnowledgeGraphInsights | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1685,11 +1686,32 @@ function KnowledgeGraphPanel() {
       setError(null);
 
       try {
-        const [nextGraph, nextInsights] = await Promise.all([
-          getKnowledgeGraph(limit),
-          getKnowledgeGraphInsights(limit),
-        ]);
-        if (!cancelled) {
+        if (overview) {
+          const overviewGraph = buildKnowledgeGraphFromOverview(overview);
+          setGraph(overviewGraph);
+          setLoading(false);
+          setHideLowImportance((current) => current || overviewGraph.nodes.length > 20);
+          setImportanceFilter((current) => (current === "all" && overviewGraph.nodes.length > 20 ? "medium" : current));
+          setSelectedNodeId((current) =>
+            current && overviewGraph.nodes.some((node) => node.id === current) ? current : overviewGraph.nodes[0]?.id ?? null,
+          );
+        } else {
+          const nextOverview = await withTimeout(getKnowledgeOverview(), 8000);
+          const overviewGraph = buildKnowledgeGraphFromOverview(nextOverview);
+          if (!cancelled) {
+            setGraph(overviewGraph);
+            setLoading(false);
+            setHideLowImportance((current) => current || overviewGraph.nodes.length > 20);
+            setImportanceFilter((current) => (current === "all" && overviewGraph.nodes.length > 20 ? "medium" : current));
+            setSelectedNodeId((current) =>
+              current && overviewGraph.nodes.some((node) => node.id === current) ? current : overviewGraph.nodes[0]?.id ?? null,
+            );
+          }
+        }
+
+        const nextGraph = await withTimeout(getKnowledgeGraph(limit), 6000).catch(() => null);
+        const nextInsights = await withTimeout(getKnowledgeGraphInsights(limit), 6000).catch(() => null);
+        if (!cancelled && nextGraph) {
           setGraph(nextGraph);
           setInsights(nextInsights);
           setHideLowImportance((current) => current || nextGraph.nodes.length > 20);
@@ -1697,6 +1719,8 @@ function KnowledgeGraphPanel() {
           setSelectedNodeId((current) =>
             current && nextGraph.nodes.some((node) => node.id === current) ? current : nextGraph.nodes[0]?.id ?? null,
           );
+        } else if (!cancelled) {
+          setInsights(nextInsights);
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -1715,7 +1739,7 @@ function KnowledgeGraphPanel() {
     return () => {
       cancelled = true;
     };
-  }, [limit]);
+  }, [limit, overview]);
 
   const nodeTypes = useMemo(() => ["all", ...Object.keys(graph?.stats.types ?? {}).sort()], [graph]);
   const edgeTypes = useMemo(() => ["all", ...Array.from(new Set((graph?.edges ?? []).map((edge) => edge.type))).sort()], [graph]);
@@ -5246,6 +5270,134 @@ function findMeshAgent(meshOverview: MeshOverview, id: string) {
   return meshOverview.agents.find((agent) => agent.id === id) ?? null;
 }
 
+function buildKnowledgeGraphFromOverview(overview: KnowledgeOverview): KnowledgeGraph {
+  const nodesById = new Map<string, KnowledgeNode>();
+  for (const node of overview.latestNodes) {
+    nodesById.set(node.id, node);
+  }
+  for (const edge of overview.latestEdges) {
+    if (edge.from_node) nodesById.set(edge.from_node.id, edge.from_node);
+    if (edge.to_node) nodesById.set(edge.to_node.id, edge.to_node);
+  }
+
+  const graphEdges: KnowledgeGraphEdge[] = overview.latestEdges
+    .filter((edge) => nodesById.has(edge.from_node_id) && nodesById.has(edge.to_node_id))
+    .map((edge) => {
+      const score = getOverviewEdgeImportanceScore(edge);
+      return {
+        id: edge.id,
+        from: edge.from_node_id,
+        to: edge.to_node_id,
+        type: edge.edge_type,
+        label: edge.edge_type,
+        confidence: edge.confidence,
+        createdAt: edge.created_at,
+        metadata: edge.metadata,
+        importanceScore: score,
+        importanceLevel: getOverviewImportanceLevel(score),
+        isRecent: isRecentKnowledgeTimestamp(edge.created_at),
+        isDecisionPath: edge.edge_type.includes("decision") || edge.edge_type === "decided_by",
+        isArchitectPath: edge.edge_type.includes("architecture") || edge.edge_type.includes("architect") || edge.edge_type === "references_memory",
+        isIncidentPath: edge.edge_type.includes("incident") || edge.edge_type === "caused_by" || edge.edge_type === "mentioned_in",
+      };
+    });
+
+  const degreeByNode = new Map<string, { inDegree: number; outDegree: number }>();
+  for (const edge of graphEdges) {
+    const fromDegree = degreeByNode.get(edge.from) ?? { inDegree: 0, outDegree: 0 };
+    fromDegree.outDegree += 1;
+    degreeByNode.set(edge.from, fromDegree);
+    const toDegree = degreeByNode.get(edge.to) ?? { inDegree: 0, outDegree: 0 };
+    toDegree.inDegree += 1;
+    degreeByNode.set(edge.to, toDegree);
+  }
+
+  const graphNodes: KnowledgeGraphNode[] = Array.from(nodesById.values()).map((node) => {
+    const degree = degreeByNode.get(node.id) ?? { inDegree: 0, outDegree: 0 };
+    const importanceScore = getOverviewNodeImportanceScore(node, degree.inDegree + degree.outDegree);
+    return {
+      id: node.id,
+      type: node.node_type,
+      label: getOverviewNodeLabel(node),
+      title: node.title,
+      summary: node.summary,
+      source: node.source,
+      externalRef: node.external_ref,
+      createdAt: node.created_at,
+      metadata: node.metadata,
+      importanceScore,
+      importanceLevel: getOverviewImportanceLevel(importanceScore),
+      degree: degree.inDegree + degree.outDegree,
+      inDegree: degree.inDegree,
+      outDegree: degree.outDegree,
+      lastReferencedAt: node.updated_at ?? node.created_at,
+      isRecent: isRecentKnowledgeTimestamp(node.updated_at ?? node.created_at),
+      isHub: degree.inDegree + degree.outDegree >= 3,
+      isDecisionRelevant: ["decision", "reviewer_result", "builder_result", "architecture_review"].includes(node.node_type),
+    };
+  });
+
+  graphNodes.sort((left, right) => right.importanceScore - left.importanceScore || left.title.localeCompare(right.title));
+
+  return {
+    nodes: graphNodes,
+    edges: graphEdges,
+    stats: {
+      nodeCount: overview.totalNodes,
+      edgeCount: overview.totalEdges,
+      types: overview.countsByType,
+    },
+  };
+}
+
+function getOverviewNodeLabel(node: KnowledgeNode) {
+  const title = node.title || node.external_ref || node.id;
+  return title.length > 30 ? `${title.slice(0, 27)}...` : title;
+}
+
+function getOverviewNodeImportanceScore(node: KnowledgeNode, degree: number) {
+  const typeWeight: Record<string, number> = {
+    decision: 34,
+    architecture_review: 28,
+    incident: 26,
+    reviewer_result: 22,
+    builder_result: 20,
+    daily_report: 16,
+    nightly_review: 14,
+    obsidian_note: 10,
+    command: 6,
+  };
+  const recency = isRecentKnowledgeTimestamp(node.updated_at ?? node.created_at) ? 8 : 0;
+  return (typeWeight[node.node_type] ?? 8) + degree * 5 + recency;
+}
+
+function getOverviewEdgeImportanceScore(edge: KnowledgeEdge) {
+  const typeWeight: Record<string, number> = {
+    decided_by: 32,
+    reviewed_by: 28,
+    reviewed_architecture_of: 28,
+    caused_by: 24,
+    mentioned_in: 20,
+    exported_to: 14,
+    relates_to: 10,
+  };
+  return (typeWeight[edge.edge_type] ?? 10) + Math.round((edge.confidence ?? 1) * 6);
+}
+
+function getOverviewImportanceLevel(score: number): ImportanceLevel {
+  if (score >= 38) return "critical";
+  if (score >= 28) return "high";
+  if (score >= 16) return "medium";
+  return "low";
+}
+
+function isRecentKnowledgeTimestamp(value: string | null | undefined) {
+  if (!value) return false;
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return false;
+  return Date.now() - timestamp < 1000 * 60 * 60 * 24 * 7;
+}
+
 function filterKnowledgeGraph(
   graph: KnowledgeGraph | null,
   filters: {
@@ -5456,6 +5608,24 @@ function hashGraphValue(value: string) {
     hash = (hash * 31 + value.charCodeAt(index)) % 997;
   }
   return hash / 997;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(`Request timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
 }
 
 function getKnowledgeNodeColor(type: string) {

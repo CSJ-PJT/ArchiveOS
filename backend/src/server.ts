@@ -112,6 +112,8 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Related Knowledge", method: "GET", path: "/api/knowledge/related", service: "knowledge", description: "Related knowledge lookup." },
   { name: "Knowledge Graph", method: "GET", path: "/api/knowledge/graph", service: "knowledge", description: "Knowledge Graph visualization data." },
   { name: "Knowledge Graph Insights", method: "GET", path: "/api/knowledge/graph/insights", service: "knowledge", description: "Knowledge Graph importance and decision chain insights." },
+  { name: "Knowledge Map", method: "GET", path: "/api/knowledge/map", service: "knowledge", description: "Knowledge Graph visualization data via browser-safe alias." },
+  { name: "Knowledge Map Insights", method: "GET", path: "/api/knowledge/map/insights", service: "knowledge", description: "Knowledge Graph insights via browser-safe alias." },
   { name: "Knowledge Node", method: "GET", path: "/api/knowledge/node/:id", service: "knowledge", description: "Knowledge node detail." },
   { name: "Architect Review", method: "POST", path: "/api/architect/review", service: "architect", description: "Rule-based Architect review recorder." },
   { name: "Architect Reviews", method: "GET", path: "/api/architect/reviews/recent", service: "architect", description: "Recent Architect reviews." },
@@ -513,11 +515,27 @@ app.get("/api/knowledge/graph", async (request, response) => {
   }
 });
 
+app.get("/api/knowledge/map", async (request, response) => {
+  try {
+    response.json({ data: await getKnowledgeGraph(readGraphLimit(request.query.limit ?? "100")) });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch knowledge map." });
+  }
+});
+
 app.get("/api/knowledge/graph/insights", async (request, response) => {
   try {
     response.json({ data: await getKnowledgeGraphInsights(readGraphLimit(request.query.limit ?? "100")) });
   } catch {
     response.status(500).json({ error: "Failed to fetch knowledge graph insights." });
+  }
+});
+
+app.get("/api/knowledge/map/insights", async (request, response) => {
+  try {
+    response.json({ data: await getKnowledgeGraphInsights(readGraphLimit(request.query.limit ?? "100")) });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch knowledge map insights." });
   }
 });
 

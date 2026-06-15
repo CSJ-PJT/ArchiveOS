@@ -4,8 +4,12 @@ import type { Agent, Task, WorkLog } from "../types/database";
 const configuredBackendUrlFromEnv = ((import.meta.env.VITE_BACKEND_URL as string | undefined) ?? "").trim();
 const isBrowser = typeof window !== "undefined";
 const isRemoteHttps = isBrowser && window.location.protocol === "https:";
+const isLocalDevOrigin =
+  isBrowser &&
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") &&
+  window.location.port === "5173";
 const configuredBackendIsLocalhost = /^(http:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?/i.test(configuredBackendUrlFromEnv);
-const backendUrl = isRemoteHttps && configuredBackendIsLocalhost ? "" : configuredBackendUrlFromEnv;
+const backendUrl = (isRemoteHttps || isLocalDevOrigin) && configuredBackendIsLocalhost ? "" : configuredBackendUrlFromEnv;
 
 export const configuredBackendUrl = backendUrl || (isBrowser ? window.location.origin : "");
 
@@ -626,12 +630,12 @@ export async function getRelatedKnowledge(input: { external_ref?: string | null;
 }
 
 export async function getKnowledgeGraph(limit = 100) {
-  const response = await request<ApiEnvelope<KnowledgeGraph>>(`/api/knowledge/graph?limit=${limit}`);
+  const response = await request<ApiEnvelope<KnowledgeGraph>>(`/api/knowledge/map?limit=${limit}`);
   return response.data;
 }
 
 export async function getKnowledgeGraphInsights(limit = 100) {
-  const response = await request<ApiEnvelope<KnowledgeGraphInsights>>(`/api/knowledge/graph/insights?limit=${limit}`);
+  const response = await request<ApiEnvelope<KnowledgeGraphInsights>>(`/api/knowledge/map/insights?limit=${limit}`);
   return response.data;
 }
 
