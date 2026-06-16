@@ -87,6 +87,9 @@ type PipelineStage = {
   pulse: boolean;
   className: string;
   dotClassName: string;
+  riskLevel?: "Low" | "Medium" | "High";
+  keyFindings?: string[];
+  recommendation?: "Proceed" | "Wait" | "Review Required" | "Escalate";
 };
 
 type PipelineConnectorState = "idle" | "current" | "success";
@@ -1780,6 +1783,8 @@ function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview | null 
   const selectedNode = filtered.nodes.find((node) => node.id === selectedNodeId) ?? filtered.nodes[0] ?? null;
   const selectedEdge = filtered.edges.find((edge) => edge.id === selectedEdgeId) ?? null;
   const selectedEdges = selectedNode ? filtered.edges.filter((edge) => edge.from === selectedNode.id || edge.to === selectedNode.id) : [];
+  const activeDecisionChain = getActiveDecisionChain(insights, filtered);
+  const focusContext = getGraphFocusContext(filtered, selectedNode?.id ?? null, activeDecisionChain.nodeIds);
   const topTypes = Object.entries(graph?.stats.types ?? {})
     .sort((left, right) => right[1] - left[1])
     .slice(0, 4);
@@ -1828,6 +1833,8 @@ function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview | null 
 
         <KnowledgeGraphLegend />
 
+        <ActiveDecisionChainPanel chain={activeDecisionChain} nodes={filtered.nodes} />
+
         {error ? (
           <EmptyState
             title="Knowledge Graph API를 불러오지 못했습니다."
@@ -1846,6 +1853,8 @@ function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview | null 
             <div className="overflow-x-auto rounded-lg border border-cyan-300/20 bg-[#050b13] p-3 shadow-[0_0_60px_rgba(34,211,238,0.08)]">
               <KnowledgeGraphSvg
                 graph={filtered}
+                focusEdgeIds={focusContext.edgeIds}
+                focusNodeIds={focusContext.nodeIds}
                 selectedEdgeId={selectedEdge?.id ?? null}
                 selectedNodeId={selectedNode?.id ?? null}
                 onSelectEdge={setSelectedEdgeId}
@@ -1948,6 +1957,48 @@ function KnowledgeGraphLegend() {
   );
 }
 
+function ActiveDecisionChainPanel({
+  chain,
+  nodes,
+}: {
+  chain: { nodeIds: Set<string>; labels: string[] };
+  nodes: KnowledgeGraphNode[];
+}) {
+  const visibleLabels = chain.labels.length
+    ? chain.labels
+    : ["Architect Review", "Builder Result", "Reviewer Verdict", "PM Decision", "Knowledge Record"];
+
+  return (
+    <div className="rounded-md border border-cyan-300/20 bg-cyan-300/[0.045] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-white">Active Decision Chain</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Operational memory flow: Architect Review → Builder Result → Reviewer Verdict → PM Decision → Knowledge Record.
+          </p>
+        </div>
+        <StatusBadge className={chain.nodeIds.size ? "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25" : "bg-slate-500/15 text-slate-200 ring-slate-400/20"}>
+          {chain.nodeIds.size ? `${chain.nodeIds.size} linked nodes` : "template"}
+        </StatusBadge>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr] md:items-center">
+        {visibleLabels.slice(0, 5).map((label, index) => {
+          const matched = nodes.find((node) => chain.nodeIds.has(node.id) && node.label === label) ?? nodes.find((node) => chain.nodeIds.has(node.id) && node.title === label);
+          return (
+            <div key={`${label}-${index}`} className="contents">
+              <div className={`rounded border p-3 ${matched ? "border-cyan-300/30 bg-cyan-300/[0.06]" : "border-white/10 bg-black/20"}`}>
+                <p className="text-xs uppercase tracking-[0.12em] text-slate-500">Step {index + 1}</p>
+                <p className="mt-1 truncate text-sm font-semibold text-slate-100" title={label}>{label}</p>
+              </div>
+              {index < 4 ? <div className="hidden h-px bg-cyan-300/50 md:block" /> : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function DecisionChainsPanel({ insights }: { insights: KnowledgeGraphInsights | null }) {
   const chains = insights?.decisionChains.slice(0, 3) ?? [];
 
@@ -1995,12 +2046,16 @@ function ChainRow({ label, nodes }: { label: string; nodes: Array<{ id: string; 
 
 function KnowledgeGraphSvg({
   graph,
+  focusEdgeIds,
+  focusNodeIds,
   selectedEdgeId,
   selectedNodeId,
   onSelectEdge,
   onSelectNode,
 }: {
   graph: Pick<KnowledgeGraph, "nodes" | "edges">;
+  focusEdgeIds: Set<string>;
+  focusNodeIds: Set<string>;
   selectedEdgeId: string | null;
   selectedNodeId: string | null;
   onSelectEdge: (id: string) => void;
@@ -2009,6 +2064,7 @@ function KnowledgeGraphSvg({
   const width = 1180;
   const height = 700;
   const positions = useMemo(() => layoutForceGraphNodes(graph.nodes, graph.edges, width, height), [graph.nodes, graph.edges]);
+  const hasFocus = focusNodeIds.size > 0 || focusEdgeIds.size > 0;
 
   return (
     <svg className="min-w-[62rem] max-w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Knowledge Graph visualization">
@@ -2058,6 +2114,8 @@ function KnowledgeGraphSvg({
         const to = positions.get(edge.to);
         if (!from || !to) return null;
         const selected = edge.id === selectedEdgeId;
+        const focused = focusEdgeIds.has(edge.id);
+        const dimmed = hasFocus && !focused && !selected;
         return (
           <g key={edge.id} className="cursor-pointer" onClick={() => onSelectEdge(edge.id)}>
             <line
@@ -2071,21 +2129,19 @@ function KnowledgeGraphSvg({
             <line
               markerEnd="url(#kg-arrow)"
               stroke={getKnowledgeEdgeColor(edge)}
-              strokeDasharray={edge.isRecent || selected ? "10 8" : undefined}
               strokeLinecap="round"
-              strokeOpacity={selected ? 0.98 : edge.importanceLevel === "low" ? 0.28 : 0.74}
-              strokeWidth={selected ? getKnowledgeEdgeWidth(edge) + 2.2 : getKnowledgeEdgeWidth(edge)}
+              strokeOpacity={dimmed ? 0.14 : selected || focused ? 0.98 : edge.importanceLevel === "low" ? 0.28 : 0.74}
+              strokeWidth={selected || focused ? getKnowledgeEdgeWidth(edge) + 2.4 : getKnowledgeEdgeWidth(edge)}
               x1={from.x}
               x2={to.x}
               y1={from.y}
               y2={to.y}
             >
-              {(edge.isRecent || selected) ? <animate attributeName="stroke-dashoffset" dur="1.8s" from="18" repeatCount="indefinite" to="0" /> : null}
               <title>{edge.type}: {edge.label} / importance {edge.importanceScore}</title>
             </line>
-            {selected || edge.importanceLevel === "critical" || edge.importanceLevel === "high" ? (
+            {selected || focused || edge.importanceLevel === "critical" || edge.importanceLevel === "high" ? (
               <text
-                fill="rgba(226,232,240,0.86)"
+                fill={dimmed ? "rgba(148,163,184,0.32)" : "rgba(226,232,240,0.86)"}
                 fontSize="11"
                 textAnchor="middle"
                 x={(from.x + to.x) / 2}
@@ -2101,6 +2157,8 @@ function KnowledgeGraphSvg({
         const position = positions.get(node.id);
         if (!position) return null;
         const selected = node.id === selectedNodeId;
+        const focused = focusNodeIds.has(node.id);
+        const dimmed = hasFocus && !focused && !selected;
         const radius = getKnowledgeNodeRadius(node, selected);
         const critical = node.importanceLevel === "critical";
         return (
@@ -2126,10 +2184,10 @@ function KnowledgeGraphSvg({
               cx={position.x}
               cy={position.y}
               fill={getKnowledgeNodeColor(node.type)}
-              opacity={selected ? 1 : 0.86}
+              opacity={dimmed ? 0.28 : selected || focused ? 1 : 0.86}
               r={radius}
-              stroke={selected ? "white" : getKnowledgeNodeStroke(node)}
-              strokeWidth={selected ? 3.5 : getKnowledgeNodeStrokeWidth(node)}
+              stroke={selected || focused ? "white" : getKnowledgeNodeStroke(node)}
+              strokeWidth={selected || focused ? 3.5 : getKnowledgeNodeStrokeWidth(node)}
             />
             <circle
               cx={position.x - radius * 0.28}
@@ -2137,8 +2195,8 @@ function KnowledgeGraphSvg({
               fill="rgba(255,255,255,0.28)"
               r={Math.max(3, radius * 0.16)}
             />
-            <text fill="white" fontSize="11" fontWeight="700" textAnchor="middle" x={position.x} y={position.y - radius - 11}>{node.type}</text>
-            <text fill="rgba(226,232,240,0.92)" fontSize="12" textAnchor="middle" x={position.x} y={position.y + radius + 18}>{truncateGraphLabel(node.label, 18)}</text>
+            <text fill={dimmed ? "rgba(148,163,184,0.36)" : "white"} fontSize="11" fontWeight="700" textAnchor="middle" x={position.x} y={position.y - radius - 11}>{node.type}</text>
+            <text fill={dimmed ? "rgba(148,163,184,0.36)" : "rgba(226,232,240,0.92)"} fontSize="12" textAnchor="middle" x={position.x} y={position.y + radius + 18}>{truncateGraphLabel(node.label, 18)}</text>
             <title>{node.title} / importance {node.importanceLevel} / score {node.importanceScore}</title>
           </g>
         );
@@ -2171,6 +2229,12 @@ function KnowledgeGraphNodeDetail({ node, edges, nodes }: { node: KnowledgeGraph
       <p className="mt-3 rounded border border-white/10 bg-white/[0.03] p-3 text-xs leading-5 text-slate-300">
         {getGraphNodeImportanceReason(node, edges, nodes)}
       </p>
+      <div className="mt-3 rounded border border-cyan-300/20 bg-cyan-300/[0.04] p-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Why Important</p>
+        <ul className="mt-2 grid gap-1 text-xs leading-5 text-slate-300">
+          {getGraphNodeImportanceReasons(node, edges, nodes).map((reason) => <li key={reason}>- {reason}</li>)}
+        </ul>
+      </div>
       <div className="mt-4">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Related edges</p>
         <div className="mt-2 grid gap-2">
@@ -4444,6 +4508,27 @@ function PipelineNode({ stage }: { stage: PipelineStage }) {
       </div>
       <p className="mt-4 truncate text-3xl font-semibold text-white" title={stage.value}>{stage.value}</p>
       <CompactValue value={stage.detail} className="mt-3 min-h-10 text-xs leading-5 text-slate-400" copyable />
+      {stage.riskLevel || stage.recommendation || stage.keyFindings?.length ? (
+        <div className="mt-3 rounded border border-white/10 bg-black/20 p-3">
+          {stage.riskLevel ? (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs uppercase tracking-[0.12em] text-slate-500">Risk</span>
+              <StatusBadge className={getArchitectRiskStyle(stage.riskLevel)}>{stage.riskLevel}</StatusBadge>
+            </div>
+          ) : null}
+          {stage.keyFindings?.length ? (
+            <div className="mt-3">
+              <p className="text-xs uppercase tracking-[0.12em] text-slate-500">Key Findings</p>
+              <ul className="mt-2 grid gap-1 text-xs leading-5 text-slate-300">
+                {stage.keyFindings.slice(0, 3).map((finding) => <li key={finding}>- {finding}</li>)}
+              </ul>
+            </div>
+          ) : null}
+          {stage.recommendation ? (
+            <p className="mt-3 text-xs leading-5 text-cyan-100">Recommendation: {stage.recommendation}</p>
+          ) : null}
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -5773,6 +5858,134 @@ function getGraphNodeImportanceReason(node: KnowledgeGraphNode, edges: Knowledge
     : "This node is currently low-importance operational memory with few graph relationships.";
 }
 
+function getGraphNodeImportanceReasons(node: KnowledgeGraphNode, edges: KnowledgeGraphEdge[], nodes: KnowledgeGraphNode[]) {
+  const relatedNodeIds = new Set<string>();
+  edges.forEach((edge) => {
+    relatedNodeIds.add(edge.from === node.id ? edge.to : edge.from);
+  });
+
+  const relatedNodes = nodes.filter((item) => relatedNodeIds.has(item.id));
+  const decisionReferences = relatedNodes.filter((item) => item.type === "decision").length + (node.type === "decision" ? 1 : 0);
+  const architectReferences = relatedNodes.filter((item) => item.type === "architecture_review").length + (node.type === "architecture_review" ? 1 : 0);
+  const nightlyReferences = relatedNodes.filter((item) => item.type === "nightly_review").length + (node.type === "nightly_review" ? 1 : 0);
+  const dailyReferences = relatedNodes.filter((item) => item.type === "daily_report").length + (node.type === "daily_report" ? 1 : 0);
+  const incidentReferences = relatedNodes.filter((item) => item.type === "incident").length + (node.type === "incident" ? 1 : 0);
+
+  const reasons = [
+    `connected to ${node.degree} node${node.degree === 1 ? "" : "s"}`,
+    decisionReferences ? `referenced by ${decisionReferences} decision context${decisionReferences === 1 ? "" : "s"}` : null,
+    architectReferences ? `referenced in ${architectReferences} Architect review context${architectReferences === 1 ? "" : "s"}` : null,
+    nightlyReferences ? `used in ${nightlyReferences} nightly review context${nightlyReferences === 1 ? "" : "s"}` : null,
+    dailyReferences ? `mentioned in ${dailyReferences} daily report context${dailyReferences === 1 ? "" : "s"}` : null,
+    incidentReferences ? `connected to ${incidentReferences} incident context${incidentReferences === 1 ? "" : "s"}` : null,
+    node.isRecent ? "recently created or referenced" : null,
+    node.isHub ? "acts as a hub for nearby operational memory" : null,
+  ].filter(Boolean) as string[];
+
+  return reasons.length ? reasons : ["low-importance memory with few current relationships"];
+}
+
+function getActiveDecisionChain(insights: KnowledgeGraphInsights | null, graph: Pick<KnowledgeGraph, "nodes" | "edges">) {
+  const nodeIds = new Set<string>();
+  const labels: string[] = [];
+  const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const firstDecisionChain = insights?.decisionChains[0] ?? null;
+
+  const addNode = (node: KnowledgeGraphNode | KnowledgeGraphInsights["decisionChains"][number]["relatedReviews"][number] | null | undefined, fallback: string) => {
+    if (node?.id) {
+      nodeIds.add(node.id);
+      labels.push(node.label || fallback);
+      return;
+    }
+    labels.push(fallback);
+  };
+
+  const findConnectedNode = (rootId: string | null, types: string[]) => {
+    const candidates = rootId
+      ? graph.edges
+          .filter((edge) => edge.from === rootId || edge.to === rootId)
+          .map((edge) => nodesById.get(edge.from === rootId ? edge.to : edge.from))
+          .filter((node): node is KnowledgeGraphNode => node !== undefined && types.includes(node.type))
+      : [];
+
+    return (
+      candidates.sort((left, right) => right.importanceScore - left.importanceScore)[0] ??
+      graph.nodes
+        .filter((node) => types.includes(node.type))
+        .sort((left, right) => right.importanceScore - left.importanceScore)[0] ??
+      null
+    );
+  };
+
+  const decisionNode = firstDecisionChain ? nodesById.get(firstDecisionChain.decisionNodeId) ?? null : findConnectedNode(null, ["decision"]);
+  const architectNode =
+    firstDecisionChain?.relatedArchitectReviews[0] ??
+    findConnectedNode(decisionNode?.id ?? null, ["architecture_review"]);
+  const reviewerNode =
+    firstDecisionChain?.relatedReviews.find((node) => node.type === "reviewer_result") ??
+    firstDecisionChain?.relatedReviews[0] ??
+    findConnectedNode(decisionNode?.id ?? null, ["reviewer_result"]);
+  const builderNode =
+    findConnectedNode(reviewerNode?.id ?? decisionNode?.id ?? null, ["builder_result"]) ??
+    findConnectedNode(null, ["builder_result"]);
+  const knowledgeNode =
+    firstDecisionChain?.relatedReports[0] ??
+    findConnectedNode(decisionNode?.id ?? null, ["obsidian_note", "daily_report", "nightly_review", "batch_run"]) ??
+    findConnectedNode(null, ["obsidian_note", "daily_report", "nightly_review", "batch_run"]);
+
+  addNode(architectNode, "Architect Review");
+  addNode(builderNode, "Builder Result");
+  addNode(reviewerNode, "Reviewer Verdict");
+  addNode(decisionNode, "PM Decision");
+  addNode(knowledgeNode, "Knowledge Record");
+
+  return { nodeIds, labels };
+}
+
+function getGraphFocusContext(
+  graph: Pick<KnowledgeGraph, "nodes" | "edges">,
+  selectedNodeId: string | null,
+  activeChainNodeIds: Set<string>,
+) {
+  const nodeIds = new Set(activeChainNodeIds);
+  const edgeIds = new Set<string>();
+
+  graph.edges.forEach((edge) => {
+    if (activeChainNodeIds.has(edge.from) && activeChainNodeIds.has(edge.to)) {
+      edgeIds.add(edge.id);
+    }
+  });
+
+  if (!selectedNodeId) {
+    return { nodeIds, edgeIds };
+  }
+
+  nodeIds.add(selectedNodeId);
+  const frontier = [{ id: selectedNodeId, depth: 0 }];
+  const seen = new Set([selectedNodeId]);
+  const maxDepth = 3;
+
+  while (frontier.length) {
+    const current = frontier.shift();
+    if (!current || current.depth >= maxDepth) continue;
+
+    graph.edges.forEach((edge) => {
+      const touchesCurrent = edge.from === current.id || edge.to === current.id;
+      if (!touchesCurrent) return;
+
+      edgeIds.add(edge.id);
+      const nextId = edge.from === current.id ? edge.to : edge.from;
+      nodeIds.add(nextId);
+      if (!seen.has(nextId)) {
+        seen.add(nextId);
+        frontier.push({ id: nextId, depth: current.depth + 1 });
+      }
+    });
+  }
+
+  return { nodeIds, edgeIds };
+}
+
 function truncateGraphLabel(value: string, maxLength: number) {
   return value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
 }
@@ -5938,6 +6151,49 @@ function getReadinessStatus(items: { status: ConsistencyStatus }[]) {
   return { label: "ready", className: consistencyStatusStyles.matched };
 }
 
+function getArchitectRiskLevel(
+  runtimeStatus: LocalRuntimeStatus,
+  review: ArchitectureReview | null,
+  error: string | null,
+): "Low" | "Medium" | "High" {
+  if (error || review?.status === "blocked" || runtimeStatus.latest_details.reviewer?.verdict === "stop") return "High";
+  if (!review || review.status === "warning" || review.findings.length > 0 || runtimeStatus.queue.inbox > 0 && !runtimeStatus.processes.loop) return "Medium";
+  return "Low";
+}
+
+function getArchitectFindingLabels(
+  runtimeStatus: LocalRuntimeStatus,
+  review: ArchitectureReview | null,
+  error: string | null,
+) {
+  const findings = [
+    error ? "architect endpoint unavailable" : null,
+    runtimeStatus.latest_details.reviewer?.verdict === "stop" ? "reviewer stop detected" : null,
+    runtimeStatus.queue.inbox > 0 && !runtimeStatus.processes.loop ? "queued work but loop offline" : null,
+    runtimeStatus.queue.inbox === 0 && runtimeStatus.queue.processing === 0 ? "queue idle" : null,
+    ...((review?.findings ?? []).map((finding) => finding.message ?? finding.title ?? finding.detail ?? finding.rule ?? null)),
+  ].filter(Boolean) as string[];
+
+  return Array.from(new Set(findings)).slice(0, 3);
+}
+
+function getArchitectRecommendation(
+  runtimeStatus: LocalRuntimeStatus,
+  review: ArchitectureReview | null,
+  error: string | null,
+): "Proceed" | "Wait" | "Review Required" | "Escalate" {
+  if (error || review?.status === "blocked") return "Escalate";
+  if (runtimeStatus.latest_details.reviewer?.verdict === "stop" || (runtimeStatus.queue.inbox === 0 && runtimeStatus.queue.processing === 0)) return "Wait";
+  if (!review || review.status === "warning" || review.findings.length > 0) return "Review Required";
+  return "Proceed";
+}
+
+function getArchitectRiskStyle(risk: "Low" | "Medium" | "High") {
+  if (risk === "High") return "bg-rose-500/15 text-rose-200 ring-rose-400/25";
+  if (risk === "Medium") return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
+  return "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25";
+}
+
 function getPipelineStages(
   runtimeStatus: LocalRuntimeStatus | null,
   latestArchitectureReview: ArchitectureReview | null = null,
@@ -5954,7 +6210,7 @@ function getPipelineStages(
       id: label.toLowerCase(),
       kicker: `Stage ${index + 1}`,
       label,
-      value: "-",
+      value: "inactive",
       detail: "Waiting for runtime status.",
       active: false,
       pulse: false,
@@ -5975,8 +6231,11 @@ function getPipelineStages(
     runtimeStatus.latest.review?.updated_at &&
     runtimeStatus.latest.outbox.updated_at > runtimeStatus.latest.review.updated_at;
   const architectBlocked = latestArchitectureReview?.status === "blocked";
-  const architectWarning = latestArchitectureReview?.status === "warning" || Boolean(architectureReviewError);
+  const architectWarning = latestArchitectureReview?.status === "warning" || Boolean(architectureReviewError) || !latestArchitectureReview;
   const architectFindings = latestArchitectureReview?.findings.length ?? 0;
+  const architectFindingLabels = getArchitectFindingLabels(runtimeStatus, latestArchitectureReview, architectureReviewError);
+  const architectRiskLevel = getArchitectRiskLevel(runtimeStatus, latestArchitectureReview, architectureReviewError);
+  const architectRecommendationLabel = getArchitectRecommendation(runtimeStatus, latestArchitectureReview, architectureReviewError);
   const architectRecommendation =
     latestArchitectureReview?.recommendations[0]?.message ??
     latestArchitectureReview?.recommendations[0]?.detail ??
@@ -5990,9 +6249,9 @@ function getPipelineStages(
       id: "input",
       kicker: "Queue",
       label: "Inbox",
-      value: String(runtimeStatus.queue.inbox),
+      value: hasPendingInput ? "healthy" : "inactive",
       detail: hasPendingInput
-        ? `${runtimeStatus.latest.inbox?.name ?? "Queued target"} is waiting for review of priority and risk.`
+        ? `${runtimeStatus.queue.inbox} queued. Target: ${runtimeStatus.latest.inbox?.name ?? "unknown"}`
         : "No queued input.",
       active: hasPendingInput,
       pulse: hasPendingInput || loopWaiting,
@@ -6003,7 +6262,7 @@ function getPipelineStages(
       id: "architect",
       kicker: "Architect Gate",
       label: "Risk Review",
-      value: architectureReviewError ? "unknown" : latestArchitectureReview?.status ?? "no review",
+      value: architectBlocked || architectWarning ? "warning" : "healthy",
       detail: architectureReviewError
         ? "Architecture review endpoint is not reachable."
         : latestArchitectureReview
@@ -6013,12 +6272,15 @@ function getPipelineStages(
       pulse: architectBlocked || architectWarning,
       className: architectBlocked ? stopped : architectWarning ? warning : latestArchitectureReview ? success : inactive,
       dotClassName: architectBlocked ? "bg-rose-300" : architectWarning ? "bg-amber-300" : latestArchitectureReview ? "bg-emerald-300" : "bg-slate-500",
+      riskLevel: architectRiskLevel,
+      keyFindings: architectFindingLabels,
+      recommendation: architectRecommendationLabel,
     },
     {
       id: "builder",
       kicker: "Builder",
       label: "Implementer",
-      value: hasProcessing ? "busy" : runtimeStatus.processes.implementer ? "ready" : "off",
+      value: runtimeStatus.processes.implementer || hasProcessing ? "healthy" : "inactive",
       detail: runtimeStatus.processes.implementer
         ? `PID ${runtimeStatus.processes.implementer.pid}${runtimeStatus.active_task ? ` / ${runtimeStatus.active_task}` : ""}`
         : "Implementer process not detected.",
@@ -6031,7 +6293,7 @@ function getPipelineStages(
       id: "reviewer",
       kicker: "Review",
       label: "Reviewer",
-      value: runtimeStatus.processes.reviewer_bridge ? "bridge" : runtimeStatus.processes.reviewer ? "manual" : "off",
+      value: runtimeStatus.processes.reviewer_bridge || runtimeStatus.processes.reviewer ? "healthy" : "inactive",
       detail: runtimeStatus.processes.reviewer_bridge
         ? `Bridge PID ${runtimeStatus.processes.reviewer_bridge.pid}`
         : runtimeStatus.processes.reviewer
@@ -6050,7 +6312,7 @@ function getPipelineStages(
       id: "decision",
       kicker: "PM Decision",
       label: "Record",
-      value: reviewerVerdict,
+      value: reviewerStopped ? "blocked" : "healthy",
       detail: runtimeStatus.latest_details.reviewer?.next_task_id
         ? `Next task: ${runtimeStatus.latest_details.reviewer.next_task_id}`
         : reviewerStopped
