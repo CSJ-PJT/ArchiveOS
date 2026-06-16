@@ -892,7 +892,8 @@ function DashboardHero({
           </div>
           <h1 className="mt-4 text-2xl font-semibold text-white sm:text-3xl">ArchiveOS PM Operations Overview</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-            Read-only AI operations visibility. Decisions are recorded as PM memory; no Codex, MCP, OpenAI, or shell execution is triggered from the UI.
+            Dashboard is the 5-second operating view: current state, risk, active work, verdict, runtime health, Architect status, and endpoint health.
+            ArchiveOS remains read-only except PM decision recording.
           </p>
         </div>
         <div className="rounded-md border border-white/10 bg-black/25 p-4 xl:w-80">
@@ -902,6 +903,7 @@ function DashboardHero({
       </div>
 
       <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <RuntimeMetric label="Overall status" value={systemState} emphasized />
         <RuntimeMetric label="Inbox / Loop" value={`${runtimeStatus?.queue.inbox ?? 0} / ${runtimeStatus?.processes.loop ? "online" : "offline"}`} emphasized={Boolean(runtimeStatus?.queue.inbox && !runtimeStatus.processes.loop)} />
         <RuntimeMetric label="Approvals" value={formatKpiValue(kpiOverview?.quality.reviewApproveCount ?? null)} />
         <RuntimeMetric label="Knowledge nodes" value={formatKpiValue(kpiOverview?.knowledge.totalNodes ?? null)} />
@@ -1122,8 +1124,8 @@ function DecisionsView({
 
   return (
     <div className="grid gap-5">
-      <Panel title="PM Decision Center">
-        <SourceLabel label="Writes real PM decisions to Supabase work_logs with log_type=decision. No agent execution is triggered." />
+      <Panel title="PM Decision Recording">
+        <SourceLabel label="This records a PM decision as operational memory only. It does not execute Codex, MCP, shell, or process control." />
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <RuntimeMetric label="Pending decision targets" value={String(pendingCount)} emphasized={pendingCount > 0} />
           <RuntimeMetric label="Recorded decisions" value={String(decisions.length)} />
@@ -1142,9 +1144,9 @@ function DecisionsView({
             <RelatedKnowledgeMini externalRef={targetTask} />
           </div>
           <div className="rounded-md border border-white/10 bg-black/20 p-4">
-            <p className="text-sm font-semibold text-white">Record PM decision</p>
+            <p className="text-sm font-semibold text-white">Approve / Reject Recording Form</p>
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              This stores PM intent as operational memory only. It does not approve, reject, or execute MCP/Codex work automatically.
+              Approve Decision and Reject Decision save approval/rejection records only. They do not trigger MCP, Codex, shell, or process control.
             </p>
             <ApprovalRecorder targetTask={targetTask} onRecorded={onRecorded} />
           </div>
@@ -1179,7 +1181,7 @@ function DecisionTargetCard({
     <article className="rounded-md border border-white/10 bg-black/20 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-white">Decision target</p>
+          <p className="text-sm font-semibold text-white">Pending Decision Target</p>
           <p className="mt-1 text-xs text-slate-500">Current task/result/review context</p>
         </div>
         <StatusBadge className={targetTask ? "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25" : "bg-slate-500/15 text-slate-200 ring-slate-400/20"}>
@@ -1188,8 +1190,8 @@ function DecisionTargetCard({
       </div>
       <div className="mt-4 grid gap-3">
         <RuntimeMetric label="Target task" value={targetTask ?? "No linked runtime task"} copyable={Boolean(targetTask)} emphasized={Boolean(targetTask)} />
-        <RuntimeMetric label="Builder result" value={runtimeStatus?.latest.outbox?.name ?? "No linked result file"} copyable={Boolean(runtimeStatus?.latest.outbox?.name)} />
-        <RuntimeMetric label="Reviewer result" value={runtimeStatus?.latest.review?.name ?? "No linked review file"} copyable={Boolean(runtimeStatus?.latest.review?.name)} />
+        <RuntimeMetric label="Related Builder Result" value={runtimeStatus?.latest.outbox?.name ?? "No linked result file"} copyable={Boolean(runtimeStatus?.latest.outbox?.name)} />
+        <RuntimeMetric label="Related Reviewer Result" value={runtimeStatus?.latest.review?.name ?? "No linked review file"} copyable={Boolean(runtimeStatus?.latest.review?.name)} />
       </div>
     </article>
   );
@@ -1461,6 +1463,13 @@ function OperatorsView({
 }) {
   return (
     <div className="grid gap-5">
+      <PipelineOverview
+        runtimeStatus={runtimeStatus}
+        runtimeError={runtimeError}
+        latestArchitectureReview={latestArchitectureReview}
+        architectureReviewError={architectureReviewError}
+      />
+
       <Panel title="Operators">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <SourceLabel label="live MCP + backend-derived process detection" />
@@ -1481,27 +1490,48 @@ function OperatorsView({
         )}
       </Panel>
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <ProcessCard title="MCP Loop" process={runtimeStatus?.processes.loop ?? null} interpretation={getLoopInterpretation(runtimeStatus)} />
-        <ProcessCard title="Reviewer Bridge" process={runtimeStatus?.processes.reviewer_bridge ?? null} interpretation={getBridgeInterpretation(runtimeStatus)} />
-      </div>
+      <details className="rounded-md border border-white/10 bg-[#0d1117] p-4 sm:p-5">
+        <summary className="cursor-pointer text-lg font-semibold text-white">Process Detection</summary>
+        <div className="mt-4 grid gap-5 xl:grid-cols-2">
+          <ProcessCard title="MCP Loop" process={runtimeStatus?.processes.loop ?? null} interpretation={getLoopInterpretation(runtimeStatus)} />
+          <ProcessCard title="Reviewer Bridge" process={runtimeStatus?.processes.reviewer_bridge ?? null} interpretation={getBridgeInterpretation(runtimeStatus)} />
+        </div>
+      </details>
 
-      <Panel title="Architect">
-        <ArchitectStatusCard review={latestArchitectureReview} error={architectureReviewError} />
-      </Panel>
+      <details className="rounded-md border border-white/10 bg-[#0d1117] p-4 sm:p-5">
+        <summary className="cursor-pointer text-lg font-semibold text-white">Queue Details</summary>
+        <div className="mt-4">
+          <QueueDetailsPanel runtimeStatus={runtimeStatus} taskCounts={taskCounts} />
+        </div>
+      </details>
 
-      <PipelineOverview runtimeStatus={runtimeStatus} runtimeError={runtimeError} />
+      <details className="rounded-md border border-white/10 bg-[#0d1117] p-4 sm:p-5">
+        <summary className="cursor-pointer text-lg font-semibold text-white">Architect Reviews</summary>
+        <div className="mt-4">
+          <ArchitectStatusCard review={latestArchitectureReview} error={architectureReviewError} />
+        </div>
+      </details>
 
-      <QueueDetailsPanel runtimeStatus={runtimeStatus} taskCounts={taskCounts} />
+      <details className="rounded-md border border-white/10 bg-[#0d1117] p-4 sm:p-5">
+        <summary className="cursor-pointer text-lg font-semibold text-white">Data Consistency</summary>
+        <div className="mt-4">
+          <DataConsistencyPanel
+            runtimeStatus={runtimeStatus}
+            runtimeError={runtimeError}
+            data={data}
+            backendReachability={backendReachability}
+            commandRunsReachability={commandRunsReachability}
+            consistencyError={consistencyError}
+          />
+        </div>
+      </details>
 
-      <DataConsistencyPanel
-        runtimeStatus={runtimeStatus}
-        runtimeError={runtimeError}
-        data={data}
-        backendReachability={backendReachability}
-        commandRunsReachability={commandRunsReachability}
-        consistencyError={consistencyError}
-      />
+      <details className="rounded-md border border-white/10 bg-[#0d1117] p-4 sm:p-5">
+        <summary className="cursor-pointer text-lg font-semibold text-white">Technical Details</summary>
+        <p className="mt-3 text-sm leading-6 text-slate-400">
+          PID, CPU, queue path, and endpoint diagnostics are technical evidence only. They do not expose process controls.
+        </p>
+      </details>
     </div>
   );
 }
@@ -2573,6 +2603,8 @@ function MeshSummaryCard({ meshOverview, error }: { meshOverview: MeshOverview |
     ["warning", "blocked", "no_review"].includes(agent.status),
   ).length;
   const latestInteraction = meshOverview.recentInteractions[0]?.time ?? null;
+  const architectAgent = findMeshAgent(meshOverview, "architect");
+  const historianAgent = findMeshAgent(meshOverview, "historian");
 
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -2582,7 +2614,7 @@ function MeshSummaryCard({ meshOverview, error }: { meshOverview: MeshOverview |
       <RuntimeMetric label="Latest interaction" value={latestInteraction ? formatRelativeTime(latestInteraction) : "none"} />
       <RuntimeMetric
         label="Architect / Historian"
-        value={`${findMeshAgent(meshOverview, "architect")?.status ?? "unknown"} / ${findMeshAgent(meshOverview, "historian")?.status ?? "unknown"}`}
+        value={`${architectAgent?.status ?? "unknown"} / ${historianAgent?.status ?? "unknown"}`}
       />
     </div>
   );
@@ -2882,7 +2914,9 @@ function TrendMiniBars({ title, points }: { title: string; points: KpiOverview["
             <span className="text-right text-slate-300">{point.count}</span>
           </div>
         )) : (
-          <p className="text-sm text-slate-500">No trend data in this range.</p>
+          <p className="text-sm leading-6 text-slate-500">
+            No trend data in this range yet. Run daily/nightly batches and record decisions over multiple days to make this trend meaningful.
+          </p>
         )}
       </div>
     </div>
@@ -2924,16 +2958,20 @@ function MeshView({
     ["warning", "blocked", "no_review"].includes(agent.status),
   ).length;
   const latestInteraction = meshOverview.recentInteractions[0]?.time ?? null;
+  const architectAgent = findMeshAgent(meshOverview, "architect");
+  const historianAgent = findMeshAgent(meshOverview, "historian");
 
   return (
     <div className="grid gap-5">
       <Panel title="Mesh Health">
         <SourceLabel label="read-only derived view from runtime, Architect, Historian, and Knowledge Graph" />
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <RuntimeMetric label="Overall status" value={meshOverview.health.status} />
           <RuntimeMetric label="Active agents" value={String(activeAgents)} />
           <RuntimeMetric label="Warnings" value={String(warningCount)} />
           <RuntimeMetric label="Latest interaction" value={latestInteraction ? formatRelativeTime(latestInteraction) : "none"} />
+          <RuntimeMetric label="Architect" value={architectAgent?.status ?? "unknown"} />
+          <RuntimeMetric label="Historian" value={historianAgent?.status ?? "unknown"} />
         </div>
         <p className="mt-4 rounded-md border border-white/10 bg-black/20 p-3 text-sm leading-6 text-slate-300">
           {meshOverview.health.summary}
@@ -3337,13 +3375,23 @@ function SettingsView({
         </ul>
       </Panel>
 
+      <Panel title="Endpoint Health Matrix">
+        <p className="mb-4 text-sm leading-6 text-slate-400">
+          Registered backend endpoints are checked here so stale frontend/backend/ngrok processes can be diagnosed without exposing secrets.
+        </p>
+        <EndpointHealthMatrix endpointHealth={endpointHealth} />
+      </Panel>
+
       <details className="rounded-md border border-white/10 bg-[#0d1117] p-4 sm:p-5">
         <summary className="cursor-pointer text-lg font-semibold text-white">Developer Diagnostics</summary>
         <p className="mt-3 text-sm leading-6 text-slate-400">
-          Endpoint Health Matrix is intentionally tucked away for debugging stale backend/frontend/ngrok processes.
+          Developer diagnostics are read-only hints for local setup. ArchiveOS does not start or stop runtime processes from this screen.
         </p>
-        <div className="mt-4">
-          <EndpointHealthMatrix endpointHealth={endpointHealth} />
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <RuntimeMetric label="Backend reachability" value={backendReachability} />
+          <RuntimeMetric label="Command runs reachability" value={commandRunsReachability} />
+          <RuntimeMetric label="Runtime queue path" value={runtimeStatus?.queue.path ?? "not configured"} copyable={Boolean(runtimeStatus?.queue.path)} />
+          <RuntimeMetric label="Historian status" value={historianError ? "unreachable" : historianStatus?.enabled ? "enabled" : "disabled"} />
         </div>
       </details>
     </div>
@@ -3745,17 +3793,21 @@ function ApprovalRecorder({
 function PipelineOverview({
   runtimeStatus,
   runtimeError,
+  latestArchitectureReview,
+  architectureReviewError,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
   runtimeError: string | null;
+  latestArchitectureReview?: ArchitectureReview | null;
+  architectureReviewError?: string | null;
 }) {
-  const stages = getPipelineStages(runtimeStatus);
+  const stages = getPipelineStages(runtimeStatus, latestArchitectureReview, architectureReviewError ?? null);
   const activeConnectorIndex = getActivePipelineConnectorIndex(runtimeStatus);
   const bottleneck = getPipelineBottleneck(runtimeStatus);
   const liveState = getLiveLoopState(runtimeStatus);
 
   return (
-    <Panel title="Live Pipeline Map" className="overflow-hidden">
+    <Panel title="Architect-Inclusive Operations Pipeline" className="overflow-hidden">
       {runtimeError ? (
         <EmptyState title="Pipeline offline" detail={runtimeError} />
       ) : runtimeStatus ? (
@@ -3765,12 +3817,10 @@ function PipelineOverview({
               <div>
                 <div className="flex items-center gap-2">
                   <LiveIndicator active={liveState.active} title={liveState.title} />
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">
-                    Runtime Flow
-                  </p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Runtime Flow</p>
                 </div>
                 <p className="mt-1 text-sm text-slate-400">
-                  PM queue to builder, reviewer, and next decision.
+                  Queue to Architect Gate, Builder/Implementer, Reviewer, and PM Decision. Visibility only; no execution control.
                 </p>
                 <SourceLabel label="live MCP" />
               </div>
@@ -3780,7 +3830,7 @@ function PipelineOverview({
               </div>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr] lg:items-stretch">
+            <div className="grid gap-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr] lg:items-stretch">
               {stages.map((stage, index) => (
                 <div key={stage.id} className="contents">
                   <PipelineNode stage={stage} />
@@ -5888,7 +5938,11 @@ function getReadinessStatus(items: { status: ConsistencyStatus }[]) {
   return { label: "ready", className: consistencyStatusStyles.matched };
 }
 
-function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineStage[] {
+function getPipelineStages(
+  runtimeStatus: LocalRuntimeStatus | null,
+  latestArchitectureReview: ArchitectureReview | null = null,
+  architectureReviewError: string | null = null,
+): PipelineStage[] {
   const inactive = "border-white/10 bg-white/[0.03]";
   const live = "border-cyan-300/30 bg-cyan-300/[0.06]";
   const success = "border-emerald-300/30 bg-emerald-300/[0.06]";
@@ -5896,7 +5950,7 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
   const stopped = "border-rose-300/30 bg-rose-300/[0.07]";
 
   if (!runtimeStatus) {
-    return ["Input", "Loop", "Builder", "Result", "Reviewer", "Decision"].map((label, index) => ({
+    return ["Queue", "Architect Gate", "Builder", "Reviewer", "PM Decision"].map((label, index) => ({
       id: label.toLowerCase(),
       kicker: `Stage ${index + 1}`,
       label,
@@ -5915,12 +5969,18 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
   const loopRunning = Boolean(runtimeStatus.processes.loop);
   const loopWaiting = loopRunning && !hasPendingInput && !hasProcessing;
   const reviewerStopped = reviewerVerdict === "stop";
-  const builderSucceeded = runtimeStatus.latest_details.builder?.status === "done";
   const reviewerApproved = reviewerVerdict === "approve_next";
   const resultNewerThanReview =
     runtimeStatus.latest.outbox?.updated_at &&
     runtimeStatus.latest.review?.updated_at &&
     runtimeStatus.latest.outbox.updated_at > runtimeStatus.latest.review.updated_at;
+  const architectBlocked = latestArchitectureReview?.status === "blocked";
+  const architectWarning = latestArchitectureReview?.status === "warning" || Boolean(architectureReviewError);
+  const architectFindings = latestArchitectureReview?.findings.length ?? 0;
+  const architectRecommendation =
+    latestArchitectureReview?.recommendations[0]?.message ??
+    latestArchitectureReview?.recommendations[0]?.detail ??
+    "No architecture recommendation recorded.";
 
   const waitingClass = loopWaiting ? live : inactive;
   const waitingDot = loopWaiting ? "bg-cyan-300" : "bg-slate-500";
@@ -5931,28 +5991,32 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
       kicker: "Queue",
       label: "Inbox",
       value: String(runtimeStatus.queue.inbox),
-      detail: hasPendingInput ? "Queued work is waiting for the loop." : "No queued input.",
+      detail: hasPendingInput
+        ? `${runtimeStatus.latest.inbox?.name ?? "Queued target"} is waiting for review of priority and risk.`
+        : "No queued input.",
       active: hasPendingInput,
       pulse: hasPendingInput || loopWaiting,
       className: hasPendingInput ? live : waitingClass,
       dotClassName: hasPendingInput ? "bg-cyan-300" : waitingDot,
     },
     {
-      id: "loop",
-      kicker: "Runner",
-      label: "Loop",
-      value: runtimeStatus.processes.loop ? "on" : "off",
-      detail: runtimeStatus.processes.loop
-        ? `PID ${runtimeStatus.processes.loop.pid}`
-        : "Loop process not detected.",
-      active: loopRunning,
-      pulse: loopRunning,
-      className: loopRunning ? live : stopped,
-      dotClassName: loopRunning ? "bg-cyan-300" : "bg-rose-300",
+      id: "architect",
+      kicker: "Architect Gate",
+      label: "Risk Review",
+      value: architectureReviewError ? "unknown" : latestArchitectureReview?.status ?? "no review",
+      detail: architectureReviewError
+        ? "Architecture review endpoint is not reachable."
+        : latestArchitectureReview
+          ? `Findings ${architectFindings}. ${architectRecommendation}`
+          : "No latest architecture review. Treat high-risk work as needing PM attention.",
+      active: Boolean(latestArchitectureReview),
+      pulse: architectBlocked || architectWarning,
+      className: architectBlocked ? stopped : architectWarning ? warning : latestArchitectureReview ? success : inactive,
+      dotClassName: architectBlocked ? "bg-rose-300" : architectWarning ? "bg-amber-300" : latestArchitectureReview ? "bg-emerald-300" : "bg-slate-500",
     },
     {
       id: "builder",
-      kicker: "Worker",
+      kicker: "Builder",
       label: "Implementer",
       value: hasProcessing ? "busy" : runtimeStatus.processes.implementer ? "ready" : "off",
       detail: runtimeStatus.processes.implementer
@@ -5962,17 +6026,6 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
       pulse: hasProcessing || loopWaiting,
       className: hasProcessing || loopWaiting ? live : runtimeStatus.processes.implementer ? inactive : stopped,
       dotClassName: hasProcessing || loopWaiting ? "bg-cyan-300" : runtimeStatus.processes.implementer ? "bg-slate-400" : "bg-rose-300",
-    },
-    {
-      id: "result",
-      kicker: "Output",
-      label: "Outbox",
-      value: String(runtimeStatus.queue.outbox),
-      detail: runtimeStatus.latest.outbox?.name ?? "No builder result.",
-      active: Boolean(runtimeStatus.latest.outbox),
-      pulse: builderSucceeded || loopWaiting,
-      className: builderSucceeded ? success : waitingClass,
-      dotClassName: builderSucceeded ? "bg-emerald-300" : waitingDot,
     },
     {
       id: "reviewer",
@@ -5995,14 +6048,14 @@ function getPipelineStages(runtimeStatus: LocalRuntimeStatus | null): PipelineSt
     },
     {
       id: "decision",
-      kicker: "Decision",
-      label: "Next Step",
+      kicker: "PM Decision",
+      label: "Record",
       value: reviewerVerdict,
       detail: runtimeStatus.latest_details.reviewer?.next_task_id
         ? `Next task: ${runtimeStatus.latest_details.reviewer.next_task_id}`
         : reviewerStopped
-          ? "Reviewer stopped. PM decision is needed."
-          : "No next task queued by reviewer.",
+          ? "Reviewer stopped. PM should record approval, rejection, or hold."
+          : "No PM decision target is currently pending.",
       active: !reviewerStopped && Boolean(runtimeStatus.latest_details.reviewer?.next_task_id),
       pulse: reviewerApproved || loopWaiting,
       className: reviewerStopped ? stopped : reviewerApproved ? success : waitingClass,
@@ -6020,7 +6073,7 @@ function getActivePipelineConnectorIndex(runtimeStatus: LocalRuntimeStatus | nul
     runtimeStatus.latest.review?.updated_at &&
     runtimeStatus.latest.outbox.updated_at > runtimeStatus.latest.review.updated_at
   ) {
-    return 3;
+    return 2;
   }
   if (runtimeStatus.queue.inbox > 0) return 0;
   if (runtimeStatus.processes.loop && runtimeStatus.queue.inbox === 0 && runtimeStatus.queue.processing === 0) return null;
