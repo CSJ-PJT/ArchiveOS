@@ -1593,6 +1593,8 @@ function DecisionTargetCard({
   runtimeStatus: LocalRuntimeStatus | null;
   targetTask: string | null;
 }) {
+  const targetTitle = formatDecisionTargetTitle(targetTask);
+
   return (
     <article className="rounded-md border border-white/10 bg-black/20 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1605,7 +1607,8 @@ function DecisionTargetCard({
         </StatusBadge>
       </div>
       <div className="mt-4 grid gap-3">
-        <RuntimeMetric label="Target task" value={targetTask ?? "No linked runtime task"} copyable={Boolean(targetTask)} emphasized={Boolean(targetTask)} />
+        <RuntimeMetric label="작업 제목" value={targetTitle} emphasized={Boolean(targetTask)} />
+        <RuntimeMetric label="원본 작업 ID" value={targetTask ?? "No linked runtime task"} copyable={Boolean(targetTask)} />
         <RuntimeMetric label="Related Builder Result" value={runtimeStatus?.latest.outbox?.name ?? "No linked result file"} copyable={Boolean(runtimeStatus?.latest.outbox?.name)} />
         <RuntimeMetric label="Related Reviewer Result" value={runtimeStatus?.latest.review?.name ?? "No linked review file"} copyable={Boolean(runtimeStatus?.latest.review?.name)} />
       </div>
@@ -4261,10 +4264,12 @@ function ApprovalRecorder({
       const note = action === "approve" ? approvalNote.trim() : rejectReason.trim();
       const reason = note ? `\nReason: ${note}` : "";
       const target = targetTask ?? "current-runtime-state";
+      const targetTitle = formatDecisionTargetTitle(targetTask);
       const decisionLabel = action === "approve" ? "APPROVED" : "REJECTED";
       const content = [
         `PM Decision: ${decisionLabel}`,
-        `Target: ${target}`,
+        `Target Title: ${targetTitle}`,
+        `Target ID: ${target}`,
         `Source: ArchiveOS Decisions tab`,
         reason.trim(),
       ].filter(Boolean).join("\n");
@@ -4277,10 +4282,10 @@ function ApprovalRecorder({
       });
 
       await createCommandRun({
-        command: `${action} ${target}`,
+        command: `${action} ${targetTitle}`,
         command_type: `pm_${action}`,
         status: "succeeded",
-        result: `PM decision saved to work_logs. Target: ${target}.${reason ? ` ${reason.replace(/\s+/g, " ").trim()}` : ""}`,
+        result: `PM decision saved to work_logs. Target: ${targetTitle} (${target}).${reason ? ` ${reason.replace(/\s+/g, " ").trim()}` : ""}`,
       });
       setMessage(action === "approve" ? "Approval decision saved." : "Rejection decision saved.");
       setApprovalNote("");
@@ -4299,7 +4304,8 @@ function ApprovalRecorder({
     <div className="grid min-w-64 gap-2">
       <div className="rounded border border-white/10 bg-black/20 p-3">
         <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Decision target</p>
-        <CompactValue value={targetTask ?? "current-runtime-state"} className="mt-2 text-sm text-slate-200" copyable={Boolean(targetTask)} />
+        <CompactValue value={formatDecisionTargetTitle(targetTask)} className="mt-2 text-sm font-semibold text-slate-100" />
+        <CompactValue value={targetTask ?? "current-runtime-state"} className="mt-1 text-xs text-slate-500" copyable={Boolean(targetTask)} />
       </div>
       <div className="flex flex-wrap gap-2">
         <button
@@ -6849,6 +6855,55 @@ function getActivePipelineConnectorIndex(runtimeStatus: LocalRuntimeStatus | nul
   if (runtimeStatus.processes.loop && runtimeStatus.queue.inbox === 0 && runtimeStatus.queue.processing === 0) return null;
 
   return null;
+}
+
+function formatDecisionTargetTitle(targetTask: string | null) {
+  if (!targetTask) return "현재 런타임 상태";
+
+  const normalized = targetTask
+    .replace(/\.(result|review|json)$/gi, "")
+    .replace(/-\d{8}-\d{6}(?:-\d+)?$/g, "");
+
+  if (normalized.includes("fix-chunk-world-foundation-m2-limited-10")) {
+    return "Chunk World Foundation M2 제한 루프 검증 수정";
+  }
+
+  if (normalized.includes("chunk-world-foundation-m2-limited-10")) {
+    return "Chunk World Foundation M2 제한 루프";
+  }
+
+  if (normalized.includes("world-construction-milestone-1-validation")) {
+    return "World Construction Milestone 1 검증";
+  }
+
+  if (normalized.includes("modular-construction")) {
+    return "Modular Construction Prototype 작업";
+  }
+
+  if (normalized.includes("knowledge-graph")) {
+    return "Knowledge Graph 작업";
+  }
+
+  return normalized
+    .split("-")
+    .filter(Boolean)
+    .map((part) => {
+      const known: Record<string, string> = {
+        fix: "수정",
+        chunk: "Chunk",
+        world: "World",
+        foundation: "Foundation",
+        milestone: "Milestone",
+        validation: "검증",
+        limited: "제한",
+        loop: "루프",
+        retry: "재시도",
+        construction: "Construction",
+        settlement: "Settlement",
+      };
+      return known[part.toLowerCase()] ?? part;
+    })
+    .join(" ");
 }
 
 function getPipelineConnectorState(
