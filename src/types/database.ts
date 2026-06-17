@@ -6,6 +6,20 @@ export type CommandStatus = "pending" | "running" | "succeeded" | "failed";
 export type BatchStatus = "completed" | "sent" | "skipped" | "failed";
 export type BatchType = "nightly_review" | "daily_report";
 export type OperationStatus = "normal" | "warning" | "problem";
+export type PmTaskPriority = "high" | "medium" | "low";
+export type PmTaskStatus =
+  | "queued"
+  | "architect_review"
+  | "ready_for_build"
+  | "building"
+  | "review"
+  | "pm_decision_required"
+  | "approved"
+  | "rejected"
+  | "hold"
+  | "failed"
+  | "done";
+export type PmDecisionAction = "approve" | "reject" | "hold" | "retry";
 
 export interface Agent {
   id: string;
@@ -94,4 +108,44 @@ export interface RuntimeSnapshot {
   operators: Record<string, unknown>;
   warnings: string[];
   source: string;
+}
+
+export interface PmTask {
+  id: string;
+  title: string;
+  description: string;
+  priority: PmTaskPriority;
+  status: PmTaskStatus;
+  target_project: string;
+  scope_files: string[] | null;
+  max_iterations: number;
+  current_iteration: number;
+  cost_budget: number | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  latest_architect_review_id: string | null;
+  latest_builder_result_id: string | null;
+  latest_reviewer_result_id: string | null;
+  latest_pm_decision_id: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface PmTaskDecision {
+  id: string;
+  task_id: string;
+  action: PmDecisionAction;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface PmTaskEvent {
+  id: string;
+  task_id: string;
+  event_type: string;
+  title: string;
+  description: string | null;
+  source: "queue" | "architect" | "builder" | "reviewer" | "pm" | "discord";
+  metadata: Record<string, unknown>;
+  created_at: string;
 }
