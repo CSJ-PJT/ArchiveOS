@@ -33,6 +33,19 @@ import {
 import { getLocalRuntimeStatus } from "./lib/localRuntime.js";
 import { getKpiOverview, normalizeRange } from "./kpi/index.js";
 import { getAgentMeshOverview } from "./mesh/index.js";
+import {
+  createPmTask,
+  decidePmTask,
+  getPmTask,
+  getQueueSummary,
+  getTaskEvents,
+  listPmTasks,
+  retryPmTask,
+  runNightlyQueueSummary,
+  runQueueOnce,
+  updatePmTask,
+  type PmTaskStatus,
+} from "./queue/index.js";
 import { supabaseAdmin } from "./lib/supabaseAdmin.js";
 
 const app = express();
@@ -47,6 +60,21 @@ const allowedOrigins = new Set([
 
 const logTypes = new Set(["summary", "decision", "error", "review"]);
 const commandStatuses = new Set(["pending", "running", "succeeded", "failed"]);
+const pmTaskPriorities = new Set(["high", "medium", "low"]);
+const pmTaskStatuses = new Set([
+  "queued",
+  "architect_review",
+  "ready_for_build",
+  "building",
+  "review",
+  "pm_decision_required",
+  "approved",
+  "rejected",
+  "hold",
+  "failed",
+  "done",
+]);
+const pmDecisionActions = new Set(["approve", "reject", "hold", "retry"]);
 const localActionTypes = new Set([
   "git_status",
   "git_branch",
@@ -73,11 +101,12 @@ type HealthServiceKey =
   | "mesh"
   | "kpi"
   | "architect"
-  | "dailyReport";
+  | "dailyReport"
+  | "queue";
 
 type EndpointRegistration = {
   name: string;
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PATCH";
   path: string;
   service: HealthServiceKey;
   description: string;
@@ -92,6 +121,14 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Record Work Log", method: "POST", path: "/api/work-logs", service: "dailyReport", description: "Recording-only work log write." },
   { name: "Commands", method: "GET", path: "/api/commands/recent", service: "dailyReport", description: "Recent recorded commands." },
   { name: "Record Command", method: "POST", path: "/api/commands", service: "dailyReport", description: "Recording-only command write." },
+  { name: "PM Tasks", method: "GET", path: "/api/tasks", service: "queue", description: "PM-controlled task queue." },
+  { name: "Create PM Task", method: "POST", path: "/api/tasks", service: "queue", description: "Recording-only queue task creation." },
+  { name: "Update PM Task", method: "PATCH", path: "/api/tasks/:id", service: "queue", description: "Queue task metadata update." },
+  { name: "PM Task Decision", method: "POST", path: "/api/tasks/:id/decision", service: "queue", description: "PM approval/rejection/hold recording." },
+  { name: "PM Task Retry", method: "POST", path: "/api/tasks/:id/retry", service: "queue", description: "PM retry recording without execution." },
+  { name: "Queue Summary", method: "GET", path: "/api/queue/summary", service: "queue", description: "Semi-auto queue summary." },
+  { name: "Queue Run Once", method: "POST", path: "/api/queue/run-once", service: "queue", description: "State transition and instruction generation only." },
+  { name: "Queue Nightly Summary", method: "POST", path: "/api/queue/nightly-summary", service: "queue", description: "Discord queue summary without execution." },
   { name: "Local Projects", method: "GET", path: "/api/local-actions/projects", service: "backend", description: "Allowlisted local project registry." },
   { name: "Local Diagnostics", method: "POST", path: "/api/local-actions/run", service: "backend", description: "Allowlisted diagnostics endpoint." },
   { name: "Runtime Status", method: "GET", path: "/api/local-runtime/status", service: "runtime", description: "Local MCP runtime status." },
@@ -168,6 +205,7 @@ app.get("/api/health", async (_request, response) => {
       kpi: services.kpi,
       architect: services.architect,
       dailyReport: services.dailyReport,
+      queue: services.queue,
     },
   });
 });
@@ -320,6 +358,108 @@ app.post("/api/commands", async (request, response) => {
   }
 
   response.status(201).json({ data });
+});
+
+app.get("/api/tasks", async (_request, response) => {
+  try {
+    response.json({ data: await listPmTasks() });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch PM tasks." });
+  }
+});
+
+app.get("/api/tasks/:id", async (request, response) => {
+  try {
+    const task = await getPmTask(request.params.id);
+    if (!task) {
+      response.status(404).json({ error: "PM task not found." });
+      return;
+    }
+    response.json({ data: task });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch PM task." });
+  }
+});
+
+app.post("/api/tasks", async (request, response) => {
+  const validation = validatePmTaskBody(request.body);
+
+  if (!validation.ok) {
+    response.status(400).json({ error: validation.error });
+    return;
+  }
+
+  try {
+    response.status(201).json({ data: await createPmTask(validation.value) });
+  } catch {
+    response.status(500).json({ error: "Failed to create PM task." });
+  }
+});
+
+app.patch("/api/tasks/:id", async (request, response) => {
+  const validation = validatePmTaskPatchBody(request.body);
+
+  if (!validation.ok) {
+    response.status(400).json({ error: validation.error });
+    return;
+  }
+
+  try {
+    response.json({ data: await updatePmTask(request.params.id, validation.value) });
+  } catch {
+    response.status(500).json({ error: "Failed to update PM task." });
+  }
+});
+
+app.post("/api/tasks/:id/decision", async (request, response) => {
+  const validation = validatePmDecisionBody(request.body);
+
+  if (!validation.ok) {
+    response.status(400).json({ error: validation.error });
+    return;
+  }
+
+  try {
+    response.json({ data: await decidePmTask(request.params.id, validation.value) });
+  } catch (error) {
+    response.status(400).json({ error: error instanceof Error ? error.message : "Failed to record PM decision." });
+  }
+});
+
+app.post("/api/tasks/:id/retry", async (request, response) => {
+  const reason = typeof request.body?.reason === "string" ? request.body.reason : null;
+
+  try {
+    response.json({ data: await retryPmTask(request.params.id, reason) });
+  } catch (error) {
+    response.status(400).json({ error: error instanceof Error ? error.message : "Failed to request retry." });
+  }
+});
+
+app.get("/api/queue/summary", async (_request, response) => {
+  try {
+    response.json({ data: await getQueueSummary() });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch queue summary." });
+  }
+});
+
+// Local/admin/testing endpoint only. This does not execute Codex, MCP, shell, deployment, git, or process control.
+app.post("/api/queue/run-once", async (_request, response) => {
+  try {
+    response.json({ data: await runQueueOnce() });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Failed to run queue once." });
+  }
+});
+
+// Local/admin/testing endpoint only. Sends a summary notification if DISCORD_WEBHOOK_URL is configured.
+app.post("/api/queue/nightly-summary", async (_request, response) => {
+  try {
+    response.json({ data: await runNightlyQueueSummary() });
+  } catch {
+    response.status(500).json({ error: "Failed to create queue nightly summary." });
+  }
 });
 
 app.get("/api/local-actions/projects", (_request, response) => {
@@ -659,7 +799,7 @@ type LocalActionResult = {
 
 type RuntimeEvent = {
   id: string;
-  type: "queue" | "builder" | "reviewer" | "command" | "decision" | "warning" | "batch";
+  type: "queue" | "builder" | "reviewer" | "command" | "decision" | "warning" | "batch" | "task";
   title: string;
   description: string;
   status: "info" | "success" | "warning" | "error";
@@ -681,6 +821,35 @@ type LocalActionValidationResult =
 
 type ArchitectReviewValidationResult =
   | { ok: true; value: ArchitectReviewBody }
+  | { ok: false; error: string };
+
+type PmTaskBody = {
+  title: string;
+  description: string;
+  priority?: "high" | "medium" | "low";
+  target_project?: string;
+  scope_files?: string[] | null;
+  max_iterations?: number;
+  cost_budget?: number | null;
+};
+
+type PmTaskPatchBody = Partial<PmTaskBody & { status: PmTaskStatus }>;
+
+type PmDecisionBody = {
+  action: "approve" | "reject" | "hold" | "retry";
+  reason?: string | null;
+};
+
+type PmTaskValidationResult =
+  | { ok: true; value: PmTaskBody }
+  | { ok: false; error: string };
+
+type PmTaskPatchValidationResult =
+  | { ok: true; value: PmTaskPatchBody }
+  | { ok: false; error: string };
+
+type PmDecisionValidationResult =
+  | { ok: true; value: PmDecisionBody }
   | { ok: false; error: string };
 
 function validateWorkLogBody(body: unknown): ValidationResult {
@@ -749,12 +918,157 @@ function validateArchitectReviewBody(body: unknown): ArchitectReviewValidationRe
   };
 }
 
+function validatePmTaskBody(body: unknown): PmTaskValidationResult {
+  if (!body || typeof body !== "object") {
+    return { ok: false, error: "Request body must be a JSON object." };
+  }
+
+  const candidate = body as Record<string, unknown>;
+  const title = readRequiredString(candidate.title, "title");
+  const description = readRequiredString(candidate.description, "description");
+  if (!title.ok) return title;
+  if (!description.ok) return description;
+
+  if (candidate.priority !== undefined && (typeof candidate.priority !== "string" || !pmTaskPriorities.has(candidate.priority))) {
+    return { ok: false, error: "priority must be high, medium, or low." };
+  }
+
+  const scopeFiles = readOptionalStringArray(candidate.scope_files, "scope_files");
+  if (!scopeFiles.ok) return scopeFiles;
+
+  const maxIterations = readOptionalNumber(candidate.max_iterations, "max_iterations");
+  if (!maxIterations.ok) return maxIterations;
+
+  const costBudget = readOptionalNumber(candidate.cost_budget, "cost_budget");
+  if (!costBudget.ok) return costBudget;
+
+  return {
+    ok: true,
+    value: {
+      title: title.value,
+      description: description.value,
+      priority: candidate.priority as PmTaskBody["priority"],
+      target_project: typeof candidate.target_project === "string" ? candidate.target_project.trim() : undefined,
+      scope_files: scopeFiles.value,
+      max_iterations: typeof maxIterations.value === "number" ? maxIterations.value : undefined,
+      cost_budget: costBudget.value,
+    },
+  };
+}
+
+function validatePmTaskPatchBody(body: unknown): PmTaskPatchValidationResult {
+  if (!body || typeof body !== "object") {
+    return { ok: false, error: "Request body must be a JSON object." };
+  }
+
+  const candidate = body as Record<string, unknown>;
+  const value: PmTaskPatchBody = {};
+
+  if (candidate.title !== undefined) {
+    const title = readRequiredString(candidate.title, "title");
+    if (!title.ok) return title;
+    value.title = title.value;
+  }
+
+  if (candidate.description !== undefined) {
+    const description = readRequiredString(candidate.description, "description");
+    if (!description.ok) return description;
+    value.description = description.value;
+  }
+
+  if (candidate.priority !== undefined) {
+    if (typeof candidate.priority !== "string" || !pmTaskPriorities.has(candidate.priority)) {
+      return { ok: false, error: "priority must be high, medium, or low." };
+    }
+    value.priority = candidate.priority as PmTaskBody["priority"];
+  }
+
+  if (candidate.status !== undefined) {
+    if (typeof candidate.status !== "string" || !pmTaskStatuses.has(candidate.status)) {
+      return { ok: false, error: "status is not a valid PM task status." };
+    }
+    value.status = candidate.status as PmTaskStatus;
+  }
+
+  if (candidate.target_project !== undefined) {
+    if (typeof candidate.target_project !== "string" || !candidate.target_project.trim()) {
+      return { ok: false, error: "target_project must be a non-empty string." };
+    }
+    value.target_project = candidate.target_project.trim();
+  }
+
+  if (candidate.scope_files !== undefined) {
+    const scopeFiles = readOptionalStringArray(candidate.scope_files, "scope_files");
+    if (!scopeFiles.ok) return scopeFiles;
+    value.scope_files = scopeFiles.value;
+  }
+
+  if (candidate.max_iterations !== undefined) {
+    const maxIterations = readOptionalNumber(candidate.max_iterations, "max_iterations");
+    if (!maxIterations.ok) return maxIterations;
+    value.max_iterations = typeof maxIterations.value === "number" ? maxIterations.value : undefined;
+  }
+
+  if (candidate.cost_budget !== undefined) {
+    const costBudget = readOptionalNumber(candidate.cost_budget, "cost_budget");
+    if (!costBudget.ok) return costBudget;
+    value.cost_budget = costBudget.value;
+  }
+
+  return { ok: true, value };
+}
+
+function validatePmDecisionBody(body: unknown): PmDecisionValidationResult {
+  if (!body || typeof body !== "object") {
+    return { ok: false, error: "Request body must be a JSON object." };
+  }
+
+  const candidate = body as Record<string, unknown>;
+  if (typeof candidate.action !== "string" || !pmDecisionActions.has(candidate.action)) {
+    return { ok: false, error: "action must be approve, reject, hold, or retry." };
+  }
+
+  if (candidate.action === "reject" && (typeof candidate.reason !== "string" || !candidate.reason.trim())) {
+    return { ok: false, error: "reason is required when rejecting a task." };
+  }
+
+  if (candidate.reason !== undefined && candidate.reason !== null && typeof candidate.reason !== "string") {
+    return { ok: false, error: "reason must be a string or null." };
+  }
+
+  return {
+    ok: true,
+    value: {
+      action: candidate.action as PmDecisionBody["action"],
+      reason: typeof candidate.reason === "string" ? candidate.reason.trim() : null,
+    },
+  };
+}
+
 function readRequiredString(value: unknown, name: string): { ok: true; value: string } | { ok: false; error: string } {
   if (typeof value !== "string" || value.trim().length === 0) {
     return { ok: false, error: `${name} is required.` };
   }
 
   return { ok: true, value: value.trim() };
+}
+
+function readOptionalNumber(value: unknown, name: string): { ok: true; value?: number | null } | { ok: false; error: string } {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (value === null) return { ok: true, value: null };
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return { ok: false, error: `${name} must be a finite number.` };
+  }
+  return { ok: true, value };
+}
+
+function readOptionalStringArray(value: unknown, name: string): { ok: true; value?: string[] | null } | { ok: false; error: string } {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (value === null) return { ok: true, value: null };
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    return { ok: false, error: `${name} must be an array of strings or null.` };
+  }
+  return { ok: true, value: value.map((item) => item.trim()).filter(Boolean) };
 }
 
 function readLimit(value: unknown) {
@@ -775,6 +1089,7 @@ async function getServiceHealth() {
     getKpiOverview("7d"),
     getLatestArchitectureReview(),
     getLatestDailyReport(),
+    getQueueSummary(),
   ]);
 
   return {
@@ -785,6 +1100,7 @@ async function getServiceHealth() {
     kpi: checks[3].status === "fulfilled",
     architect: checks[4].status === "fulfilled",
     dailyReport: checks[5].status === "fulfilled",
+    queue: checks[6].status === "fulfilled",
   } satisfies Record<HealthServiceKey, boolean>;
 }
 
@@ -955,7 +1271,7 @@ function scoreToGrade(score: number) {
 
 async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
   const checkedAt = new Date().toISOString();
-  const [runtime, commandsResult, decisionsResult, batchRuns] = await Promise.all([
+  const [runtime, commandsResult, decisionsResult, batchRuns, taskEvents] = await Promise.all([
     getLocalRuntimeStatus(),
     supabaseAdmin
       .from("command_runs")
@@ -971,6 +1287,7 @@ async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
       .order("created_at", { ascending: false })
       .limit(5),
     getRecentBatchRuns(5).catch(() => []),
+    getTaskEvents(10).catch(() => []),
   ]);
 
   const events: RuntimeEvent[] = [];
@@ -1079,6 +1396,18 @@ async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
       status: batch.status === "failed" ? "error" : batch.status === "skipped" ? "warning" : "success",
       source: "backend",
       created_at: batch.created_at,
+    });
+  }
+
+  for (const event of taskEvents) {
+    events.push({
+      id: `pm-task-${event.id}`,
+      type: "task",
+      title: event.event_type,
+      description: summarizeEventDescription(event.description ?? event.title),
+      status: event.event_type.includes("failed") ? "error" : event.event_type.includes("held") ? "warning" : "info",
+      source: "backend",
+      created_at: event.created_at,
     });
   }
 

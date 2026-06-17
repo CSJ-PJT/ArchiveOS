@@ -192,6 +192,67 @@ create table if not exists public.knowledge_edges (
   constraint knowledge_edges_unique_link unique (from_node_id, to_node_id, edge_type)
 );
 
+create table if not exists public.pm_tasks (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text not null,
+  priority text not null default 'medium' check (priority in ('high', 'medium', 'low')),
+  status text not null default 'queued' check (
+    status in (
+      'queued',
+      'architect_review',
+      'ready_for_build',
+      'building',
+      'review',
+      'pm_decision_required',
+      'approved',
+      'rejected',
+      'hold',
+      'failed',
+      'done'
+    )
+  ),
+  target_project text not null default 'DeepStake3D',
+  scope_files text[],
+  max_iterations integer not null default 2 check (max_iterations >= 1 and max_iterations <= 10),
+  current_iteration integer not null default 0 check (current_iteration >= 0),
+  cost_budget numeric,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  completed_at timestamptz,
+  latest_architect_review_id uuid references public.architecture_reviews(id) on delete set null,
+  latest_builder_result_id uuid references public.command_runs(id) on delete set null,
+  latest_reviewer_result_id uuid references public.command_runs(id) on delete set null,
+  latest_pm_decision_id uuid,
+  metadata jsonb not null default '{}'::jsonb
+);
+
+create table if not exists public.pm_task_decisions (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.pm_tasks(id) on delete cascade,
+  action text not null check (action in ('approve', 'reject', 'hold', 'retry')),
+  reason text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.pm_tasks
+drop constraint if exists pm_tasks_latest_pm_decision_id_fkey;
+
+alter table public.pm_tasks
+add constraint pm_tasks_latest_pm_decision_id_fkey
+foreign key (latest_pm_decision_id) references public.pm_task_decisions(id) on delete set null;
+
+create table if not exists public.pm_task_events (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.pm_tasks(id) on delete cascade,
+  event_type text not null,
+  title text not null,
+  description text,
+  source text not null check (source in ('queue', 'architect', 'builder', 'reviewer', 'pm', 'discord')),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
 alter table public.daily_reports add column if not exists historian_exported boolean not null default false;
 alter table public.daily_reports add column if not exists historian_note_path text;
 alter table public.daily_reports add column if not exists historian_export_reason text;
@@ -260,6 +321,13 @@ create index if not exists knowledge_edges_edge_type_idx on public.knowledge_edg
 create index if not exists knowledge_edges_created_at_idx on public.knowledge_edges(created_at desc);
 create index if not exists knowledge_edges_from_node_id_idx on public.knowledge_edges(from_node_id);
 create index if not exists knowledge_edges_to_node_id_idx on public.knowledge_edges(to_node_id);
+create index if not exists pm_tasks_status_priority_created_at_idx on public.pm_tasks(status, priority, created_at);
+create index if not exists pm_tasks_target_project_idx on public.pm_tasks(target_project);
+create index if not exists pm_tasks_updated_at_idx on public.pm_tasks(updated_at desc);
+create index if not exists pm_task_decisions_task_id_idx on public.pm_task_decisions(task_id);
+create index if not exists pm_task_decisions_created_at_idx on public.pm_task_decisions(created_at desc);
+create index if not exists pm_task_events_task_id_idx on public.pm_task_events(task_id);
+create index if not exists pm_task_events_event_type_created_at_idx on public.pm_task_events(event_type, created_at desc);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -295,6 +363,12 @@ before update on public.knowledge_nodes
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_pm_tasks_updated_at on public.pm_tasks;
+create trigger set_pm_tasks_updated_at
+before update on public.pm_tasks
+for each row
+execute function public.set_updated_at();
+
 alter table public.agents enable row level security;
 alter table public.tasks enable row level security;
 alter table public.work_logs enable row level security;
@@ -306,6 +380,9 @@ alter table public.historian_exports enable row level security;
 alter table public.architecture_reviews enable row level security;
 alter table public.knowledge_nodes enable row level security;
 alter table public.knowledge_edges enable row level security;
+alter table public.pm_tasks enable row level security;
+alter table public.pm_task_decisions enable row level security;
+alter table public.pm_task_events enable row level security;
 
 drop policy if exists "Allow public read agents" on public.agents;
 create policy "Allow public read agents"
@@ -384,6 +461,27 @@ for select
 to anon, authenticated
 using (true);
 
+drop policy if exists "Allow public read PM tasks" on public.pm_tasks;
+create policy "Allow public read PM tasks"
+on public.pm_tasks
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "Allow public read PM task decisions" on public.pm_task_decisions;
+create policy "Allow public read PM task decisions"
+on public.pm_task_decisions
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "Allow public read PM task events" on public.pm_task_events;
+create policy "Allow public read PM task events"
+on public.pm_task_events
+for select
+to anon, authenticated
+using (true);
+
 grant usage on schema public to anon, authenticated;
 grant select on public.agents to anon, authenticated;
 grant select on public.tasks to anon, authenticated;
@@ -396,3 +494,6 @@ grant select on public.historian_exports to anon, authenticated;
 grant select on public.architecture_reviews to anon, authenticated;
 grant select on public.knowledge_nodes to anon, authenticated;
 grant select on public.knowledge_edges to anon, authenticated;
+grant select on public.pm_tasks to anon, authenticated;
+grant select on public.pm_task_decisions to anon, authenticated;
+grant select on public.pm_task_events to anon, authenticated;

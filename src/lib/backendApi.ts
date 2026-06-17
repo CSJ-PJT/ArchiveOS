@@ -1,4 +1,4 @@
-import type { BatchRun, CommandRun, DailyReport, RuntimeSnapshot } from "../types/database";
+import type { BatchRun, CommandRun, DailyReport, PmDecisionAction, PmTask, RuntimeSnapshot } from "../types/database";
 import type { Agent, Task, WorkLog } from "../types/database";
 
 const configuredBackendUrlFromEnv = ((import.meta.env.VITE_BACKEND_URL as string | undefined) ?? "").trim();
@@ -38,6 +38,7 @@ export type PlatformHealth = {
     kpi: boolean;
     architect: boolean;
     dailyReport: boolean;
+    queue: boolean;
   };
 };
 
@@ -47,7 +48,7 @@ export type EndpointHealth = {
   checkedAt: string;
   endpoints: Array<{
     name: string;
-    method: "GET" | "POST";
+    method: "GET" | "POST" | "PATCH";
     path: string;
     service: string;
     description: string;
@@ -181,12 +182,30 @@ export type LocalRuntimeStatus = {
 
 export type RuntimeEvent = {
   id: string;
-  type: "queue" | "builder" | "reviewer" | "command" | "decision" | "warning" | "batch";
+  type: "queue" | "builder" | "reviewer" | "command" | "decision" | "warning" | "batch" | "task";
   title: string;
   description: string;
   status: "info" | "success" | "warning" | "error";
   source: "mcp" | "supabase" | "backend";
   created_at: string;
+};
+
+export type QueueSummary = {
+  queued: number;
+  in_progress: number;
+  pm_decision_required: number;
+  done_today: number;
+  failed_today: number;
+  current_task: Pick<PmTask, "id" | "title" | "priority" | "status" | "current_iteration" | "max_iterations"> | null;
+  recommended_pm_action: string;
+  updated_at: string;
+};
+
+export type QueueRunOnceResult = {
+  status: string;
+  message?: string;
+  summary?: QueueSummary;
+  task?: PmTask;
 };
 
 export type LatestBatchStatus = {
@@ -524,6 +543,55 @@ export async function createCommandRun(input: {
     body: JSON.stringify(input),
   });
 
+  return response.data;
+}
+
+export async function getPmTasks() {
+  const response = await request<ApiEnvelope<PmTask[]>>("/api/tasks");
+  return response.data;
+}
+
+export async function createPmTask(input: {
+  title: string;
+  description: string;
+  priority?: "high" | "medium" | "low";
+  target_project?: string;
+  scope_files?: string[] | null;
+  max_iterations?: number;
+  cost_budget?: number | null;
+}) {
+  const response = await request<ApiEnvelope<PmTask>>("/api/tasks", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
+export async function decidePmTask(taskId: string, input: { action: PmDecisionAction; reason?: string | null }) {
+  const response = await request<ApiEnvelope<{ task: PmTask }>>(`/api/tasks/${taskId}/decision`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
+export async function retryPmTask(taskId: string, reason?: string | null) {
+  const response = await request<ApiEnvelope<{ task: PmTask }>>(`/api/tasks/${taskId}/retry`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+  return response.data;
+}
+
+export async function getQueueSummary() {
+  const response = await request<ApiEnvelope<QueueSummary>>("/api/queue/summary");
+  return response.data;
+}
+
+export async function runQueueOnce() {
+  const response = await request<ApiEnvelope<QueueRunOnceResult>>("/api/queue/run-once", {
+    method: "POST",
+  });
   return response.data;
 }
 

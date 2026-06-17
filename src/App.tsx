@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   configuredBackendUrl,
   createCommandRun,
+  createPmTask,
   createWorkLog,
+  decidePmTask,
   getDashboardData,
   getBackendHealth,
   getEndpointHealth,
@@ -22,10 +24,14 @@ import {
   getLocalActionProjects,
   getLocalRuntimeStatus,
   getMeshOverview,
+  getPmTasks,
+  getQueueSummary,
   getRecentArchitectureReviews,
   getRecentCommands,
   getRecentKnowledgeNodes,
   getRecentRuntimeEvents,
+  retryPmTask,
+  runQueueOnce,
   runLocalAction,
   searchKnowledgeNodes,
   type LocalAction,
@@ -54,6 +60,8 @@ import {
   type PlatformReadiness,
   type PublicAccessStatus,
   type RuntimeVersion,
+  type QueueRunOnceResult,
+  type QueueSummary,
   type RuntimeEvent,
 } from "./lib/backendApi";
 import type {
@@ -63,6 +71,8 @@ import type {
   CommandStatus,
   DailyReport,
   LogType,
+  PmDecisionAction,
+  PmTask,
   Task,
   TaskStatus,
   WorkLog,
@@ -149,6 +159,7 @@ const runtimeEventTypeStyles: Record<RuntimeEvent["type"], string> = {
   decision: "border-sky-300/30 bg-sky-300/[0.04]",
   warning: "border-rose-300/30 bg-rose-300/[0.05]",
   batch: "border-emerald-300/30 bg-emerald-300/[0.04]",
+  task: "border-cyan-300/30 bg-cyan-300/[0.04]",
 };
 
 const consistencyStatusStyles: Record<ConsistencyStatus, string> = {
@@ -374,6 +385,10 @@ function OperationsLayout({
   const [publicAccessStatus, setPublicAccessStatus] = useState<PublicAccessStatus | null>(null);
   const [runtimeVersion, setRuntimeVersion] = useState<RuntimeVersion | null>(null);
   const [platformHealthError, setPlatformHealthError] = useState<string | null>(null);
+  const [pmTasks, setPmTasks] = useState<PmTask[]>([]);
+  const [queueSummary, setQueueSummary] = useState<QueueSummary | null>(null);
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const [queueActionResult, setQueueActionResult] = useState<QueueRunOnceResult | null>(null);
   const [focusMode, setFocusMode] = useState(false);
   const runtimeAgents = getRuntimeAgents(runtimeStatus);
 
@@ -388,6 +403,7 @@ function OperationsLayout({
     refreshMesh();
     refreshKpi({ range: kpiRange });
     refreshPlatformHealth();
+    refreshPmQueue();
     const timer = window.setInterval(() => {
       refreshRuntime({ silent: true });
       refreshRuntimeEvents({ silent: true });
@@ -399,6 +415,7 @@ function OperationsLayout({
       refreshMesh({ silent: true });
       refreshKpi({ silent: true, range: kpiRange });
       refreshPlatformHealth({ silent: true });
+      refreshPmQueue({ silent: true });
     }, 5000);
 
     return () => window.clearInterval(timer);
@@ -572,6 +589,74 @@ function OperationsLayout({
     }
   }
 
+  async function refreshPmQueue(options: { silent?: boolean } = {}) {
+    if (!options.silent) {
+      setQueueError(null);
+    }
+
+    try {
+      const [tasks, summary] = await Promise.all([getPmTasks(), getQueueSummary()]);
+      setPmTasks(tasks);
+      setQueueSummary(summary);
+    } catch (error) {
+      setQueueError(error instanceof Error ? error.message : "PM queue is not reachable.");
+    }
+  }
+
+  async function handleRunQueueOnce() {
+    setQueueError(null);
+    try {
+      const result = await runQueueOnce();
+      setQueueActionResult(result);
+      await Promise.all([
+        refreshPmQueue({ silent: true }),
+        refreshRuntimeEvents({ silent: true }),
+        refreshKnowledge({ silent: true }),
+        refreshArchitectureReviews({ silent: true }),
+      ]);
+    } catch (error) {
+      setQueueError(error instanceof Error ? error.message : "Queue run-once failed.");
+    }
+  }
+
+  async function handlePmDecision(taskId: string, action: PmDecisionAction, reason?: string | null) {
+    setQueueError(null);
+    try {
+      if (action === "retry") {
+        await retryPmTask(taskId, reason);
+      } else {
+        await decidePmTask(taskId, { action, reason });
+      }
+      await Promise.all([
+        refreshPmQueue({ silent: true }),
+        refreshRuntimeEvents({ silent: true }),
+        refreshKnowledge({ silent: true }),
+        reloadDashboard({ silent: true }),
+      ]);
+    } catch (error) {
+      setQueueError(error instanceof Error ? error.message : "PM decision failed.");
+    }
+  }
+
+  async function handleCreatePmTask(input: {
+    title: string;
+    description: string;
+    priority: "high" | "medium" | "low";
+    target_project: string;
+    max_iterations: number;
+  }) {
+    setQueueError(null);
+    try {
+      await createPmTask(input);
+      await Promise.all([
+        refreshPmQueue({ silent: true }),
+        refreshRuntimeEvents({ silent: true }),
+      ]);
+    } catch (error) {
+      setQueueError(error instanceof Error ? error.message : "PM task creation failed.");
+    }
+  }
+
   const warningCount = getPipelineWarningMessages(runtimeStatus).length;
   const operatorActive = Boolean(runtimeStatus?.queue.processing || runtimeStatus?.processes.implementer || runtimeStatus?.processes.reviewer || runtimeStatus?.processes.reviewer_bridge);
 
@@ -613,6 +698,9 @@ function OperationsLayout({
           platformReadiness={platformReadiness}
           platformHealthError={platformHealthError}
           publicAccessStatus={publicAccessStatus}
+          queueSummary={queueSummary}
+          pmTasks={pmTasks}
+          queueError={queueError}
         />
       ) : null}
 
@@ -621,6 +709,13 @@ function OperationsLayout({
           decisions={data.decisions}
           runtimeStatus={runtimeStatus}
           latestArchitectureReview={latestArchitectureReview}
+          pmTasks={pmTasks}
+          queueSummary={queueSummary}
+          queueError={queueError}
+          queueActionResult={queueActionResult}
+          onCreateTask={handleCreatePmTask}
+          onRunQueueOnce={handleRunQueueOnce}
+          onPmDecision={handlePmDecision}
           onRecorded={() => {
             refreshRuntimeEvents({ silent: true });
             reloadDashboard({ silent: true });
@@ -639,6 +734,8 @@ function OperationsLayout({
           consistencyError={consistencyError}
           latestArchitectureReview={latestArchitectureReview}
           architectureReviewError={architectureReviewError}
+          queueSummary={queueSummary}
+          pmTasks={pmTasks}
           onOpenMesh={() => setView("mesh")}
           onRecorded={refreshRuntimeEvents}
         />
@@ -661,6 +758,7 @@ function OperationsLayout({
           recentNodes={recentKnowledgeNodes}
           knowledgeError={knowledgeError}
           recentArchitectureReviews={recentArchitectureReviews}
+          pmTasks={pmTasks}
         />
       ) : null}
 
@@ -696,6 +794,8 @@ function OperationsLayout({
           publicAccessStatus={publicAccessStatus}
           platformHealthError={platformHealthError}
           runtimeVersion={runtimeVersion}
+          queueSummary={queueSummary}
+          queueError={queueError}
         />
       ) : null}
     </div>
@@ -785,6 +885,9 @@ function DashboardView({
   platformReadiness,
   platformHealthError,
   publicAccessStatus,
+  queueSummary,
+  pmTasks,
+  queueError,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
   runtimeError: string | null;
@@ -807,6 +910,9 @@ function DashboardView({
   platformReadiness: PlatformReadiness | null;
   platformHealthError: string | null;
   publicAccessStatus: PublicAccessStatus | null;
+  queueSummary: QueueSummary | null;
+  pmTasks: PmTask[];
+  queueError: string | null;
 }) {
   return (
     <div className="grid gap-5">
@@ -830,6 +936,8 @@ function DashboardView({
             kpiOverview={kpiOverview}
             latestDailyReport={latestDailyReport}
           />
+
+          <QueueSummaryPanel summary={queueSummary} tasks={pmTasks} error={queueError} compact />
 
           <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
             <DashboardAlerts
@@ -950,6 +1058,287 @@ function DashboardMetricStrip({
       <RuntimeMetric label="Architecture reviews" value={formatKpiValue(kpiOverview?.quality.architectReviewCount ?? null)} />
       <RuntimeMetric label="Agents active/offline" value={meshOverview ? `${activeAgents}/${offlineAgents}` : "unknown"} />
     </div>
+  );
+}
+
+function QueueSummaryPanel({
+  summary,
+  tasks,
+  error,
+  compact = false,
+}: {
+  summary: QueueSummary | null;
+  tasks: PmTask[];
+  error: string | null;
+  compact?: boolean;
+}) {
+  if (error) {
+    return (
+      <Panel title="PM Queue Summary">
+        <EmptyState
+          title="PM queue unavailable"
+          detail="Queue endpoints may be missing or stale. Check Settings > Endpoint Health Matrix and restart backend from latest main."
+        />
+      </Panel>
+    );
+  }
+
+  if (!summary) {
+    return (
+      <Panel title="PM Queue Summary">
+        <EmptyState title="PM queue loading" detail="Reading PM task queue state." muted />
+      </Panel>
+    );
+  }
+
+  const current = summary.current_task;
+  const pending = tasks.filter((task) => task.status === "pm_decision_required");
+
+  return (
+    <Panel title="PM Queue Summary">
+      <SourceLabel label="backend-orchestrated PM queue; no direct Codex/MCP/shell execution" />
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <RuntimeMetric label="Queued" value={String(summary.queued)} emphasized={summary.queued > 0} />
+        <RuntimeMetric label="In progress" value={String(summary.in_progress)} emphasized={summary.in_progress > 0} />
+        <RuntimeMetric label="PM decisions" value={String(summary.pm_decision_required)} emphasized={summary.pm_decision_required > 0} />
+        <RuntimeMetric label="Done today" value={String(summary.done_today)} />
+        <RuntimeMetric label="Failed today" value={String(summary.failed_today)} emphasized={summary.failed_today > 0} />
+        <RuntimeMetric label="Last updated" value={formatRelativeTime(summary.updated_at)} />
+      </div>
+      <div className="mt-4 grid gap-3 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-md border border-cyan-300/20 bg-cyan-300/[0.04] p-4">
+          <p className="text-xs uppercase tracking-[0.14em] text-cyan-300">Current task</p>
+          {current ? (
+            <div className="mt-2">
+              <CompactValue value={current.title} className="text-sm font-semibold text-white" copyable />
+              <div className="mt-2 flex flex-wrap gap-2">
+                <StatusBadge className={getPmTaskPriorityStyle(current.priority)}>{current.priority}</StatusBadge>
+                <StatusBadge className={getPmTaskStatusStyle(current.status)}>{current.status}</StatusBadge>
+                <span className="rounded bg-white/[0.04] px-2 py-1 text-xs text-slate-400">
+                  {current.current_iteration}/{current.max_iterations}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-slate-500">No current queue task.</p>
+          )}
+        </div>
+        <div className="rounded-md border border-white/10 bg-black/20 p-4">
+          <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Recommended PM Action</p>
+          <p className="mt-2 text-sm leading-6 text-slate-200">{summary.recommended_pm_action}</p>
+          {!compact && pending.length ? (
+            <p className="mt-3 text-xs text-amber-200">{pending.length} task(s) are waiting in Decisions.</p>
+          ) : null}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function PmQueueComposer({
+  onCreateTask,
+  onRunQueueOnce,
+  actionResult,
+}: {
+  onCreateTask: (input: {
+    title: string;
+    description: string;
+    priority: "high" | "medium" | "low";
+    target_project: string;
+    max_iterations: number;
+  }) => Promise<void>;
+  onRunQueueOnce: () => Promise<void>;
+  actionResult: QueueRunOnceResult | null;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState<"high" | "medium" | "low">("high");
+  const [targetProject, setTargetProject] = useState("DeepStake3D");
+  const [maxIterations, setMaxIterations] = useState(2);
+  const [busy, setBusy] = useState(false);
+  const canSubmit = title.trim().length > 0 && description.trim().length > 0;
+
+  async function submitTask() {
+    if (!canSubmit) return;
+    setBusy(true);
+    try {
+      await onCreateTask({
+        title,
+        description,
+        priority,
+        target_project: targetProject,
+        max_iterations: maxIterations,
+      });
+      setTitle("");
+      setDescription("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runOnce() {
+    setBusy(true);
+    try {
+      await onRunQueueOnce();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Panel title="PM Task Queue Intake">
+      <SourceLabel label="This creates orchestration records and instruction suggestions only. It does not execute Codex, MCP, shell, deployment, git push, or process control." />
+      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_0.55fr]">
+        <div className="grid gap-3">
+          <input
+            className="min-h-11 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600"
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Task title, e.g. DeepStake3D Chunk World Foundation M2 validation"
+            value={title}
+          />
+          <textarea
+            className="min-h-32 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm leading-6 text-white outline-none placeholder:text-slate-600"
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Task description, scope, allowed files, forbidden areas, and validation expectations"
+            value={description}
+          />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <select className="min-h-11 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none" onChange={(event) => setPriority(event.target.value as "high" | "medium" | "low")} value={priority}>
+              <option value="high">high</option>
+              <option value="medium">medium</option>
+              <option value="low">low</option>
+            </select>
+            <input
+              className="min-h-11 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+              onChange={(event) => setTargetProject(event.target.value)}
+              value={targetProject}
+            />
+            <input
+              className="min-h-11 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+              max={10}
+              min={1}
+              onChange={(event) => setMaxIterations(Number(event.target.value))}
+              type="number"
+              value={maxIterations}
+            />
+          </div>
+          <button
+            className="rounded-md bg-cyan-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!canSubmit || busy}
+            onClick={submitTask}
+            type="button"
+          >
+            Add PM Task
+          </button>
+        </div>
+        <div className="rounded-md border border-amber-300/20 bg-amber-300/[0.05] p-4">
+          <p className="text-sm font-semibold text-white">Semi-Auto Loop Skeleton</p>
+          <p className="mt-2 text-xs leading-5 text-slate-400">
+            Run Once advances one queued task through Architect Review, builder instruction recording, reviewer verdict recording, and PM decision required. It does not execute external tools.
+          </p>
+          <button
+            className="mt-4 rounded-md border border-amber-300/30 bg-amber-300/10 px-4 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-300/15 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={busy}
+            onClick={runOnce}
+            type="button"
+          >
+            Run Queue Once (record-only)
+          </button>
+          {actionResult ? (
+            <p className="mt-3 rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-300">
+              Last run: {actionResult.status}{actionResult.message ? ` / ${actionResult.message}` : ""}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function PendingPmDecisionsPanel({
+  tasks,
+  onDecision,
+}: {
+  tasks: PmTask[];
+  onDecision: (taskId: string, action: PmDecisionAction, reason?: string | null) => Promise<void>;
+}) {
+  const pending = tasks.filter((task) => task.status === "pm_decision_required" || task.status === "hold");
+  const [selectedId, setSelectedId] = useState<string | null>(pending[0]?.id ?? null);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const selected = pending.find((task) => task.id === selectedId) ?? pending[0] ?? null;
+
+  async function decide(action: PmDecisionAction) {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      await onDecision(selected.id, action, reason);
+      setReason("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Panel title="Pending PM Decisions">
+      <SourceLabel label="This records a PM decision and updates ArchiveOS task state. It does not directly execute Codex, MCP, shell, deployment, or process control." />
+      {!pending.length ? (
+        <EmptyState title="No pending PM decisions" detail="Tasks appear here after Queue Run Once records Architect, Builder, and Reviewer stages." muted />
+      ) : (
+        <div className="mt-4 grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+          <div className="grid gap-2">
+            {pending.map((task) => (
+              <button
+                key={task.id}
+                className={`rounded-md border p-3 text-left transition ${selected?.id === task.id ? "border-cyan-300/40 bg-cyan-300/[0.07]" : "border-white/10 bg-black/20 hover:bg-white/[0.04]"}`}
+                onClick={() => setSelectedId(task.id)}
+                type="button"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge className={getPmTaskPriorityStyle(task.priority)}>{task.priority}</StatusBadge>
+                  <StatusBadge className={getPmTaskStatusStyle(task.status)}>{task.status}</StatusBadge>
+                  <span className="text-xs text-slate-500">{task.current_iteration}/{task.max_iterations}</span>
+                </div>
+                <p className="mt-2 line-clamp-2 text-sm font-semibold text-white" title={task.title}>{task.title}</p>
+                <p className="mt-1 text-xs text-slate-500">{formatRelativeTime(task.updated_at)}</p>
+              </button>
+            ))}
+          </div>
+          {selected ? (
+            <div className="rounded-md border border-white/10 bg-black/20 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.14em] text-cyan-300">Decision Detail</p>
+                  <h3 className="mt-2 text-lg font-semibold text-white">{selected.title}</h3>
+                </div>
+                <StatusBadge className={getPmTaskStatusStyle(selected.status)}>{selected.status}</StatusBadge>
+              </div>
+              <p className="mt-3 max-h-32 overflow-y-auto text-sm leading-6 text-slate-300">{selected.description}</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <RuntimeMetric label="Target project" value={selected.target_project} />
+                <RuntimeMetric label="Iteration" value={`${selected.current_iteration}/${selected.max_iterations}`} />
+                <RuntimeMetric label="Architect review" value={selected.latest_architect_review_id ?? "not recorded"} copyable={Boolean(selected.latest_architect_review_id)} />
+                <RuntimeMetric label="Builder result" value={selected.latest_builder_result_id ?? "not recorded"} copyable={Boolean(selected.latest_builder_result_id)} />
+                <RuntimeMetric label="Reviewer result" value={selected.latest_reviewer_result_id ?? "not recorded"} copyable={Boolean(selected.latest_reviewer_result_id)} />
+                <RuntimeMetric label="Recommended PM Action" value={selected.status === "hold" ? "Review Required" : "Approve / Reject / Hold / Retry"} />
+              </div>
+              <textarea
+                className="mt-4 min-h-20 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm leading-6 text-white outline-none placeholder:text-slate-600"
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Reason required for Reject; optional for Hold/Retry"
+                value={reason}
+              />
+              <div className="mt-4 grid gap-2 sm:grid-cols-4">
+                <button className="rounded bg-emerald-300 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50" disabled={busy} onClick={() => decide("approve")} type="button">Approve Task</button>
+                <button className="rounded bg-rose-300 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50" disabled={busy || !reason.trim()} onClick={() => decide("reject")} type="button">Reject Task</button>
+                <button className="rounded border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm font-semibold text-amber-100 disabled:opacity-50" disabled={busy} onClick={() => decide("hold")} type="button">Hold Task</button>
+                <button className="rounded border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-100 disabled:opacity-50" disabled={busy || selected.current_iteration >= selected.max_iterations} onClick={() => decide("retry")} type="button">Request Retry</button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </Panel>
   );
 }
 
@@ -1103,11 +1492,31 @@ function DecisionsView({
   decisions,
   runtimeStatus,
   latestArchitectureReview,
+  pmTasks,
+  queueSummary,
+  queueError,
+  queueActionResult,
+  onCreateTask,
+  onRunQueueOnce,
+  onPmDecision,
   onRecorded,
 }: {
   decisions: WorkLog[];
   runtimeStatus: LocalRuntimeStatus | null;
   latestArchitectureReview: ArchitectureReview | null;
+  pmTasks: PmTask[];
+  queueSummary: QueueSummary | null;
+  queueError: string | null;
+  queueActionResult: QueueRunOnceResult | null;
+  onCreateTask: (input: {
+    title: string;
+    description: string;
+    priority: "high" | "medium" | "low";
+    target_project: string;
+    max_iterations: number;
+  }) => Promise<void>;
+  onRunQueueOnce: () => Promise<void>;
+  onPmDecision: (taskId: string, action: PmDecisionAction, reason?: string | null) => Promise<void>;
   onRecorded: (options?: { silent?: boolean }) => void;
 }) {
   const targetTask =
@@ -1127,6 +1536,10 @@ function DecisionsView({
 
   return (
     <div className="grid gap-5">
+      <QueueSummaryPanel summary={queueSummary} tasks={pmTasks} error={queueError} />
+      <PmQueueComposer onCreateTask={onCreateTask} onRunQueueOnce={onRunQueueOnce} actionResult={queueActionResult} />
+      <PendingPmDecisionsPanel tasks={pmTasks} onDecision={onPmDecision} />
+
       <Panel title="PM Decision Recording">
         <SourceLabel label="This records a PM decision as operational memory only. It does not execute Codex, MCP, shell, or process control." />
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -1449,6 +1862,8 @@ function OperatorsView({
   consistencyError,
   latestArchitectureReview,
   architectureReviewError,
+  queueSummary,
+  pmTasks,
   onOpenMesh,
   onRecorded,
 }: {
@@ -1461,6 +1876,8 @@ function OperatorsView({
   consistencyError: string | null;
   latestArchitectureReview: ArchitectureReview | null;
   architectureReviewError: string | null;
+  queueSummary: QueueSummary | null;
+  pmTasks: PmTask[];
   onOpenMesh: () => void;
   onRecorded: (options?: { silent?: boolean }) => void;
 }) {
@@ -1471,7 +1888,10 @@ function OperatorsView({
         runtimeError={runtimeError}
         latestArchitectureReview={latestArchitectureReview}
         architectureReviewError={architectureReviewError}
+        queueSummary={queueSummary}
       />
+
+      <QueueSummaryPanel summary={queueSummary} tasks={pmTasks} error={null} compact />
 
       <Panel title="Operators">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -1560,6 +1980,7 @@ function KnowledgeView({
   recentNodes,
   knowledgeError,
   recentArchitectureReviews,
+  pmTasks,
 }: {
   historianStatus: HistorianStatus | null;
   historianError: string | null;
@@ -1567,6 +1988,7 @@ function KnowledgeView({
   recentNodes: KnowledgeNode[];
   knowledgeError: string | null;
   recentArchitectureReviews: ArchitectureReview[];
+  pmTasks: PmTask[];
 }) {
   const memoryTypes = [
     { label: "Decisions", type: "decision" },
@@ -1627,6 +2049,8 @@ function KnowledgeView({
       </Panel>
 
       <KnowledgeGraphPanel overview={knowledgeOverview} />
+
+      <OperationalMemoryChainPanel tasks={pmTasks} />
 
       <KnowledgeSearchPanel />
 
@@ -1690,6 +2114,43 @@ function KnowledgeNodeList({ nodes }: { nodes: KnowledgeNode[] }) {
         </article>
       ))}
     </div>
+  );
+}
+
+function OperationalMemoryChainPanel({ tasks }: { tasks: PmTask[] }) {
+  const task =
+    tasks.find((item) => item.status === "pm_decision_required") ??
+    tasks.find((item) => ["architect_review", "ready_for_build", "building", "review"].includes(item.status)) ??
+    tasks[0] ??
+    null;
+
+  const chain = [
+    { label: "Task", value: task?.title ?? "No PM task yet", active: Boolean(task) },
+    { label: "Architect Review", value: task?.latest_architect_review_id ?? "not recorded", active: Boolean(task?.latest_architect_review_id) },
+    { label: "Builder Result", value: task?.latest_builder_result_id ?? "not recorded", active: Boolean(task?.latest_builder_result_id) },
+    { label: "Reviewer Verdict", value: task?.latest_reviewer_result_id ?? "not recorded", active: Boolean(task?.latest_reviewer_result_id) },
+    { label: "PM Decision", value: task?.latest_pm_decision_id ?? "pending", active: Boolean(task?.latest_pm_decision_id) },
+    { label: "Knowledge Record", value: task ? `pm_task:${task.id}` : "not linked", active: Boolean(task) },
+  ];
+
+  return (
+    <Panel title="Operational Memory Chain">
+      <SourceLabel label="Task → Architect Review → Builder Result → Reviewer Verdict → PM Decision → Knowledge Record" />
+      <div className="mt-4 grid gap-2 xl:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr] xl:items-center">
+        {chain.map((item, index) => (
+          <div key={`${item.label}-${index}`} className="contents">
+            <div className={`rounded-md border p-3 ${item.active ? "border-cyan-300/30 bg-cyan-300/[0.06]" : "border-white/10 bg-black/20"}`}>
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{item.label}</p>
+              <CompactValue value={item.value} className="mt-2 text-sm font-semibold text-white" copyable={item.active} />
+            </div>
+            {index < chain.length - 1 ? <div className="hidden h-px bg-cyan-300/40 xl:block" /> : null}
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs leading-5 text-slate-500">
+        This is metadata-only operational memory. It shows how PM queue work becomes queryable Knowledge Graph context without executing agents directly.
+      </p>
+    </Panel>
   );
 }
 
@@ -3271,6 +3732,8 @@ function SettingsView({
   publicAccessStatus,
   platformHealthError,
   runtimeVersion,
+  queueSummary,
+  queueError,
 }: {
   backendReachability: ConsistencyStatus;
   commandRunsReachability: ConsistencyStatus;
@@ -3285,6 +3748,8 @@ function SettingsView({
   publicAccessStatus: PublicAccessStatus | null;
   platformHealthError: string | null;
   runtimeVersion: RuntimeVersion | null;
+  queueSummary: QueueSummary | null;
+  queueError: string | null;
 }) {
   const supabaseConfigured = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
   const currentFrontendUrl = typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:5173";
@@ -3428,6 +3893,23 @@ function SettingsView({
             Nightly Review and Daily Report batches are backend/local-worker controlled. The UI is read-only and does not expose scheduling, webhook values, or execution controls.
           </p>
         </div>
+      </Panel>
+
+      <Panel title="Queue Runner Config">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <RuntimeMetric label="Default max_iterations" value="2" />
+          <RuntimeMetric label="Auto loop" value="disabled by default" />
+          <RuntimeMetric label="Direct execution" value="disabled" />
+          <RuntimeMetric label="Discord webhook" value={batchStatus?.discord_webhook_configured ? "configured: yes" : "configured: no"} />
+          <RuntimeMetric label="Queued" value={String(queueSummary?.queued ?? 0)} />
+          <RuntimeMetric label="PM decisions" value={String(queueSummary?.pm_decision_required ?? 0)} />
+          <RuntimeMetric label="Queue health" value={queueError ? "warning" : "available"} />
+          <RuntimeMetric label="Secret exposure" value="none" />
+        </div>
+        <p className="mt-3 rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-400">
+          Queue Run Once generates Architect, Builder instruction, Reviewer verdict, Timeline, Discord, and Knowledge metadata only.
+          It does not execute Codex, MCP, shell commands, git push, deployment, or process start/stop.
+        </p>
       </Panel>
 
       <Panel title="Security Principles">
@@ -3859,11 +4341,13 @@ function PipelineOverview({
   runtimeError,
   latestArchitectureReview,
   architectureReviewError,
+  queueSummary,
 }: {
   runtimeStatus: LocalRuntimeStatus | null;
   runtimeError: string | null;
   latestArchitectureReview?: ArchitectureReview | null;
   architectureReviewError?: string | null;
+  queueSummary?: QueueSummary | null;
 }) {
   const stages = getPipelineStages(runtimeStatus, latestArchitectureReview, architectureReviewError ?? null);
   const activeConnectorIndex = getActivePipelineConnectorIndex(runtimeStatus);
@@ -3886,6 +4370,13 @@ function PipelineOverview({
                 <p className="mt-1 text-sm text-slate-400">
                   Queue to Architect Gate, Builder/Implementer, Reviewer, and PM Decision. Visibility only; no execution control.
                 </p>
+                {queueSummary?.current_task ? (
+                  <p className="mt-2 max-w-2xl truncate text-xs text-cyan-100" title={queueSummary.current_task.title}>
+                    Current PM task: {queueSummary.current_task.title}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-500">No active PM queue task.</p>
+                )}
                 <SourceLabel label="live MCP" />
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -5320,6 +5811,7 @@ function getEventTypeLabel(event: RuntimeEvent) {
   if (event.type === "command") return "command recorded";
   if (event.type === "warning") return "warning detected";
   if (event.type === "batch") return "batch event";
+  if (event.type === "task") return "task lifecycle";
   return event.type;
 }
 
@@ -5330,6 +5822,7 @@ function getEventTypeBadgeClassName(event: RuntimeEvent) {
   if (event.type === "command") return "bg-violet-500/15 text-violet-200 ring-violet-400/25";
   if (event.type === "warning") return commandStatusStyles.failed;
   if (event.type === "batch") return runtimeEventStatusStyles[event.status];
+  if (event.type === "task") return "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25";
   return runtimeEventStatusStyles[event.status];
 }
 
@@ -5340,6 +5833,7 @@ function getEventCardClassName(event: RuntimeEvent) {
   if (event.type === "command") return "border-violet-300/30 bg-violet-300/[0.05]";
   if (event.type === "warning") return "border-rose-300/40 bg-rose-300/[0.07]";
   if (event.type === "batch") return "border-emerald-300/30 bg-emerald-300/[0.05]";
+  if (event.type === "task") return "border-cyan-300/30 bg-cyan-300/[0.05]";
   return runtimeEventTypeStyles[event.type];
 }
 
@@ -5348,6 +5842,20 @@ function getBatchStatusStyle(status: string) {
   if (status === "skipped") return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
   if (status === "failed") return commandStatusStyles.failed;
   return commandStatusStyles.pending;
+}
+
+function getPmTaskStatusStyle(status: PmTask["status"]) {
+  if (["approved", "done"].includes(status)) return commandStatusStyles.succeeded;
+  if (["queued", "architect_review", "ready_for_build", "building", "review"].includes(status)) return commandStatusStyles.running;
+  if (status === "pm_decision_required" || status === "hold") return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
+  if (status === "rejected" || status === "failed") return commandStatusStyles.failed;
+  return commandStatusStyles.pending;
+}
+
+function getPmTaskPriorityStyle(priority: PmTask["priority"]) {
+  if (priority === "high") return "bg-rose-500/15 text-rose-200 ring-rose-400/25";
+  if (priority === "medium") return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
+  return "bg-slate-500/15 text-slate-200 ring-slate-400/20";
 }
 
 function getArchitectStatusStyle(status: ArchitectureReview["status"]) {
