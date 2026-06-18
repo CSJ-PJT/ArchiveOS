@@ -66,3 +66,543 @@ select {
     transform: translateX(255%);
   }
 }
+
+.panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  background: #0d1117;
+  padding: 1.25rem;
+}
+
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.panel h2 {
+  margin: 0.25rem 0 0;
+  color: #ffffff;
+  font-size: 1.125rem;
+  font-weight: 650;
+}
+
+.eyebrow {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.metric-card {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.85rem;
+}
+
+.metric-card span {
+  display: block;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.metric-card strong {
+  display: block;
+  margin-top: 0.4rem;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: 0.98rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-card.working {
+  border-color: rgba(34, 211, 238, 0.28);
+  background: rgba(8, 145, 178, 0.08);
+}
+
+.metric-card.reviewing {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(146, 64, 14, 0.08);
+}
+
+.metric-card.succeeded {
+  border-color: rgba(34, 197, 94, 0.28);
+  background: rgba(22, 101, 52, 0.1);
+}
+
+.metric-card.failed {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(127, 29, 29, 0.12);
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.8);
+  padding: 0.22rem 0.55rem;
+  color: #cbd5e1;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.status-badge.working {
+  border-color: rgba(34, 211, 238, 0.38);
+  color: #a5f3fc;
+}
+
+.status-badge.reviewing {
+  border-color: rgba(245, 158, 11, 0.38);
+  color: #fde68a;
+}
+
+.status-badge.succeeded {
+  border-color: rgba(34, 197, 94, 0.38);
+  color: #bbf7d0;
+}
+
+.status-badge.failed {
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fecaca;
+}
+
+.status-badge.idle,
+.status-badge.default {
+  border-color: rgba(148, 163, 184, 0.22);
+  color: #94a3b8;
+}
+
+.source-label,
+.compact-value,
+.muted {
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.empty-state {
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.14);
+  padding: 1rem;
+}
+
+.empty-state strong,
+.empty-state span {
+  display: block;
+}
+
+.empty-state strong {
+  color: #e2e8f0;
+  font-size: 0.94rem;
+}
+
+.empty-state span {
+  margin-top: 0.35rem;
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.operational-chain,
+.active-decision-chain,
+.graph-filter-bar,
+.graph-mode-row,
+.graph-health-row,
+.graph-insights,
+.detail-section {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.chain-task-summary {
+  display: grid;
+  gap: 0.3rem;
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  border-radius: 0.5rem;
+  background: rgba(8, 145, 178, 0.06);
+  padding: 1rem;
+}
+
+.chain-task-summary strong {
+  overflow: hidden;
+  color: #ffffff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chain-task-summary span:last-child {
+  color: #94a3b8;
+  font-size: 0.82rem;
+}
+
+.memory-chain-row,
+.active-chain-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.65rem;
+}
+
+.memory-chain-step,
+.active-chain-step {
+  display: contents;
+}
+
+.memory-chain-node,
+.active-chain-node {
+  display: grid;
+  min-width: 10rem;
+  flex: 1 1 10rem;
+  gap: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.24);
+  padding: 0.85rem;
+  text-align: left;
+}
+
+.active-chain-node {
+  cursor: pointer;
+  color: inherit;
+}
+
+.active-chain-node:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.memory-chain-node span,
+.active-chain-node span {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.memory-chain-node strong,
+.active-chain-node strong {
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-chain-node.working,
+.active-chain-node.linked {
+  border-color: rgba(34, 211, 238, 0.26);
+  background: rgba(8, 145, 178, 0.08);
+}
+
+.memory-chain-node.reviewing {
+  border-color: rgba(245, 158, 11, 0.26);
+  background: rgba(146, 64, 14, 0.08);
+}
+
+.memory-chain-node.succeeded {
+  border-color: rgba(34, 197, 94, 0.28);
+  background: rgba(22, 101, 52, 0.1);
+}
+
+.memory-chain-node.failed {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(127, 29, 29, 0.12);
+}
+
+.memory-chain-arrow,
+.active-chain-arrow {
+  align-self: center;
+  color: #22d3ee;
+  font-weight: 800;
+}
+
+.active-decision-chain {
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  border-radius: 0.75rem;
+  background:
+    radial-gradient(circle at 15% 0%, rgba(34, 211, 238, 0.14), transparent 30%),
+    rgba(5, 11, 19, 0.92);
+  padding: 1rem;
+}
+
+.chain-header,
+.detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.chain-header strong,
+.detail-header h3 {
+  display: block;
+  margin-top: 0.25rem;
+  color: #ffffff;
+}
+
+.graph-health-row,
+.graph-insight-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+}
+
+.graph-filter-bar {
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.graph-filter-bar label {
+  display: grid;
+  gap: 0.35rem;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.graph-filter-bar input,
+.graph-filter-bar select {
+  min-height: 2.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.28);
+  padding: 0.55rem 0.75rem;
+  color: #ffffff;
+  outline: none;
+}
+
+.graph-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.graph-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 0.45rem 0.7rem;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.graph-toggle.active {
+  border-color: rgba(34, 211, 238, 0.42);
+  background: rgba(8, 145, 178, 0.16);
+  color: #a5f3fc;
+}
+
+.graph-readonly-note {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.graph-main-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 1180px) {
+  .graph-main-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.32fr);
+  }
+}
+
+.knowledge-graph-canvas {
+  min-height: 34rem;
+  overflow-x: auto;
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  border-radius: 0.75rem;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(14, 165, 233, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(5, 11, 19, 0.96));
+  box-shadow: 0 0 60px rgba(34, 211, 238, 0.08);
+}
+
+.knowledge-graph-canvas svg {
+  min-width: 760px;
+  width: 100%;
+  height: 34rem;
+}
+
+.graph-empty-canvas {
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  background: rgba(0, 0, 0, 0.16);
+  padding: 2rem;
+  color: #94a3b8;
+}
+
+.graph-empty-canvas strong,
+.graph-empty-canvas span {
+  display: block;
+}
+
+.graph-node {
+  cursor: pointer;
+}
+
+.graph-node.critical circle:last-of-type {
+  animation: graph-critical-pulse 2.4s ease-in-out infinite;
+}
+
+.graph-node-label {
+  fill: #e2e8f0;
+  font-size: 12px;
+  font-weight: 750;
+  paint-order: stroke;
+  stroke: rgba(2, 6, 23, 0.9);
+  stroke-width: 3px;
+}
+
+.graph-node-type,
+.graph-edge-label {
+  fill: #94a3b8;
+  font-size: 10px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(2, 6, 23, 0.85);
+  stroke-width: 3px;
+}
+
+.graph-edge {
+  cursor: pointer;
+  transition: opacity 160ms ease, stroke-width 160ms ease;
+}
+
+.graph-edge.active {
+  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.32));
+}
+
+@keyframes graph-critical-pulse {
+  0%, 100% {
+    opacity: 0.16;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(1.08);
+  }
+}
+
+.graph-detail-panel,
+.edge-detail-panel,
+.graph-insights,
+.graph-edge-table {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 1rem;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(6rem, 0.8fr) minmax(0, 1.2fr);
+  gap: 0.55rem 0.8rem;
+  margin-top: 0.85rem;
+}
+
+.detail-grid span {
+  color: #64748b;
+  font-size: 0.76rem;
+}
+
+.detail-grid strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #e2e8f0;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-summary,
+.why-important {
+  margin-top: 1rem;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.why-important {
+  border: 1px solid rgba(34, 211, 238, 0.15);
+  border-radius: 0.5rem;
+  background: rgba(8, 145, 178, 0.06);
+  padding: 0.85rem;
+}
+
+.why-important ul {
+  margin: 0.65rem 0 0;
+  padding-left: 1rem;
+  color: #94a3b8;
+}
+
+.copy-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.copy-row button,
+.edge-table-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.45rem;
+  background: rgba(15, 23, 42, 0.86);
+  padding: 0.35rem 0.55rem;
+  color: #cbd5e1;
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.mini-edge-list,
+.insight-list,
+.graph-notes,
+.edge-table {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
+.mini-edge,
+.insight-row,
+.edge-row {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.5rem;
+  background: rgba(15, 23, 42, 0.5);
+  padding: 0.65rem;
+  color: #cbd5e1;
+  text-align: left;
+}
+
+.insight-row,
+.edge-row {
+  cursor: pointer;
+}
+
+.insight-row small,
+.graph-notes span {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.edge-row {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+}
