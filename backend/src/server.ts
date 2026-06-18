@@ -275,41 +275,65 @@ app.get("/api/work-logs/recent", async (_request, response) => {
 });
 
 app.get("/api/dashboard", async (_request, response) => {
-  const [agentsResult, tasksResult, logsResult, decisionsResult] = await Promise.all([
-    supabaseAdmin.from("agents").select("*").order("name", { ascending: true }),
-    supabaseAdmin
-      .from("tasks")
-      .select("*, agent:agents(name,status)")
-      .order("updated_at", { ascending: false }),
-    supabaseAdmin
-      .from("work_logs")
-      .select("*, task:tasks(title,status), agent:agents(name,role)")
-      .order("created_at", { ascending: false })
-      .limit(8),
-    supabaseAdmin
-      .from("work_logs")
-      .select("*, task:tasks(title,status), agent:agents(name,role)")
-      .eq("log_type", "decision")
-      .order("created_at", { ascending: false })
-      .limit(20),
-  ]);
+  try {
+    const [agentsResult, tasksResult, logsResult, decisionsResult] = await withTimeout(
+      Promise.all([
+        supabaseAdmin.from("agents").select("*").order("name", { ascending: true }),
+        supabaseAdmin
+          .from("tasks")
+          .select("*, agent:agents(name,status)")
+          .order("updated_at", { ascending: false }),
+        supabaseAdmin
+          .from("work_logs")
+          .select("*, task:tasks(title,status), agent:agents(name,role)")
+          .order("created_at", { ascending: false })
+          .limit(8),
+        supabaseAdmin
+          .from("work_logs")
+          .select("*, task:tasks(title,status), agent:agents(name,role)")
+          .eq("log_type", "decision")
+          .order("created_at", { ascending: false })
+          .limit(20),
+      ]),
+      4500,
+      "Dashboard Supabase query timed out.",
+    );
 
-  const firstError =
-    agentsResult.error ?? tasksResult.error ?? logsResult.error ?? decisionsResult.error;
+    const firstError =
+      agentsResult.error ?? tasksResult.error ?? logsResult.error ?? decisionsResult.error;
 
-  if (firstError) {
-    response.status(500).json({ error: "Failed to fetch dashboard data." });
-    return;
+    if (firstError) {
+      response.json({
+        data: {
+          agents: [],
+          tasks: [],
+          logs: [],
+          decisions: [],
+        },
+        warning: "Supabase dashboard data is temporarily unavailable.",
+      });
+      return;
+    }
+
+    response.json({
+      data: {
+        agents: agentsResult.data ?? [],
+        tasks: tasksResult.data ?? [],
+        logs: logsResult.data ?? [],
+        decisions: decisionsResult.data ?? [],
+      },
+    });
+  } catch {
+    response.json({
+      data: {
+        agents: [],
+        tasks: [],
+        logs: [],
+        decisions: [],
+      },
+      warning: "Supabase dashboard data timed out. ArchiveOS is running in visibility fallback mode.",
+    });
   }
-
-  response.json({
-    data: {
-      agents: agentsResult.data ?? [],
-      tasks: tasksResult.data ?? [],
-      logs: logsResult.data ?? [],
-      decisions: decisionsResult.data ?? [],
-    },
-  });
 });
 
 app.post("/api/work-logs", async (request, response) => {
@@ -376,7 +400,10 @@ app.get("/api/tasks", async (_request, response) => {
   try {
     response.json({ data: await listPmTasks() });
   } catch {
-    response.status(500).json({ error: "Failed to fetch PM tasks." });
+    response.json({
+      data: [],
+      warning: "PM task queue is not available yet. Apply queue schema or check Supabase connectivity.",
+    });
   }
 });
 
@@ -474,7 +501,9 @@ app.get("/api/queue/summary", async (_request, response) => {
   try {
     response.json({ data: await getQueueSummary() });
   } catch {
-    response.status(500).json({ error: "Failed to fetch queue summary." });
+    response.json({
+      data: createEmptyQueueSummary("PM queue summary is not available yet. Apply queue schema or check Supabase connectivity."),
+    });
   }
 });
 
@@ -755,17 +784,28 @@ app.get("/api/architect/reviews/latest", async (_request, response) => {
 
 app.get("/api/mesh/overview", async (_request, response) => {
   try {
-    response.json({ data: await getAgentMeshOverview() });
+    response.json({ data: await withTimeout(getAgentMeshOverview(), 4500, "Agent Mesh overview timed out.") });
   } catch {
-    response.status(500).json({ error: "Failed to fetch agent mesh overview." });
+    response.json({
+      data: {
+        agents: [],
+        links: [],
+        recentInteractions: [],
+        health: {
+          status: "warning",
+          summary: "Agent Mesh data is temporarily unavailable. Runtime remains read-only.",
+        },
+      },
+    });
   }
 });
 
 app.get("/api/kpi/overview", async (request, response) => {
   try {
-    response.json({ data: await getKpiOverview(normalizeRange(request.query.range)) });
+    response.json({ data: await withTimeout(getKpiOverview(normalizeRange(request.query.range)), 4500, "KPI overview timed out.") });
   } catch {
-    response.status(500).json({ error: "Failed to fetch KPI overview." });
+    const range = normalizeRange(request.query.range);
+    response.json({ data: createEmptyKpiOverview(range, "KPI data is temporarily unavailable. Run batches or check Supabase connectivity.") });
   }
 });
 
@@ -1115,16 +1155,94 @@ function readGraphLimit(value: unknown) {
   return Number.isFinite(numeric) ? Math.min(Math.max(Math.floor(numeric), 1), 300) : 100;
 }
 
+function createEmptyQueueSummary(recommendedAction: string) {
+  return {
+    queued: 0,
+    in_progress: 0,
+    pm_decision_required: 0,
+    done_today: 0,
+    failed_today: 0,
+    current_task: null,
+    recommended_pm_action: recommendedAction,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function createEmptyKpiOverview(range: ReturnType<typeof normalizeRange>, note: string) {
+  return {
+    range,
+    generatedAt: new Date().toISOString(),
+    productivity: {
+      tasksCompleted: null,
+      reviewsCompleted: null,
+      decisionsRecorded: null,
+      commandsRecorded: null,
+      dailyReportsSent: null,
+      nightlyReviewsCompleted: null,
+    },
+    quality: {
+      reviewApproveCount: null,
+      reviewRejectCount: null,
+      reviewStopCount: null,
+      approvalRate: null,
+      architectReviewCount: null,
+      architectWarningCount: null,
+      architectBlockedCount: null,
+    },
+    runtime: {
+      latestInbox: null,
+      latestProcessing: null,
+      latestOutbox: null,
+      latestReviews: null,
+      latestStatus: "unknown",
+      warningCount: null,
+      loopDetectedRate: null,
+    },
+    knowledge: {
+      totalNodes: null,
+      totalEdges: null,
+      nodesCreatedInRange: null,
+      edgesCreatedInRange: null,
+      obsidianExports: null,
+      graphDensity: null,
+    },
+    trends: {
+      dailyReports: [],
+      decisions: [],
+      knowledgeNodes: [],
+      warnings: [],
+    },
+    notes: [note],
+  };
+}
+
+async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 async function getServiceHealth() {
   const checks = await Promise.allSettled([
-    getLocalRuntimeStatus(),
-    getKnowledgeOverview(),
-    getAgentMeshOverview(),
-    getKpiOverview("7d"),
-    getLatestArchitectureReview(),
-    getLatestDailyReport(),
-    getQueueSummary(),
-    getSecurityStatus(),
+    withTimeout(getLocalRuntimeStatus(), 2500, "Runtime status check timed out."),
+    withTimeout(getKnowledgeOverview(), 2500, "Knowledge overview check timed out."),
+    withTimeout(getAgentMeshOverview(), 2500, "Agent Mesh check timed out."),
+    withTimeout(getKpiOverview("7d"), 2500, "KPI check timed out."),
+    withTimeout(getLatestArchitectureReview(), 2500, "Architect check timed out."),
+    withTimeout(getLatestDailyReport(), 2500, "Daily report check timed out."),
+    withTimeout(getQueueSummary(), 2500, "Queue summary check timed out."),
+    withTimeout(getSecurityStatus(), 2500, "Security status check timed out."),
   ]);
 
   return {
@@ -1307,24 +1425,44 @@ function scoreToGrade(score: number) {
 
 async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
   const checkedAt = new Date().toISOString();
-  const [runtime, commandsResult, decisionsResult, batchRuns, taskEvents] = await Promise.all([
-    getLocalRuntimeStatus(),
-    supabaseAdmin
-      .from("command_runs")
-      .select("id, command, command_type, status, result, created_at")
-      .not("id", "in", `(${seedCommandRunIds.join(",")})`)
-      .order("created_at", { ascending: false })
-      .limit(5),
-    supabaseAdmin
-      .from("work_logs")
-      .select("id, log_type, content, created_at, task:tasks(title), agent:agents(name)")
-      .eq("log_type", "decision")
-      .not("id", "in", `(${seedWorkLogIds.join(",")})`)
-      .order("created_at", { ascending: false })
-      .limit(5),
-    getRecentBatchRuns(5).catch(() => []),
-    getTaskEvents(10).catch(() => []),
+  const [runtimeResult, commandsResult, decisionsResult, batchRuns, taskEvents] = await Promise.all([
+    withTimeout(getLocalRuntimeStatus(), 2500, "Runtime status timed out.").catch(() => null),
+    withTimeout(
+      supabaseAdmin
+        .from("command_runs")
+        .select("id, command, command_type, status, result, created_at")
+        .not("id", "in", `(${seedCommandRunIds.join(",")})`)
+        .order("created_at", { ascending: false })
+        .limit(5),
+      2500,
+      "command_runs query timed out.",
+    ).catch(() => ({ data: [], error: null })),
+    withTimeout(
+      supabaseAdmin
+        .from("work_logs")
+        .select("id, log_type, content, created_at, task:tasks(title), agent:agents(name)")
+        .eq("log_type", "decision")
+        .not("id", "in", `(${seedWorkLogIds.join(",")})`)
+        .order("created_at", { ascending: false })
+        .limit(5),
+      2500,
+      "decision work_logs query timed out.",
+    ).catch(() => ({ data: [], error: null })),
+    withTimeout(getRecentBatchRuns(5), 2500, "Batch runs timed out.").catch(() => []),
+    withTimeout(getTaskEvents(10), 2500, "Task events timed out.").catch(() => []),
   ]);
+  const runtime =
+    runtimeResult ??
+    ({
+      checked_at: checkedAt,
+      status: "unknown",
+      queue: { path: null, inbox: 0, processing: 0, outbox: 0, reviews: 0 },
+      active_task: null,
+      processes: { implementer: null, reviewer: null, loop: null, reviewer_bridge: null },
+      latest: { inbox: null, processing: null, outbox: null, review: null },
+      latest_details: { builder: null, reviewer: null },
+      judgement: "Runtime status timed out.",
+    } as Awaited<ReturnType<typeof getLocalRuntimeStatus>>);
 
   const events: RuntimeEvent[] = [];
 
