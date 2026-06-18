@@ -33,6 +33,7 @@ import {
 import { getLocalRuntimeStatus } from "./lib/localRuntime.js";
 import { getKpiOverview, normalizeRange } from "./kpi/index.js";
 import { getAgentMeshOverview } from "./mesh/index.js";
+import { getSecurityStatus, notifySecurityEvent } from "./security/securityModel.js";
 import {
   createPmTask,
   decidePmTask,
@@ -102,7 +103,8 @@ type HealthServiceKey =
   | "kpi"
   | "architect"
   | "dailyReport"
-  | "queue";
+  | "queue"
+  | "security";
 
 type EndpointRegistration = {
   name: string;
@@ -135,6 +137,7 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Runtime Events", method: "GET", path: "/api/runtime/events/recent", service: "runtime", description: "Derived runtime events." },
   { name: "Runtime Version", method: "GET", path: "/api/runtime/version", service: "backend", description: "Backend git/runtime version." },
   { name: "Public Access", method: "GET", path: "/api/runtime/public-access", service: "backend", description: "Remote/ngrok runtime URL configuration." },
+  { name: "Runtime Security", method: "GET", path: "/api/security/status", service: "security", description: "ngrok OAuth readiness, role model, and device approval status." },
   { name: "Batch Runs", method: "GET", path: "/api/batches/recent", service: "dailyReport", description: "Recent batch runs." },
   { name: "Latest Batch", method: "GET", path: "/api/batches/latest", service: "dailyReport", description: "Latest nightly/daily batch state." },
   { name: "Run Nightly Review", method: "POST", path: "/api/batches/nightly-review/run", service: "dailyReport", description: "Manual nightly batch trigger." },
@@ -206,6 +209,7 @@ app.get("/api/health", async (_request, response) => {
       architect: services.architect,
       dailyReport: services.dailyReport,
       queue: services.queue,
+      security: services.security,
     },
   });
 });
@@ -244,6 +248,14 @@ app.get("/api/runtime/public-access", (request, response) => {
       checkedAt: new Date().toISOString(),
     },
   });
+});
+
+app.get("/api/security/status", async (request, response) => {
+  try {
+    response.json({ data: await getSecurityStatus(request) });
+  } catch {
+    response.status(500).json({ error: "Failed to fetch runtime security status." });
+  }
 });
 
 app.get("/api/work-logs/recent", async (_request, response) => {
@@ -420,7 +432,18 @@ app.post("/api/tasks/:id/decision", async (request, response) => {
   }
 
   try {
-    response.json({ data: await decidePmTask(request.params.id, validation.value) });
+    const result = await decidePmTask(request.params.id, validation.value);
+    void notifySecurityEvent({
+      type: "pm_decision_executed",
+      title: "PM decision recorded",
+      summary: "A PM decision changed ArchiveOS task state. This did not execute Codex, MCP, shell, or deployment.",
+      metadata: {
+        task_id: request.params.id,
+        action: validation.value.action,
+        status: result.task.status,
+      },
+    });
+    response.json({ data: result });
   } catch (error) {
     response.status(400).json({ error: error instanceof Error ? error.message : "Failed to record PM decision." });
   }
@@ -430,7 +453,18 @@ app.post("/api/tasks/:id/retry", async (request, response) => {
   const reason = typeof request.body?.reason === "string" ? request.body.reason : null;
 
   try {
-    response.json({ data: await retryPmTask(request.params.id, reason) });
+    const result = await retryPmTask(request.params.id, reason);
+    void notifySecurityEvent({
+      type: "pm_decision_executed",
+      title: "PM retry requested",
+      summary: "A PM retry request was recorded. This does not directly execute Codex, MCP, shell, or process control.",
+      metadata: {
+        task_id: request.params.id,
+        status: result.task.status,
+        current_iteration: result.task.current_iteration,
+      },
+    });
+    response.json({ data: result });
   } catch (error) {
     response.status(400).json({ error: error instanceof Error ? error.message : "Failed to request retry." });
   }
@@ -1090,6 +1124,7 @@ async function getServiceHealth() {
     getLatestArchitectureReview(),
     getLatestDailyReport(),
     getQueueSummary(),
+    getSecurityStatus(),
   ]);
 
   return {
@@ -1101,6 +1136,7 @@ async function getServiceHealth() {
     architect: checks[4].status === "fulfilled",
     dailyReport: checks[5].status === "fulfilled",
     queue: checks[6].status === "fulfilled",
+    security: checks[7].status === "fulfilled",
   } satisfies Record<HealthServiceKey, boolean>;
 }
 
