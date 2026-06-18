@@ -8,3 +8,4 @@ dist
 tools/runtime/runtime.config.json
 tools/runtime/logs/
 tools/runtime/pids/
+backend/data/approved-devices.json

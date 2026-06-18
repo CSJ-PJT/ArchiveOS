@@ -39,6 +39,7 @@ export type PlatformHealth = {
     architect: boolean;
     dailyReport: boolean;
     queue: boolean;
+    security: boolean;
   };
 };
 
@@ -82,6 +83,56 @@ export type RuntimeVersion = {
   startedAt: string;
   backendVersion: string | null;
   checkedAt: string;
+};
+
+export type SecurityStatus = {
+  checkedAt: string;
+  authentication: {
+    enabled: boolean;
+    provider: string | null;
+    status: "configured" | "not_configured" | "enabled" | "disabled" | "protected" | "read_only" | "unknown";
+  };
+  oauth: {
+    provider: string | null;
+    allowedEmailsConfigured: boolean;
+    allowedDomainsConfigured: boolean;
+    allowedEmailCount: number;
+    allowedDomainCount: number;
+    status: "configured" | "not_configured" | "enabled" | "disabled" | "protected" | "read_only" | "unknown";
+  };
+  deviceApproval: {
+    enabled: boolean;
+    status: "configured" | "not_configured" | "enabled" | "disabled" | "protected" | "read_only" | "unknown";
+    approvedDevicesCount: number;
+    knownDevicesCount: number;
+    lastSeenAt: string | null;
+    lastLogin: string | null;
+  };
+  roles: {
+    viewer: SecurityRoleCapability;
+    pm: SecurityRoleCapability & { enabled: boolean };
+    admin: SecurityRoleCapability & { enabled: boolean };
+  };
+  protectedEndpoints: Array<{
+    method: "POST" | "PATCH";
+    path: string;
+    action: string;
+    requiredRole: "viewer" | "pm" | "admin";
+    enforcement: "report_only" | "enforced";
+    description: string;
+  }>;
+  securityLevel: "open_read_only" | "configured_read_only" | "protected" | "needs_setup";
+  warnings: string[];
+  notes: string[];
+};
+
+export type SecurityRoleCapability = {
+  role: "viewer" | "pm" | "admin";
+  canRead: boolean;
+  canDecide: boolean;
+  canRetry: boolean;
+  canAdmin: boolean;
+  description: string;
 };
 
 export type PlatformReadiness = {
@@ -511,6 +562,11 @@ export async function getPublicAccessStatus() {
 
 export async function getRuntimeVersion() {
   const response = await request<ApiEnvelope<RuntimeVersion>>("/api/runtime/version");
+  return response.data;
+}
+
+export async function getSecurityStatus() {
+  const response = await request<ApiEnvelope<SecurityStatus>>("/api/security/status");
   return response.data;
 }
 

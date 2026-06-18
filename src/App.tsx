@@ -17,6 +17,7 @@ import {
   getPlatformReadiness,
   getPublicAccessStatus,
   getRuntimeVersion,
+  getSecurityStatus,
   getRelatedKnowledge,
   getLatestBatchStatus,
   getLatestDailyReport,
@@ -55,6 +56,7 @@ import {
   type PlatformReadiness,
   type PublicAccessStatus,
   type RuntimeVersion,
+  type SecurityStatus,
   type QueueRunOnceResult,
   type QueueSummary,
   type RuntimeEvent,
@@ -379,6 +381,7 @@ function OperationsLayout({
   const [platformReadiness, setPlatformReadiness] = useState<PlatformReadiness | null>(null);
   const [publicAccessStatus, setPublicAccessStatus] = useState<PublicAccessStatus | null>(null);
   const [runtimeVersion, setRuntimeVersion] = useState<RuntimeVersion | null>(null);
+  const [securityStatus, setSecurityStatus] = useState<SecurityStatus | null>(null);
   const [platformHealthError, setPlatformHealthError] = useState<string | null>(null);
   const [pmTasks, setPmTasks] = useState<PmTask[]>([]);
   const [queueSummary, setQueueSummary] = useState<QueueSummary | null>(null);
@@ -573,12 +576,14 @@ function OperationsLayout({
       setPlatformHealth(health);
       setEndpointHealth(endpoints);
       setPlatformReadiness(readiness);
-      const [publicAccess, version] = await Promise.all([
+      const [publicAccess, version, security] = await Promise.all([
         getPublicAccessStatus(),
         getRuntimeVersion(),
+        getSecurityStatus(),
       ]);
       setPublicAccessStatus(publicAccess);
       setRuntimeVersion(version);
+      setSecurityStatus(security);
     } catch (error) {
       setPlatformHealthError(error instanceof Error ? error.message : "Platform health is not reachable.");
     }
@@ -789,6 +794,7 @@ function OperationsLayout({
           publicAccessStatus={publicAccessStatus}
           platformHealthError={platformHealthError}
           runtimeVersion={runtimeVersion}
+          securityStatus={securityStatus}
           queueSummary={queueSummary}
           queueError={queueError}
         />
@@ -3067,6 +3073,7 @@ function SettingsView({
   publicAccessStatus,
   platformHealthError,
   runtimeVersion,
+  securityStatus,
   queueSummary,
   queueError,
 }: {
@@ -3083,6 +3090,7 @@ function SettingsView({
   publicAccessStatus: PublicAccessStatus | null;
   platformHealthError: string | null;
   runtimeVersion: RuntimeVersion | null;
+  securityStatus: SecurityStatus | null;
   queueSummary: QueueSummary | null;
   queueError: string | null;
 }) {
@@ -3155,6 +3163,8 @@ function SettingsView({
           </div>
         </div>
       </Panel>
+
+      <SecurityOverviewPanel securityStatus={securityStatus} />
 
       <Panel title="Integrations">
         <div className="grid gap-4">
@@ -3276,6 +3286,109 @@ function SettingsView({
         </div>
       </details>
     </div>
+  );
+}
+
+function SecurityOverviewPanel({ securityStatus }: { securityStatus: SecurityStatus | null }) {
+  const warnings = securityStatus?.warnings ?? ["Security status has not been loaded yet."];
+  const protectedEndpoints = securityStatus?.protectedEndpoints ?? [];
+  const securityLevel = securityStatus?.securityLevel ?? "unknown";
+
+  return (
+    <Panel title="Runtime Security">
+      <div className="grid gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Security Overview</p>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+              ngrok OAuth, ArchiveOS roles, and approved devices are tracked here as a readiness layer.
+              PM/Task Queue CUD endpoints are marked for protection while read-only screens remain visible.
+            </p>
+          </div>
+          <StatusBadge className={getSecurityLevelStyle(securityLevel)}>
+            {securityLevel === "protected" ? "Protected" : securityLevel === "needs_setup" ? "Needs setup" : securityLevel === "configured_read_only" ? "Configured" : "Read-only"}
+          </StatusBadge>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <RuntimeMetric label="Authentication Enabled" value={securityStatus?.authentication.enabled ? "yes" : "no"} />
+          <RuntimeMetric label="OAuth Provider" value={securityStatus?.oauth.provider ?? "not configured"} />
+          <RuntimeMetric label="Device Approval Enabled" value={securityStatus?.deviceApproval.enabled ? "yes" : "no"} />
+          <RuntimeMetric label="PM Role Enabled" value={securityStatus?.roles.pm.enabled ? "yes" : "no"} />
+          <RuntimeMetric label="Admin Role Enabled" value={securityStatus?.roles.admin.enabled ? "yes" : "no"} />
+          <RuntimeMetric label="Last Login" value={securityStatus?.deviceApproval.lastLogin ?? "none detected"} />
+          <RuntimeMetric label="Approved Devices Count" value={String(securityStatus?.deviceApproval.approvedDevicesCount ?? 0)} />
+          <RuntimeMetric label="Known Devices Count" value={String(securityStatus?.deviceApproval.knownDevicesCount ?? 0)} />
+          <RuntimeMetric label="Allowed Emails" value={securityStatus ? `${securityStatus.oauth.allowedEmailCount} configured` : "unknown"} />
+          <RuntimeMetric label="Allowed Domains" value={securityStatus ? `${securityStatus.oauth.allowedDomainCount} configured` : "unknown"} />
+          <RuntimeMetric label="Protected CUD APIs" value={String(protectedEndpoints.length)} />
+          <RuntimeMetric label="Last Security Check" value={securityStatus?.checkedAt ?? "unknown"} copyable={Boolean(securityStatus?.checkedAt)} />
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-[1fr_1.2fr]">
+          <article className="rounded-md border border-white/10 bg-black/20 p-4">
+            <p className="text-sm font-semibold text-white">Role Model</p>
+            <div className="mt-3 grid gap-2">
+              {securityStatus ? (
+                [
+                  securityStatus.roles.viewer,
+                  securityStatus.roles.pm,
+                  securityStatus.roles.admin,
+                ].map((role) => (
+                  <div key={role.role} className="rounded border border-white/10 bg-slate-950/50 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-200">{role.role}</span>
+                      <StatusBadge className={("enabled" in role ? role.enabled : true) ? "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25" : "bg-slate-500/15 text-slate-200 ring-slate-400/20"}>
+                        {("enabled" in role ? role.enabled : true) ? "enabled" : "disabled"}
+                      </StatusBadge>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-slate-400">{role.description}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-500">Security role model is loading.</p>
+              )}
+            </div>
+          </article>
+
+          <article className="rounded-md border border-white/10 bg-black/20 p-4">
+            <p className="text-sm font-semibold text-white">Protected API Readiness</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              Enforcement is report-only until ngrok OAuth headers and approved device policy are confirmed.
+            </p>
+            <div className="mt-3 grid gap-2">
+              {protectedEndpoints.length ? (
+                protectedEndpoints.map((endpoint) => (
+                  <div key={`${endpoint.method}-${endpoint.path}`} className="rounded border border-white/10 bg-slate-950/50 p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge className="bg-cyan-500/15 text-cyan-200 ring-cyan-400/25">{endpoint.method}</StatusBadge>
+                      <span className="font-mono text-xs text-slate-200">{endpoint.path}</span>
+                      <StatusBadge className="bg-amber-500/15 text-amber-200 ring-amber-400/25">{endpoint.requiredRole}</StatusBadge>
+                      <StatusBadge className="bg-slate-500/15 text-slate-200 ring-slate-400/20">{endpoint.enforcement}</StatusBadge>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">{endpoint.description}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-500">Protected endpoint list is not loaded yet.</p>
+              )}
+            </div>
+          </article>
+        </div>
+
+        <div className="grid gap-2">
+          {warnings.map((warning) => (
+            <p key={warning} className="rounded border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+              {warning}
+            </p>
+          ))}
+          <p className="rounded border border-white/10 bg-slate-950/60 p-3 text-xs leading-5 text-slate-400">
+            PM actions will require authenticated ngrok identity plus an approved device when enforcement is enabled.
+            Secret values, webhook URLs, and local device registry paths are never shown in the UI.
+          </p>
+        </div>
+      </div>
+    </Panel>
   );
 }
 
@@ -5211,6 +5324,14 @@ function getIntegrationStatusStyle(status: "configured" | "not_configured" | "un
   if (status === "configured") return "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25";
   if (status === "not_configured") return "bg-slate-500/15 text-slate-200 ring-slate-400/20";
   return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
+}
+
+function getSecurityLevelStyle(status: SecurityStatus["securityLevel"] | "unknown") {
+  if (status === "protected") return "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25";
+  if (status === "configured_read_only") return "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25";
+  if (status === "needs_setup") return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
+  if (status === "open_read_only") return "bg-slate-500/15 text-slate-200 ring-slate-400/20";
+  return "bg-violet-500/15 text-violet-200 ring-violet-400/25";
 }
 
 function getVersionSyncStatus(runtimeVersion: RuntimeVersion | null) {
