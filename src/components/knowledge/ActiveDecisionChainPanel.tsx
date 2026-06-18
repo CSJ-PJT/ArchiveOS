@@ -14,11 +14,13 @@ export function ActiveDecisionChainPanel({
   selectedChainId,
   onSelectChain,
   onSelectNode,
+  showReplay = true,
 }: {
   chains: ActiveDecisionChain[];
   selectedChainId: string | null;
   onSelectChain: (chain: ActiveDecisionChain) => void;
   onSelectNode: (node: KnowledgeGraphNode) => void;
+  showReplay?: boolean;
 }) {
   const selectedChain = chains.find((chain) => chain.id === selectedChainId) || chains[0] || null;
 
@@ -62,7 +64,7 @@ export function ActiveDecisionChainPanel({
                 {chain.steps.map((step, index) => (
                   <span className={step.node ? "linked" : "missing"} key={step.key} title={step.node?.title || step.fallback}>
                     {step.label.replace(" Result", "").replace(" Verdict", "").replace(" Review", "")}
-                    {index < chain.steps.length - 1 ? <b>→</b> : null}
+                    {index < chain.steps.length - 1 ? <b>-&gt;</b> : null}
                   </span>
                 ))}
               </div>
@@ -77,12 +79,12 @@ export function ActiveDecisionChainPanel({
         </div>
       )}
 
-      <OperationalChainReplay chain={selectedChain} onSelectNode={onSelectNode} />
+      {showReplay ? <OperationalChainReplay chain={selectedChain} onSelectNode={onSelectNode} /> : null}
     </section>
   );
 }
 
-function OperationalChainReplay({
+export function OperationalChainReplay({
   chain,
   onSelectNode,
 }: {
@@ -118,7 +120,7 @@ function OperationalChainReplay({
                 <>
                   <strong title={step.node.title}>{truncateGraphLabel(step.node.title, 54)}</strong>
                   <small>
-                    {step.node.type} · {step.node.importanceLevel} · {formatRelativeTime(step.node.createdAt)}
+                    {step.node.type} / {step.node.importanceLevel} / {formatRelativeTime(step.node.createdAt)}
                   </small>
                 </>
               ) : (

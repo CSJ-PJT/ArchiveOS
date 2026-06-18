@@ -234,7 +234,7 @@ select {
   background:
     radial-gradient(circle at 12% 0%, rgba(34, 211, 238, 0.12), transparent 30%),
     rgba(2, 6, 23, 0.35);
-  padding: 1rem;
+  padding: 0.85rem;
 }
 
 .chain-section-header,
@@ -252,18 +252,25 @@ select {
 }
 
 .operational-chain-grid {
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  display: flex;
+  grid-template-columns: none;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.15rem;
+  scroll-snap-type: x proximity;
 }
 
 .operational-chain-card {
   display: grid;
-  gap: 0.8rem;
+  flex: 0 0 min(22rem, 86vw);
+  gap: 0.62rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0.75rem;
   background: rgba(0, 0, 0, 0.22);
-  padding: 0.9rem;
+  padding: 0.78rem;
   color: inherit;
   cursor: pointer;
+  scroll-snap-align: start;
   text-align: left;
 }
 
@@ -291,16 +298,20 @@ select {
 
 .chain-card-statuses {
   display: grid;
-  gap: 0.45rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.38rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .chain-card-statuses .metric-card {
-  padding: 0.65rem;
+  padding: 0.52rem;
 }
 
 .chain-card-statuses .metric-card strong {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
+}
+
+.chain-card-statuses .metric-card span {
+  font-size: 0.58rem;
 }
 
 .mini-chain {
@@ -340,6 +351,14 @@ select {
   border-radius: 0.75rem;
   background: rgba(0, 0, 0, 0.2);
   padding: 1rem;
+}
+
+.chain-replay-mobile {
+  display: none;
+}
+
+.chain-replay-desktop {
+  display: grid;
 }
 
 .chain-replay-step {
@@ -587,7 +606,63 @@ select {
   line-height: 1.6;
 }
 
+.memory-constellation {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(34, 211, 238, 0.24);
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 24% 18%, rgba(34, 211, 238, 0.16), transparent 26%),
+    radial-gradient(circle at 74% 42%, rgba(14, 165, 233, 0.13), transparent 28%),
+    radial-gradient(circle at 48% 80%, rgba(99, 102, 241, 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(2, 6, 23, 0.94), rgba(3, 7, 18, 0.98));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.025),
+    0 0 70px rgba(34, 211, 238, 0.08);
+  padding: 1rem;
+}
+
+.memory-constellation::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle, rgba(226, 232, 240, 0.18) 0 1px, transparent 1px),
+    radial-gradient(circle, rgba(34, 211, 238, 0.18) 0 1px, transparent 1px);
+  background-position: 0 0, 21px 17px;
+  background-size: 78px 78px, 114px 114px;
+  content: "";
+  opacity: 0.22;
+}
+
+.constellation-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.constellation-header h3 {
+  margin: 0.25rem 0 0;
+  color: #ffffff;
+  font-size: 1.35rem;
+  letter-spacing: 0;
+}
+
+.constellation-header p {
+  max-width: 46rem;
+  margin: 0.35rem 0 0;
+  color: #94a3b8;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
 .graph-main-layout {
+  position: relative;
+  z-index: 1;
   display: grid;
   gap: 1rem;
 }
@@ -599,20 +674,23 @@ select {
 }
 
 .knowledge-graph-canvas {
-  min-height: 34rem;
+  min-height: 42rem;
   overflow-x: auto;
   border: 1px solid rgba(34, 211, 238, 0.2);
-  border-radius: 0.75rem;
+  border-radius: 0.9rem;
   background:
-    radial-gradient(circle at 50% 40%, rgba(14, 165, 233, 0.12), transparent 34%),
-    linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(5, 11, 19, 0.96));
-  box-shadow: 0 0 60px rgba(34, 211, 238, 0.08);
+    radial-gradient(circle at 50% 42%, rgba(34, 211, 238, 0.14), transparent 32%),
+    radial-gradient(circle at 18% 72%, rgba(56, 189, 248, 0.08), transparent 26%),
+    linear-gradient(180deg, rgba(1, 5, 15, 0.86), rgba(2, 6, 23, 0.94));
+  box-shadow:
+    inset 0 0 48px rgba(15, 23, 42, 0.62),
+    0 0 72px rgba(34, 211, 238, 0.12);
 }
 
 .knowledge-graph-canvas svg {
   min-width: 760px;
   width: 100%;
-  height: 34rem;
+  height: 42rem;
 }
 
 .graph-empty-canvas {
@@ -784,13 +862,21 @@ select {
 }
 
 @media (max-width: 760px) {
+  .memory-constellation {
+    padding: 0.75rem;
+  }
+
+  .constellation-header {
+    flex-direction: column;
+  }
+
   .knowledge-graph-canvas {
-    min-height: 24rem;
+    min-height: 26rem;
   }
 
   .knowledge-graph-canvas svg {
     min-width: 620px;
-    height: 24rem;
+    height: 26rem;
   }
 
   .graph-node-label {
@@ -801,10 +887,21 @@ select {
     display: none;
   }
 
-  .chain-card-statuses,
   .detail-grid,
   .edge-row {
     grid-template-columns: 1fr;
+  }
+
+  .chain-card-statuses {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chain-replay-mobile {
+    display: grid;
+  }
+
+  .chain-replay-desktop {
+    display: none;
   }
 
   .chain-replay-step {

@@ -7,7 +7,7 @@ import {
   type KnowledgeGraphInsights,
   type KnowledgeOverview,
 } from "../../lib/backendApi";
-import { ActiveDecisionChainPanel } from "./ActiveDecisionChainPanel";
+import { ActiveDecisionChainPanel, OperationalChainReplay } from "./ActiveDecisionChainPanel";
 import { KnowledgeGraphInsightsPanel } from "./KnowledgeGraphInsights";
 import { KnowledgeGraphEdgeDetail, KnowledgeGraphEdgeList, KnowledgeGraphNodeDetail } from "./KnowledgeNodeDetail";
 import { KnowledgeGraphSvg } from "./KnowledgeGraphSvg";
@@ -96,6 +96,11 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
     .slice()
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 
+  const selectNode = (nodeId: string | null) => {
+    setSelectedNodeId(nodeId);
+    setSelectedEdge(null);
+  };
+
   const graphBody = () => {
     if (loadState === "loading") {
       return <KnowledgeEmptyState title="Loading graph" body="Reading knowledge_nodes and knowledge_edges." />;
@@ -120,30 +125,51 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
           onSelectChain={(chain) => {
             setSelectedChainId(chain.id);
             const firstNode = chain.steps.find((step) => step.node)?.node;
-            setSelectedNodeId(firstNode?.id || null);
-            setSelectedEdge(null);
+            selectNode(firstNode?.id || null);
           }}
-          onSelectNode={(node) => {
-            setSelectedNodeId(node.id);
-            setSelectedEdge(null);
-          }}
+          onSelectNode={(node) => selectNode(node.id)}
+          showReplay={false}
         />
 
-        <KnowledgeGraphInsightsPanel insights={insights} graph={filteredGraph} onSelectNode={(node) => setSelectedNodeId(node.id)} />
-
-        <div className="graph-main-layout">
-          <KnowledgeGraphSvg
-            graph={filteredGraph}
-            selectedNodeId={selectedNodeId}
-            activeChain={activeChain}
-            onSelectNode={(node) => {
-              setSelectedNodeId(node.id);
-              setSelectedEdge(null);
-            }}
-            onSelectEdge={(edge) => setSelectedEdge(edge)}
-          />
-          <KnowledgeGraphNodeDetail node={selectedNode} graph={filteredGraph} activeChain={activeChain} />
+        <div className="chain-replay-mobile">
+          <OperationalChainReplay chain={activeChain} onSelectNode={(node) => selectNode(node.id)} />
         </div>
+
+        <section className="memory-constellation">
+          <div className="constellation-header">
+            <div>
+              <span className="eyebrow">Knowledge Graph</span>
+              <h3>Memory Constellation</h3>
+              <p>Explore how decisions, reviews, incidents, reports, and knowledge records are connected.</p>
+            </div>
+            <KnowledgeStatusBadge tone={activeChain ? "working" : "idle"}>
+              {activeChain ? "chain focus" : "free explore"}
+            </KnowledgeStatusBadge>
+          </div>
+
+          <div className="graph-main-layout">
+            <KnowledgeGraphSvg
+              graph={filteredGraph}
+              selectedNodeId={selectedNodeId}
+              activeChain={activeChain}
+              onSelectNode={(node) => {
+                selectNode(node.id);
+                const linkedChain = operationalChains.find((chain) => chain.nodeIds.has(node.id));
+                if (linkedChain) {
+                  setSelectedChainId(linkedChain.id);
+                }
+              }}
+              onSelectEdge={(edge) => setSelectedEdge(edge)}
+            />
+            <KnowledgeGraphNodeDetail node={selectedNode} graph={filteredGraph} activeChain={activeChain} />
+          </div>
+        </section>
+
+        <div className="chain-replay-desktop">
+          <OperationalChainReplay chain={activeChain} onSelectNode={(node) => selectNode(node.id)} />
+        </div>
+
+        <KnowledgeGraphInsightsPanel insights={insights} graph={filteredGraph} onSelectNode={(node) => selectNode(node.id)} />
 
         <KnowledgeGraphEdgeDetail edge={selectedEdge} graph={filteredGraph} />
         <KnowledgeGraphEdgeList
@@ -224,8 +250,8 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
       </div>
 
       <p className="graph-readonly-note">
-        Read-only operational memory view. Chain cards explain the work flow first; the graph remains a supporting relationship visualization.
-        {latestNode ? <span title={latestNode.createdAt}> Latest: {latestNode.type} · {formatRelativeTime(latestNode.createdAt)}</span> : null}
+        Read-only operational memory view. Chain cards explain the active PM flow first; Memory Constellation keeps the relationship graph as the signature visual layer.
+        {latestNode ? <span title={latestNode.createdAt}> Latest: {latestNode.type} / {formatRelativeTime(latestNode.createdAt)}</span> : null}
       </p>
 
       {graphBody()}
