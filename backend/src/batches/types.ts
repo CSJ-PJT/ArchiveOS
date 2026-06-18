@@ -1,4 +1,4 @@
-export type BatchType = "nightly_review" | "daily_report";
+export type BatchType = "nightly_review" | "daily_report" | "supabase_keepalive";
 
 export type BatchStatus = "completed" | "sent" | "skipped" | "failed";
 

@@ -540,3 +540,42 @@ ArchiveOS is presented as an AI Agent Operations Platform, not a raw developer d
 - KPI cards include top-contributor interpretation so raw counts have operational meaning.
 - Mesh relationships are read-only and expandable for traceability from agent relationship to related knowledge.
 - Remote access can use `ARCHIVEOS_PUBLIC_URL` or `ARCHIVEOS_NGROK_URL` for the latest public frontend URL.
+
+## Supabase Keep-Alive Batch
+
+ArchiveOS와 RH Healthcare Supabase 프로젝트가 free-tier inactivity pause에 걸리지 않도록 backend/local-worker 전용 keep-alive batch를 제공합니다.
+
+```bash
+cd backend
+npm run batch:supabase-keepalive
+```
+
+동작:
+
+- ArchiveOS Supabase는 `batch_runs`를 가볍게 조회합니다.
+- RH Healthcare Supabase는 REST endpoint를 가볍게 조회합니다.
+- 결과는 `batch_runs`에 `batch_type = supabase_keepalive`로 기록됩니다.
+- service role, publishable key, webhook 값은 frontend에 노출하지 않습니다.
+
+Backend env:
+
+```env
+RH_HEALTHCARE_SUPABASE_URL=
+RH_HEALTHCARE_SUPABASE_PUBLISHABLE_KEY=
+RH_HEALTHCARE_PAUSED_SUPABASE_URL=
+RH_HEALTHCARE_PAUSED_SUPABASE_PUBLISHABLE_KEY=
+```
+
+권장 Windows Task Scheduler 실행 예:
+
+```powershell
+-NoProfile -ExecutionPolicy Bypass -Command "cd 'C:\Users\dan18\Documents\Codex\2026-05-20\create-a-new-project-named-archiveos\ArchiveOS\backend'; npm run batch:supabase-keepalive"
+```
+
+권장 주기: 매일 10:00 KST 1회.
+
+로컬 실행 스크립트:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools/runtime/run-supabase-keepalive.ps1"
+```

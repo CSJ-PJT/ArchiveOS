@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "batch:nightly-review": "tsx src/batches/runBatch.ts nightly-review",
     "batch:daily-report": "tsx src/batches/runBatch.ts daily-report",
+    "batch:supabase-keepalive": "tsx src/batches/runBatch.ts supabase-keepalive",
     "architect:review-demo": "tsx src/architect/runArchitectDemo.ts"
   },
   "dependencies": {

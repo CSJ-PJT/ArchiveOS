@@ -70,13 +70,18 @@ create table if not exists public.command_runs (
 
 create table if not exists public.batch_runs (
   id uuid primary key default gen_random_uuid(),
-  batch_type text not null check (batch_type in ('nightly_review', 'daily_report')),
+  batch_type text not null check (batch_type in ('nightly_review', 'daily_report', 'supabase_keepalive')),
   status text not null check (status in ('completed', 'sent', 'skipped', 'failed')),
   target_date date not null,
   summary text not null,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
+
+alter table public.batch_runs drop constraint if exists batch_runs_batch_type_check;
+alter table public.batch_runs
+  add constraint batch_runs_batch_type_check
+  check (batch_type in ('nightly_review', 'daily_report', 'supabase_keepalive'));
 
 create table if not exists public.daily_reports (
   id uuid primary key default gen_random_uuid(),

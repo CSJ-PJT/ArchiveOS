@@ -454,3 +454,30 @@ ARCHIVEOS_NGROK_URL=
 ```
 
 `ARCHIVEOS_PUBLIC_URL` takes priority. `ARCHIVEOS_NGROK_URL` is accepted as a convenience alias for the latest frontend ngrok URL. Backend public URL still uses `ARCHIVEOS_BACKEND_PUBLIC_URL`.
+
+## Supabase Keep-Alive Batch
+
+무료 티어 Supabase 프로젝트의 inactivity pause를 줄이기 위한 backend/local-worker 전용 배치입니다. UI 실행 제어가 아니며 secret 값은 frontend에 노출하지 않습니다.
+
+```bash
+npm run batch:supabase-keepalive
+```
+
+필요 env:
+
+```env
+RH_HEALTHCARE_SUPABASE_URL=
+RH_HEALTHCARE_SUPABASE_PUBLISHABLE_KEY=
+RH_HEALTHCARE_PAUSED_SUPABASE_URL=
+RH_HEALTHCARE_PAUSED_SUPABASE_PUBLISHABLE_KEY=
+```
+
+ArchiveOS 대상은 기존 `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`를 사용합니다. RH Healthcare 대상은 publishable key로 REST endpoint를 가볍게 호출합니다. 결과는 `batch_runs`에 `batch_type = supabase_keepalive`로 저장됩니다.
+
+권장 스케줄: Windows Task Scheduler에서 매일 10:00 KST에 `npm run batch:supabase-keepalive` 실행.
+
+Repository root에서 실행 가능한 helper:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools/runtime/run-supabase-keepalive.ps1"
+```
