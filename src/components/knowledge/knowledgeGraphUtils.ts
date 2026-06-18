@@ -26,7 +26,18 @@ export type ActiveDecisionStep = {
 };
 
 export type ActiveDecisionChain = {
+  id: string;
   title: string;
+  status: string;
+  priority: string;
+  risk: string;
+  warning: string;
+  lastUpdated: string | null;
+  architectStatus: string;
+  builderStatus: string;
+  reviewerStatus: string;
+  pmDecisionStatus: string;
+  knowledgeStatus: string;
   steps: ActiveDecisionStep[];
   nodeIds: Set<string>;
   edgeIds: Set<string>;
@@ -88,8 +99,8 @@ export function buildKnowledgeGraphFromOverview(overview: KnowledgeOverview): Kn
       degree,
       isHub: degree >= 4,
       isDecisionRelevant: ["decision", "reviewer_result", "architecture_review", "incident"].includes(node.type),
-      importanceScore: node.importanceScore + degree * 4,
-      importanceLevel: getImportanceLevel(node.importanceScore + degree * 4),
+      importanceScore: node.importanceScore + degree * 2,
+      importanceLevel: getImportanceLevel(node.importanceScore + degree * 2),
     };
   });
 
@@ -131,19 +142,19 @@ function toGraphNode(node: KnowledgeNode, edges: KnowledgeOverview["latestEdges"
 function getNodeImportanceScore(node: KnowledgeNode, edges: KnowledgeOverview["latestEdges"]) {
   const connected = edges.filter((edge) => edge.from_node_id === node.id || edge.to_node_id === node.id).length;
   const typeWeight: Record<string, number> = {
-    decision: 34,
-    architecture_review: 28,
+    decision: 32,
+    architecture_review: 26,
     incident: 26,
-    reviewer_result: 22,
-    builder_result: 20,
+    reviewer_result: 20,
+    builder_result: 18,
     daily_report: 16,
     nightly_review: 16,
     obsidian_note: 12,
     command: 8,
     task: 18,
   };
-  const recency = isRecent(node.created_at) ? 10 : 0;
-  return (typeWeight[node.node_type] || 10) + connected * 6 + recency;
+  const recency = isRecent(node.created_at) ? 5 : 0;
+  return (typeWeight[node.node_type] || 10) + connected * 4 + recency;
 }
 
 function getEdgeImportanceScore(edgeType: string, confidence: number | null, metadata: Record<string, unknown>) {
@@ -213,8 +224,23 @@ function importancePasses(node: KnowledgeGraphNode, mode: GraphFilterMode) {
   return true;
 }
 
+export function getOperationalChains(insights: KnowledgeGraphInsights | null, graph: KnowledgeGraph): ActiveDecisionChain[] {
+  const chains = insights?.decisionChains?.length ? insights.decisionChains.slice(0, 5) : [null];
+  const built = chains
+    .map((chain, index) => buildOperationalChain(chain, graph, index))
+    .filter((chain): chain is ActiveDecisionChain => Boolean(chain));
+  return built;
+}
+
 export function getActiveDecisionChain(insights: KnowledgeGraphInsights | null, graph: KnowledgeGraph): ActiveDecisionChain | null {
-  const chain = insights?.decisionChains?.[0];
+  return getOperationalChains(insights, graph)[0] || null;
+}
+
+function buildOperationalChain(
+  chain: KnowledgeGraphInsights["decisionChains"][number] | null,
+  graph: KnowledgeGraph,
+  index: number,
+): ActiveDecisionChain | null {
   const nodes = graph.nodes;
   const edges = graph.edges;
   const findNode = (id?: string) => (id ? nodes.find((node) => node.id === id) || null : null);
@@ -245,11 +271,59 @@ export function getActiveDecisionChain(insights: KnowledgeGraphInsights | null, 
   );
 
   return {
+    id: decisionNode?.id || chain?.decisionNodeId || `operational-chain-${index}`,
     title: decisionNode?.label || chain?.decisionLabel || "Active operational memory chain",
+    status: decisionNode ? "PM Decision Recorded" : reviewerNode ? "PM Decision Required" : builderNode ? "Review Pending" : "Building Context",
+    priority: decisionNode?.importanceLevel || architectNode?.importanceLevel || reviewerNode?.importanceLevel || "medium",
+    risk: getChainRisk(architectNode, reviewerNode, edges),
+    warning: getChainWarning(architectNode, reviewerNode, decisionNode),
+    lastUpdated: getLatestChainTimestamp(steps),
+    architectStatus: architectNode ? getNodeStatusLabel(architectNode) : "not linked",
+    builderStatus: builderNode ? getNodeStatusLabel(builderNode) : "not linked",
+    reviewerStatus: reviewerNode ? getNodeStatusLabel(reviewerNode) : "not linked",
+    pmDecisionStatus: decisionNode ? getNodeStatusLabel(decisionNode) : "pending",
+    knowledgeStatus: knowledgeNode ? getNodeStatusLabel(knowledgeNode) : "not linked",
     steps,
     nodeIds,
     edgeIds,
   };
+}
+
+function getNodeStatusLabel(node: KnowledgeGraphNode) {
+  if (node.importanceLevel === "critical") return "critical";
+  if (node.importanceLevel === "high") return "ready";
+  if (node.isRecent) return "recent";
+  return "linked";
+}
+
+function getChainRisk(
+  architectNode: KnowledgeGraphNode | null,
+  reviewerNode: KnowledgeGraphNode | null,
+  edges: KnowledgeGraphEdge[],
+) {
+  const hasBlocker = [architectNode, reviewerNode].some((node) => node?.importanceLevel === "critical");
+  if (hasBlocker || edges.some((edge) => edge.type === "blocks")) return "High";
+  if (architectNode?.importanceLevel === "high" || reviewerNode?.importanceLevel === "high") return "Medium";
+  return "Low";
+}
+
+function getChainWarning(
+  architectNode: KnowledgeGraphNode | null,
+  reviewerNode: KnowledgeGraphNode | null,
+  decisionNode: KnowledgeGraphNode | null,
+) {
+  if (!decisionNode) return "PM decision is still pending.";
+  if (architectNode?.importanceLevel === "critical") return "Architect review is marked critical.";
+  if (reviewerNode?.importanceLevel === "critical") return "Reviewer verdict is marked critical.";
+  return "No blocking warning detected.";
+}
+
+function getLatestChainTimestamp(steps: ActiveDecisionStep[]) {
+  const timestamps = steps
+    .map((step) => step.node?.createdAt)
+    .filter((value): value is string => Boolean(value))
+    .sort((left, right) => new Date(right).getTime() - new Date(left).getTime());
+  return timestamps[0] || null;
 }
 
 function findConnectedNode(
@@ -399,9 +473,9 @@ export function getKnowledgeEdgeWidth(edge: KnowledgeGraphEdge) {
 }
 
 export function getImportanceLevel(score: number): ImportanceLevel {
-  if (score >= 58) return "critical";
-  if (score >= 38) return "high";
-  if (score >= 22) return "medium";
+  if (score >= 75) return "critical";
+  if (score >= 45) return "high";
+  if (score >= 24) return "medium";
   return "low";
 }
 

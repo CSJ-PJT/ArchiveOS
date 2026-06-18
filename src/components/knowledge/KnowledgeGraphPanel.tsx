@@ -5,7 +5,6 @@ import {
   type KnowledgeGraph,
   type KnowledgeGraphEdge,
   type KnowledgeGraphInsights,
-  type KnowledgeGraphNode,
   type KnowledgeOverview,
 } from "../../lib/backendApi";
 import { ActiveDecisionChainPanel } from "./ActiveDecisionChainPanel";
@@ -23,7 +22,7 @@ import {
 import {
   buildKnowledgeGraphFromOverview,
   filterKnowledgeGraph,
-  getActiveDecisionChain,
+  getOperationalChains,
   type GraphFilterMode,
 } from "./knowledgeGraphUtils";
 
@@ -36,6 +35,7 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
   const [error, setError] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<KnowledgeGraphEdge | null>(null);
+  const [selectedChainId, setSelectedChainId] = useState<string | null>(null);
   const [nodeType, setNodeType] = useState("all");
   const [edgeType, setEdgeType] = useState("all");
   const [limit, setLimit] = useState(100);
@@ -84,7 +84,11 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
     return filterKnowledgeGraph(graph, { nodeType, edgeType, search, limit, mode });
   }, [edgeType, graph, limit, mode, nodeType, search]);
 
-  const activeChain = useMemo(() => (filteredGraph ? getActiveDecisionChain(insights, filteredGraph) : null), [filteredGraph, insights]);
+  const operationalChains = useMemo(() => (filteredGraph ? getOperationalChains(insights, filteredGraph) : []), [filteredGraph, insights]);
+  const activeChain = useMemo(
+    () => operationalChains.find((chain) => chain.id === selectedChainId) || operationalChains[0] || null,
+    [operationalChains, selectedChainId],
+  );
   const selectedNode = filteredGraph?.nodes.find((node) => node.id === selectedNodeId) || null;
   const nodeTypes = useMemo(() => ["all", ...Object.keys(graph?.stats.types || {})], [graph]);
   const edgeTypes = useMemo(() => ["all", ...Array.from(new Set(graph?.edges.map((edge) => edge.type) || []))], [graph]);
@@ -110,7 +114,23 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
 
     return (
       <>
-        <ActiveDecisionChainPanel chain={activeChain} onSelectNode={(node) => setSelectedNodeId(node.id)} />
+        <ActiveDecisionChainPanel
+          chains={operationalChains}
+          selectedChainId={activeChain?.id || null}
+          onSelectChain={(chain) => {
+            setSelectedChainId(chain.id);
+            const firstNode = chain.steps.find((step) => step.node)?.node;
+            setSelectedNodeId(firstNode?.id || null);
+            setSelectedEdge(null);
+          }}
+          onSelectNode={(node) => {
+            setSelectedNodeId(node.id);
+            setSelectedEdge(null);
+          }}
+        />
+
+        <KnowledgeGraphInsightsPanel insights={insights} graph={filteredGraph} onSelectNode={(node) => setSelectedNodeId(node.id)} />
+
         <div className="graph-main-layout">
           <KnowledgeGraphSvg
             graph={filteredGraph}
@@ -124,8 +144,8 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
           />
           <KnowledgeGraphNodeDetail node={selectedNode} graph={filteredGraph} activeChain={activeChain} />
         </div>
+
         <KnowledgeGraphEdgeDetail edge={selectedEdge} graph={filteredGraph} />
-        <KnowledgeGraphInsightsPanel insights={insights} graph={filteredGraph} onSelectNode={(node) => setSelectedNodeId(node.id)} />
         <KnowledgeGraphEdgeList
           graph={filteredGraph}
           collapsed={edgeTableCollapsed}
@@ -138,15 +158,15 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
 
   return (
     <KnowledgePanel
-      title="Operational Memory Graph"
-      eyebrow="Knowledge Graph Visualization"
+      title="Operational Memory"
+      eyebrow="Chain View + Knowledge Graph"
       className="knowledge-graph-panel"
       right={<KnowledgeStatusBadge tone={loadState === "ready" ? "succeeded" : loadState === "error" ? "failed" : "idle"}>{loadState}</KnowledgeStatusBadge>}
     >
       <div className="graph-health-row">
         <KnowledgeMetric label="Nodes" value={graph?.stats.nodeCount ?? overview?.totalNodes ?? 0} tone="working" />
         <KnowledgeMetric label="Edges" value={graph?.stats.edgeCount ?? overview?.totalEdges ?? 0} tone="reviewing" />
-        <KnowledgeMetric label="Top Type" value={Object.entries(graph?.stats.types || overview?.countsByType || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || "None"} tone="succeeded" />
+        <KnowledgeMetric label="Operational Chains" value={operationalChains.length} tone="succeeded" />
         <KnowledgeMetric label="Latest Node" value={latestNode?.type || "None"} tone="idle" />
       </div>
 
@@ -204,7 +224,7 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
       </div>
 
       <p className="graph-readonly-note">
-        Read-only operational memory view. Node size represents importance, edge thickness represents relationship strength, and focus mode highlights upstream/downstream context.
+        Read-only operational memory view. Chain cards explain the work flow first; the graph remains a supporting relationship visualization.
         {latestNode ? <span title={latestNode.createdAt}> Latest: {latestNode.type} · {formatRelativeTime(latestNode.createdAt)}</span> : null}
       </p>
 
