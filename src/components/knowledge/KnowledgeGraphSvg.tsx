@@ -94,6 +94,13 @@ export function KnowledgeGraphSvg({
           const faded = hasFocus && !selected && !inFocus && !inActiveChain;
           const radius = getKnowledgeNodeRadius(node);
           const isCritical = node.importanceLevel === "critical";
+          const showLabel =
+            selected ||
+            inActiveChain ||
+            node.importanceLevel === "critical" ||
+            node.importanceLevel === "high" ||
+            node.type === "decision" ||
+            node.type === "architecture_review";
           return (
             <g
               className={`graph-node ${selected ? "selected" : ""} ${isCritical ? "critical" : ""}`}
@@ -110,12 +117,16 @@ export function KnowledgeGraphSvg({
                 filter={node.isRecent || selected || inActiveChain ? "url(#graphGlow)" : undefined}
               />
               <circle r={radius + 5} fill="none" stroke={getKnowledgeNodeColor(node.type)} strokeWidth={1} opacity={isCritical ? 0.7 : 0.18} />
-              <text y={radius + 18} textAnchor="middle" className="graph-node-label">
-                {truncateGraphLabel(node.label, 18)}
-              </text>
-              <text y={radius + 33} textAnchor="middle" className="graph-node-type">
-                {node.type}
-              </text>
+              {showLabel ? (
+                <>
+                  <text y={radius + 18} textAnchor="middle" className="graph-node-label">
+                    {truncateGraphLabel(node.label, 18)}
+                  </text>
+                  <text y={radius + 33} textAnchor="middle" className="graph-node-type">
+                    {node.type}
+                  </text>
+                </>
+              ) : null}
               <title>{`${node.title}\nimportance: ${node.importanceScore}\n${node.type}`}</title>
             </g>
           );
