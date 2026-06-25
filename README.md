@@ -19,6 +19,18 @@ Key APIs:
 
 `OPENAI_API_KEY`, Supabase service role keys, Discord webhooks, and local vault paths remain backend-only. If `OPENAI_API_KEY` is missing, RAG endpoints return HTTP 503 instead of fake success.
 
+For real vector RAG sync/search/ask, configure direct PostgreSQL settings for Supabase PostgreSQL + pgvector or the local docker-compose pgvector database:
+
+```bash
+DB_HOST=
+DB_PORT=5432
+DB_NAME=
+DB_USER=
+DB_PASSWORD=
+OBSIDIAN_VAULT_PATH=
+OPENAI_API_KEY=
+```
+
 Run Java tests:
 
 ```bash
