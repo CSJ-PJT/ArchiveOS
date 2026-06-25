@@ -408,6 +408,50 @@ button {
   gap: 0.5rem;
 }
 
+.spring-ai-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.rag-pipeline {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.rag-pipeline-step {
+  position: relative;
+  min-height: 3.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  background: var(--color-surface-muted);
+  padding: 0.8rem;
+  font-weight: 800;
+}
+
+.rag-pipeline-step::after {
+  position: absolute;
+  top: 50%;
+  right: -0.45rem;
+  width: 0.4rem;
+  height: 1px;
+  background: var(--color-border-strong);
+  content: "";
+}
+
+.rag-pipeline-step:last-child::after {
+  display: none;
+}
+
+.rag-pipeline-step.ready {
+  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
+}
+
+.rag-pipeline-step.pending {
+  color: var(--color-text-muted);
+}
+
 .runtime-stage {
   min-height: 4.2rem;
   border: 1px solid var(--color-border);
@@ -952,6 +996,15 @@ code {
 
   .runtime-flow {
     grid-template-columns: 1fr;
+  }
+
+  .spring-ai-grid,
+  .rag-pipeline {
+    grid-template-columns: 1fr;
+  }
+
+  .rag-pipeline-step::after {
+    display: none;
   }
 
   .workflow-row,

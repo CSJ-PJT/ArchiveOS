@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   configuredBackendUrl,
+  getAxReadiness,
   getDashboardData,
   getEndpointHealth,
   getHistorianStatus,
@@ -20,6 +21,7 @@ import {
   getSecurityStatus,
   getKpiOverview,
   type ArchitectureReview,
+  type AxReadiness,
   type DashboardData,
   type EndpointHealth,
   type HistorianStatus,
@@ -65,6 +67,7 @@ export type AppData = {
   runtimeVersion: RuntimeVersion | null;
   security: SecurityStatus | null;
   architect: ArchitectureReview | null;
+  axReadiness: AxReadiness | null;
   latestBatch: LatestBatchStatus | null;
   dailyReport: DailyReport | null;
 };
@@ -89,6 +92,7 @@ const emptyData: AppData = {
   runtimeVersion: null,
   security: null,
   architect: null,
+  axReadiness: null,
   latestBatch: null,
   dailyReport: null,
 };
@@ -124,6 +128,7 @@ function AppShellInner() {
       settle("runtimeVersion", getRuntimeVersion),
       settle("security", getSecurityStatus),
       settle("architect", getLatestArchitectureReview),
+      settle("axReadiness", getAxReadiness),
       settle("latestBatch", getLatestBatchStatus),
       settle("dailyReport", getLatestDailyReport),
     ]);
