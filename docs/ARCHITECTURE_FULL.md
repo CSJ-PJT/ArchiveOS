@@ -333,7 +333,7 @@ Request:
 
 ```json
 {
-  "question": "현대오토에버 면접용으로 ArchiveOS를 어떻게 설명하면 좋아?"
+  "question": "ArchiveOS의 Spring AI RAG 운영 구조를 요약해줘"
 }
 ```
 

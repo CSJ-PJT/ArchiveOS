@@ -1,8 +1,8 @@
 # ArchiveOS
 
-ArchiveOS is a Spring Boot 3 + Spring AI centered AX operations platform.
+ArchiveOS는 Spring Boot 3 + Spring AI 중심의 AX 운영 플랫폼이다. PM 운영 화면, Agent 상태 가시화, Obsidian 기반 장기 기억, PostgreSQL + pgvector RAG 엔진을 분리된 런타임으로 구성한다.
 
-Technology priority:
+## 기술 우선순위
 
 1. Spring Boot 3
 2. Spring AI
@@ -14,121 +14,91 @@ Technology priority:
 8. Node/Express Operations Backend
 9. React Dashboard
 
-Runtime responsibility:
+## 런타임 책임
 
-- `archiveos-ai`: Obsidian sync, heading-aware chunking, OpenAI embeddings, pgvector storage, vector search, RAG answer generation, and future AI Agent engine.
-- `backend`: PM operations, Agent/runtime visibility, MCP visibility, Discord notifications, Supabase operational history, and proxy calls to Spring AI.
-- `frontend`: Overview, Workflows, Knowledge, History, and Settings screens.
+- `archiveos-ai`: Obsidian sync, heading-aware chunking, OpenAI embeddings, pgvector 저장, vector search, RAG answer generation, 향후 AI Agent engine.
+- `backend`: PM operations, Agent/runtime visibility, MCP visibility, Discord notifications, Supabase 운영 이력, Spring AI proxy.
+- `frontend`: Overview, Workflows, Knowledge, History, Settings 화면.
 
-Key RAG flow:
+핵심 RAG 흐름:
 
 ```text
 Markdown -> Chunking -> Embedding -> VectorStore -> Retriever -> ChatModel -> Answer + References
 ```
 
-See:
+## 로컬 개발 환경
 
-- `docs/architecture/spring-ai-engine.md`
-- `docs/ui/spring-ai-dashboard.md`
+### 1. 환경 파일 준비
 
-ArchiveOS는 AI 에이전트 작업 상태, PM 의사결정, 지식 검색, 자동화 실행 이력을 한곳에서 관리하기 위한 운영형 대시보드입니다.
-
-현재 구조는 운영 기능과 AI/RAG 기능을 분리합니다.
-
-- **Frontend**: React + Vite + TypeScript
-- **Operations backend**: Node.js + Express
-- **AI backend**: Spring Boot + Spring AI
-- **Vector database**: PostgreSQL + pgvector
-- **Knowledge source**: Obsidian Markdown vault
-- **Runtime**: Docker Compose
-
-## 주요 기능
-
-### 운영 대시보드
-
-- Agent 상태와 현재 작업 조회
-- 작업 로그, 의사결정, 리뷰 결과 확인
-- PM 승인·반려 흐름
-- Discord 알림 상태 확인
-- MCP 및 로컬 런타임 상태 표시
-
-### Obsidian RAG
-
-- Markdown 문서 자동 탐색 및 수집
-- heading-aware chunking
-- content hash 기반 증분 동기화
-- OpenAI EmbeddingModel 기반 임베딩 생성
-- pgvector cosine similarity 검색
-- Spring AI ChatModel 기반 질의응답
-- 응답에 문서 제목, 경로, heading, score 포함
-
-### 안전한 실행 경계
-
-- API Key, DB 비밀번호, webhook URL은 backend 환경변수로만 관리
-- OpenAI 호출을 frontend에 노출하지 않음
-- 임의 shell command를 직접 실행하지 않음
-- 승인 전 배포 작업 실행 금지
-- 설정 누락 시 가짜 성공 대신 명확한 오류 반환
-
-## 전체 구조
-
-```text
-React Dashboard
-    |
-    v
-Node/Express Backend
-    |-- PM operations
-    |-- Agent/runtime visibility
-    |-- Discord/MCP integration
-    |-- Spring AI proxy
-    |
-    v
-Spring Boot + Spring AI
-    |-- Obsidian sync
-    |-- Chunking
-    |-- Embedding
-    |-- Vector search
-    |-- RAG answer
-    |
-    v
-PostgreSQL + pgvector
+```powershell
+Copy-Item .env.example .env
 ```
 
-## 로컬 실행
-
-### 1. 환경파일 준비
-
-```bash
-cp .env.example .env
-```
-
-최소 설정값:
+필수 값:
 
 ```env
 OPENAI_API_KEY=
-DB_HOST=postgres
+OPENAI_CHAT_MODEL=gpt-4o-mini
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=archiveos
 DB_USER=archiveos
 DB_PASSWORD=archiveos
 HOST_OBSIDIAN_VAULT_PATH=./docs
+ARCHIVEOS_AI_BASE_URL=http://localhost:4100
 ```
 
-실제 Obsidian vault를 사용할 때는 `HOST_OBSIDIAN_VAULT_PATH`를 해당 경로로 변경합니다.
+실제 Obsidian vault를 사용할 때는 `HOST_OBSIDIAN_VAULT_PATH`를 해당 경로로 바꾼다. API key, DB password, webhook URL은 Git에 커밋하지 않는다.
 
-Windows 예시:
+### 2. Docker Desktop / Docker CLI 확인
 
-```env
-HOST_OBSIDIAN_VAULT_PATH=C:/Users/user/Documents/ObsidianVault
+Windows 기준으로 먼저 아래를 확인한다.
+
+```powershell
+Test-Path "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
+Test-Path "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+docker --version
+docker compose version
+docker info
 ```
 
-### 2. Docker Compose 실행
+Docker Desktop이 설치되어 있는데 PATH만 빠진 경우 현재 세션에 임시로 추가한다.
 
-```bash
-docker compose up --build
+```powershell
+$env:PATH = "C:\Program Files\Docker\Docker\resources\bin;$env:PATH"
 ```
 
-기본 서비스:
+영구 등록은 Windows 환경 변수의 사용자 또는 시스템 `Path`에 아래 경로를 추가한다.
+
+```text
+C:\Program Files\Docker\Docker\resources\bin
+```
+
+Docker Desktop이 설치되어 있지 않으면 관리자 PowerShell에서 설치한다.
+
+```powershell
+choco install docker-desktop -y
+```
+
+설치 후 Docker Desktop을 실행하고 `docker info`가 성공하는지 확인한다.
+
+### 3. Docker Compose 실행
+
+```powershell
+docker compose config
+docker compose up --build -d
+docker compose ps
+```
+
+성공 조건:
+
+- `postgres` 컨테이너 running
+- `archiveos-ai` 컨테이너 running
+- `backend` 컨테이너 running
+- `frontend` 컨테이너 running 또는 접근 가능
+
+기본 포트:
 
 | 서비스 | 포트 | 역할 |
 |---|---:|---|
@@ -137,131 +107,93 @@ docker compose up --build
 | archiveos-ai | 4100 | Spring AI/RAG API |
 | PostgreSQL | 5432 | pgvector 저장소 |
 
-## RAG API
+## RAG End-to-End 검증
 
-### 문서 동기화
+Docker가 정상 설치되어 있으면 아래 스크립트로 전체 흐름을 확인한다.
 
-```bash
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/runtime/verify-rag-e2e.ps1
+```
+
+스크립트가 수행하는 검증:
+
+1. Docker CLI, Compose, Docker daemon 확인
+2. `docker compose config`
+3. `docker compose up --build -d`
+4. PostgreSQL 접속 및 `vector` extension 확인
+5. `obsidian_documents`, `obsidian_chunks`, embedding index 확인
+6. `GET /api/health`
+7. `GET /api/ai/runtime`
+8. `POST /api/ai/runtime/check`
+9. `POST /api/obsidian/sync`
+10. `GET /api/rag/search?query=ArchiveOS&limit=5`
+11. `POST /api/rag/ask`
+12. Node proxy `GET/POST /api/ai/runtime`
+
+수동 검증 명령:
+
+```powershell
+curl http://localhost:4100/api/health
+curl http://localhost:4100/api/ai/runtime
+curl -X POST http://localhost:4100/api/ai/runtime/check
 curl -X POST http://localhost:4100/api/obsidian/sync
-```
-
-### 문서 목록
-
-```bash
-curl http://localhost:4100/api/obsidian/documents
-```
-
-### 벡터 검색
-
-```bash
 curl "http://localhost:4100/api/rag/search?query=ArchiveOS&limit=5"
+curl -X POST http://localhost:4100/api/rag/ask -H "Content-Type: application/json" -d "{\"question\":\"ArchiveOS의 Spring AI RAG 구조를 요약해줘\"}"
+curl http://localhost:4000/api/ai/runtime
+curl -X POST http://localhost:4000/api/ai/runtime/check
 ```
 
-### RAG 질의
+성공 기준:
 
-```bash
-curl -X POST http://localhost:4100/api/rag/ask \
-  -H "Content-Type: application/json" \
-  -d '{"question":"ArchiveOS 구조를 요약해줘"}'
-```
+- `/api/ai/runtime`이 실제 DB 연결 상태를 반환한다.
+- `vectorStore.databaseConnected=true`
+- `vectorStore.extensionInstalled=true`
+- Obsidian sync 후 `knowledge.documents`, `knowledge.chunks`, `knowledge.embeddedChunks`가 증가한다.
+- RAG search가 `score`가 있는 references를 반환한다.
+- RAG ask가 `answer`와 `references`를 반환한다.
+- runtime telemetry에 latency와 reference count가 기록된다.
+- 응답에 API key, DB password, webhook URL, 로컬 vault 절대 경로가 노출되지 않는다.
 
-`OPENAI_API_KEY`가 없거나 AI backend가 준비되지 않은 경우 RAG API는 HTTP 503을 반환합니다.
+## 개발 명령
 
-## Obsidian vault 탐색 규칙
+Frontend:
 
-`OBSIDIAN_VAULT_PATH`가 지정되지 않으면 다음 순서로 후보를 탐색합니다.
-
-1. 기존 환경변수에 설정된 경로
-2. 프로젝트의 `docs` 디렉터리
-3. 사용자 홈의 `Obsidian`, `Vault`, `Notes`, `ArchiveOS`, `DeepStake3D`, `ETC` 관련 폴더
-4. `.obsidian` 디렉터리가 있는 경로
-5. ArchiveOS, AX, Spring AI, RAG 관련 Markdown이 포함된 경로
-
-적합한 경로를 찾지 못하면 프로젝트의 `docs`를 기본 vault로 사용합니다.
-
-## 개발 명령어
-
-### Frontend
-
-```bash
+```powershell
 npm install
-npm run dev
 npm run test
 npm run build
 ```
 
-### Node backend
+Node backend:
 
-```bash
+```powershell
 cd backend
 npm install
-npm run dev
 npm run test
 npm run typecheck
 npm run build
 ```
 
-### Spring AI backend
+Spring AI backend:
 
-Windows:
-
-```bash
+```powershell
 cd archiveos-ai
 .\gradlew.bat test --no-daemon
-.\gradlew.bat bootRun
+.\gradlew.bat bootJar --no-daemon
 ```
-
-Linux/macOS:
-
-```bash
-cd archiveos-ai
-./gradlew test --no-daemon
-./gradlew bootRun
-```
-
-## 데이터 저장
-
-주요 테이블:
-
-- `agents`
-- `tasks`
-- `work_logs`
-- `pm_tasks`
-- `pm_task_decisions`
-- `pm_task_events`
-- `obsidian_documents`
-- `obsidian_chunks`
-- `knowledge_nodes`
-- `knowledge_edges`
-
-pgvector 인덱스와 유사도 검색 함수는 `supabase/schema.sql`에서 관리합니다.
-
-## 운영 원칙
-
-- 대시보드는 읽기와 승인 중심으로 유지합니다.
-- 실행 권한은 backend에만 둡니다.
-- AI 결과와 사람의 의사결정을 분리해 기록합니다.
-- 실패 상태와 재시도 이력을 보존합니다.
-- 자동화는 관찰 가능성과 복구 가능성을 우선합니다.
 
 ## 문서
 
-- [전체 아키텍처](docs/ARCHITECTURE_FULL.md)
+- [Spring AI Engine Architecture](docs/architecture/spring-ai-engine.md)
+- [Spring AI Dashboard UI](docs/ui/spring-ai-dashboard.md)
+- [Developer Guide](docs/operations/developer-guide.md)
 - [AX 구현 상태](docs/AX_IMPLEMENTATION_STATUS.md)
-- [v1 안정화 기준](docs/ARCHIVEOS_V1_HARDENING.md)
-- [Obsidian 연동 전략](docs/obsidian-integration-strategy.md)
-- [런타임 보안](docs/runtime-security.md)
-- [Knowledge Graph MVP](docs/knowledge-graph-mvp.md)
+- [전체 아키텍처](docs/ARCHITECTURE_FULL.md)
 
-## 현재 진행 방향
+## 운영 원칙
 
-ArchiveOS는 다음 순서로 확장하고 있습니다.
-
-1. Obsidian RAG end-to-end 검증
-2. PM 승인 게이트 정교화
-3. Pipeline Run/Stage/Step 실행 이력
-4. Retry 및 rollback 상태 관리
-5. MCP 기반 도구 호출 확장
-6. 멀티 에이전트 워크플로우
-
-기능을 한 번에 크게 늘리기보다, 실제 실행과 검증이 가능한 단위로 확장합니다.
+- ArchiveOS UI는 visibility-first 원칙을 유지한다.
+- shell, MCP, Codex, process control을 UI에서 직접 실행하지 않는다.
+- PM decision 기능은 ArchiveOS task state와 decision log를 기록하는 용도다.
+- Secret 값은 backend/local runtime에서만 사용하고 frontend에 노출하지 않는다.
+- RAG 실패는 fake success가 아니라 명확한 unavailable/degraded 상태로 표시한다.

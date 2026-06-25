@@ -1,47 +1,45 @@
-# ArchiveOS AX Implementation Status
+# ArchiveOS AX 구현 상태
 
-Baseline commit before this phase:
+현재 ArchiveOS는 PM 운영 backend와 Spring AI RAG engine을 분리한 AX knowledge platform foundation 단계다.
 
-- `3d1b89d9c8c0fd97d5ca3a244de694323fafa05e`
+## 책임 분리
 
-Current responsibility split:
+- Node/Express backend: PM 운영, Agent 상태, MCP visibility, Dashboard, Discord, Supabase 운영 데이터, Spring AI proxy.
+- `archiveos-ai` Spring Boot module: Obsidian ingestion, heading-aware chunking, embedding, pgvector storage, vector search, RAG answer generation, 향후 AI Agent layer.
 
-- Node/Express backend: PM operations, Agent state, MCP visibility, Dashboard, Discord, existing Supabase operational data.
-- `archiveos-ai` Spring Boot module: Obsidian ingestion, Markdown chunking, embedding, pgvector storage, vector search, RAG answer generation, future AI Agent layer.
-
-## Implemented
+## 구현 완료
 
 ### Spring AI module
 
 - Java 21 Spring Boot service: `archiveos-ai`
-- Gradle Wrapper included: `archiveos-ai/gradlew`, `archiveos-ai/gradlew.bat`
-- Spring AI BOM configured
-- OpenAI ChatModel dependency configured
-- OpenAI EmbeddingModel dependency configured
-- PgVectorStore dependency configured
-- Runtime status endpoint:
+- Gradle Wrapper 포함
+- Spring AI BOM 구성
+- OpenAI ChatModel dependency 구성
+- OpenAI EmbeddingModel dependency 구성
+- PgVectorStore dependency 구성
+- Runtime API:
   - `GET /api/health`
   - `GET /api/ai/runtime`
+  - `POST /api/ai/runtime/check`
 
 ### Obsidian ingestion
 
 - `POST /api/obsidian/sync`
 - `GET /api/obsidian/documents`
-- Reads local Markdown vault from `OBSIDIAN_VAULT_PATH`
-- Heading-aware Markdown chunking
-- Code-block aware section splitting
-- Content hash based incremental sync
-- Re-indexes changed documents only
+- local Markdown vault 읽기
+- heading-aware chunking
+- content hash 기반 증분 sync
+- 변경 문서만 재색인
 
 ### Vector RAG
 
-- Embeds chunks with Spring AI `EmbeddingModel`
-- Stores embeddings in `public.obsidian_chunks.embedding vector(1536)`
-- Uses PostgreSQL / pgvector cosine similarity search
+- Spring AI `EmbeddingModel`로 chunk embedding 생성
+- `public.obsidian_chunks.embedding vector(1536)` 저장
+- PostgreSQL/pgvector cosine similarity search
 - `GET /api/rag/search?query=...`
 - `POST /api/rag/ask`
-- RAG answers are generated through Spring AI `ChatModel`
-- Answers include references:
+- Spring AI `ChatModel` 기반 답변 생성
+- references 반환:
   - title
   - path
   - heading
@@ -49,25 +47,24 @@ Current responsibility split:
 
 ### Safe disabled mode
 
-- If `OPENAI_API_KEY` is missing:
-  - server startup still succeeds
-  - RAG sync/search/ask returns HTTP 503
-  - no fake successful RAG answer is returned
+- `OPENAI_API_KEY`가 없으면 서버 시작은 가능하다.
+- RAG sync/search/ask는 HTTP 503 또는 명확한 unavailable 상태를 반환한다.
+- fake success 응답을 반환하지 않는다.
 
 ### Database
 
-Default development Vector DB:
+기본 로컬 개발 Vector DB:
 
 - Docker Compose PostgreSQL + pgvector
-- `docker-compose.yml` starts `pgvector/pgvector:pg16`
-- `archiveos-ai` connects to the compose `postgres` service
-- `./docs` is mounted as `/vault` by default
+- image: `pgvector/pgvector:pg16`
+- `archiveos-ai`는 compose 내부에서 `postgres` host로 연결
+- `./docs`는 기본 vault로 `/vault`에 read-only mount
 
-Optional production-like Vector DB:
+선택 가능한 원격 DB:
 
 - Supabase PostgreSQL + pgvector
 
-Schema includes:
+Schema:
 
 - `public.obsidian_documents`
 - `public.obsidian_chunks`
@@ -76,41 +73,33 @@ Schema includes:
 
 ### Node backend integration
 
-Node/Express no longer owns RAG logic.
+Node/Express backend는 RAG를 직접 구현하지 않고 `archiveos-ai`로 proxy한다.
 
-The existing Node endpoints now proxy to `archiveos-ai`:
-
+- `GET /api/ai/runtime`
+- `POST /api/ai/runtime/check`
 - `POST /api/obsidian/sync`
 - `GET /api/obsidian/documents`
 - `GET /api/rag/search`
 - `POST /api/rag/ask`
 
-Set:
+`archiveos-ai`가 꺼져 있으면 fake healthy 대신 HTTP 503을 반환한다.
 
-```bash
-ARCHIVEOS_AI_BASE_URL=http://localhost:4100
-```
+### Frontend integration
 
-## Required environment
+Overview와 Knowledge 화면은 `/api/ai/runtime`의 실제 telemetry를 사용한다.
 
-For real RAG execution:
+더 이상 사용하지 않는 대체값:
 
-```bash
-OPENAI_API_KEY=
-OBSIDIAN_VAULT_PATH=
-DB_HOST=
-DB_PORT=5432
-DB_NAME=
-DB_USER=
-DB_PASSWORD=
-ARCHIVEOS_AI_BASE_URL=http://localhost:4100
-```
+- Embeddings = Knowledge Graph totalNodes
+- Vector Index = Knowledge Graph totalEdges 여부
+- References = Knowledge Graph totalEdges
+- Last RAG Check = AX readiness generatedAt
+- pgvector status = Knowledge relation count
+- ChatModel/EmbeddingModel status = endpoint 존재 여부
 
-Supabase PostgreSQL is the recommended default target for production-like use.
+## 검증 완료
 
-## Validation status
-
-Completed locally:
+최근 로컬 검증:
 
 - `npm run test`
 - `npm run build`
@@ -121,90 +110,79 @@ Completed locally:
 - `cd archiveos-ai && .\gradlew.bat bootJar --no-daemon`
 - `archiveos-ai` jar startup smoke test
 - `POST /api/rag/ask` without key returns HTTP 503
-- OpenAI ChatModel smoke call succeeded with the configured local `OPENAI_API_KEY`
-- OpenAI EmbeddingModel smoke call succeeded and returned 1536 dimensions
-- Obsidian vault path was found through local backend env and copied to `archiveos-ai/.env`
-- Obsidian vault exists and contains Markdown files
-- Obsidian vault auto-discovery was implemented in `archiveos-ai`
-- Local auto-discovery selected the project `docs` directory as the highest-scoring ArchiveOS AX/RAG Markdown vault
-- OpenAI ChatModel smoke call succeeded again after vault discovery changes
-- OpenAI EmbeddingModel smoke call succeeded again and returned 1536 dimensions
+- OpenAI ChatModel smoke call 성공
+- OpenAI EmbeddingModel smoke call 성공, 1536 dimensions 확인
+- Obsidian vault auto-discovery 구현
+- project `docs` 디렉터리를 기본 local vault로 사용 가능
+- `archiveos-ai` 미실행 상태에서 Node proxy `GET /api/ai/runtime` HTTP 503 확인
+- `archiveos-ai` 미실행 상태에서 Node proxy `POST /api/ai/runtime/check` HTTP 503 확인
 
-Blocked locally:
+## 이번 Docker 진단 결과
 
-- pgvector sync/search/RAG storage cannot complete until a reachable PostgreSQL/pgvector connection is configured.
-- `localhost:5432` was not reachable.
-- Direct Supabase database host/password were not available in local env files.
-- Supabase API URL and service role exist for the Node backend, but Spring JDBC requires direct PostgreSQL settings:
-  - `DB_HOST`
-  - `DB_PORT`
-  - `DB_NAME`
-  - `DB_USER`
-- `DB_PASSWORD`
+현재 로컬 세션에서 확인한 Docker 상태:
 
-Not executable in this local environment:
+- `C:\Program Files\Docker\Docker\resources\bin\docker.exe`: 없음
+- `C:\Program Files\Docker\Docker\Docker Desktop.exe`: 없음
+- `C:\ProgramData\DockerDesktop`: 없음
+- 사용자 PATH 내 Docker 경로: 없음
+- 시스템 PATH 내 Docker 경로: 없음
+- Docker 관련 Windows service: 없음
+- WSL 배포판: 설치되지 않음
+- `where docker`: 실패
+- `where docker-compose`: 실패
+- Chocolatey는 설치되어 있으나 현재 PowerShell은 관리자 권한이 아님
+- `choco install docker-desktop -y`는 `C:\ProgramData\chocolatey\lib\docker-desktop` 접근 권한 부족으로 실패
 
-- Docker build / compose execution, because `docker` is not installed or not on PATH.
+따라서 현재 세션에서는 실제 `docker compose up` 기반 pgvector E2E 검증을 실행할 수 없다.
 
-Expected Docker development flow:
+## Docker 설치 후 검증 절차
 
-```bash
-cp .env.example .env
-# set OPENAI_API_KEY in .env
-docker compose up --build
-curl -X POST http://localhost:4100/api/obsidian/sync
-curl "http://localhost:4100/api/rag/search?query=ArchiveOS&limit=5"
+관리자 PowerShell에서 Docker Desktop을 설치한다.
+
+```powershell
+choco install docker-desktop -y
 ```
 
-Static Docker assets are present:
+Docker Desktop 실행 후:
 
-- root frontend `Dockerfile`
-- backend `Dockerfile`
-- `archiveos-ai/Dockerfile`
-- `docker-compose.yml`
+```powershell
+docker --version
+docker compose version
+docker info
+```
 
-## Spring AI Runtime Observability
+ArchiveOS 루트에서:
 
-`archiveos-ai`는 `GET /api/ai/runtime`으로 실제 runtime telemetry를 반환한다.
+```powershell
+docker compose config
+docker compose up --build -d
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/runtime/verify-rag-e2e.ps1 -KeepRunning
+```
 
-반환 항목:
+성공 기준:
 
-- Spring Boot 상태와 버전
-- Spring AI 상태와 버전
-- ChatModel 설정 여부, Bean 사용 가능 여부, 최근 호출 성공/실패
-- EmbeddingModel 설정 여부, Bean 사용 가능 여부, 차원, 최근 호출 성공/실패
-- PostgreSQL 연결 상태
-- pgvector extension 설치 여부
-- vector index 존재 여부와 index 방식
-- `obsidian_documents` 실제 행 수
-- `obsidian_chunks` 실제 행 수
-- embedded/pending/failed chunk 수
-- 마지막 sync 시각
-- 최근 RAG search/ask/sync 시각
-- 최근 RAG latency
-- 최근 reference 수
+- `postgres` container running
+- `archiveos-ai` container running
+- `backend` container running
+- `frontend` container running 또는 접근 가능
+- pgvector extension installed
+- obsidian tables/index present
+- Obsidian sync creates documents/chunks
+- embedding vectors stored
+- vector similarity search returns scored references
+- `/api/rag/ask` returns answer + references
+- Node proxy returns Spring AI runtime data
 
-`POST /api/ai/runtime/check`는 명시적으로 호출할 때만 ChatModel과 EmbeddingModel smoke check를 수행한다.
+## 남은 검증 항목
 
-Node backend는 다음 endpoint를 proxy한다.
+Docker Desktop 설치 후 다음 항목을 실제 실행으로 확인해야 한다.
 
-- `GET /api/ai/runtime`
-- `POST /api/ai/runtime/check`
-
-React Overview와 Knowledge 화면은 Spring AI Engine 지표를 이 runtime API에 연결한다.
-
-더 이상 사용하지 않는 대체값:
-
-- Embeddings = Knowledge Graph totalNodes
-- Vector Index = Knowledge Graph totalEdges 존재 여부
-- References = Knowledge Graph totalEdges
-- Last RAG Check = AX readiness generatedAt
-- pgvector status = Knowledge relation count
-- ChatModel/EmbeddingModel status = endpoint 존재 여부
-
-## Remaining work
-
-- Run real Obsidian sync with a configured vault.
-- Verify Supabase pgvector connection with real DB credentials.
-- Verify real OpenAI embeddings and ChatModel answer generation with `OPENAI_API_KEY`.
-- Add richer integration tests using Testcontainers or a dedicated pgvector test database.
+- `docker compose config`
+- `docker compose up --build -d`
+- PostgreSQL + pgvector container health
+- `/api/obsidian/sync`
+- embedding 저장
+- vector search
+- `/api/rag/ask`
+- Node proxy 정상/503 전환
+- frontend Overview/Knowledge 실제 runtime 표시
