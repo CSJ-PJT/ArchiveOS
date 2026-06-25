@@ -4,8 +4,10 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.io.IOException;
 import java.util.Map;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -51,6 +53,13 @@ public class ObsidianRagController {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of(
                 "error", error.getMessage(),
                 "status", "disabled"));
+    }
+
+    @ExceptionHandler({CannotGetJdbcConnectionException.class, DataAccessResourceFailureException.class})
+    public ResponseEntity<Map<String, Object>> databaseUnavailable(Exception error) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of(
+                "error", "Vector database is unavailable. Configure DB_HOST, DB_PORT, DB_NAME, DB_USER, and DB_PASSWORD for Supabase PostgreSQL or local pgvector.",
+                "status", "database_unavailable"));
     }
 
     public record RagAskRequest(@NotBlank String question) {}

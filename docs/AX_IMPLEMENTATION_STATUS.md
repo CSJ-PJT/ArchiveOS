@@ -118,6 +118,22 @@ Completed locally:
 - `cd archiveos-ai && .\gradlew.bat bootJar --no-daemon`
 - `archiveos-ai` jar startup smoke test
 - `POST /api/rag/ask` without key returns HTTP 503
+- OpenAI ChatModel smoke call succeeded with the configured local `OPENAI_API_KEY`
+- OpenAI EmbeddingModel smoke call succeeded and returned 1536 dimensions
+- Obsidian vault path was found through local backend env and copied to `archiveos-ai/.env`
+- Obsidian vault exists and contains Markdown files
+
+Blocked locally:
+
+- pgvector sync/search/RAG storage cannot complete until a reachable PostgreSQL/pgvector connection is configured.
+- `localhost:5432` was not reachable.
+- Direct Supabase database host/password were not available in local env files.
+- Supabase API URL and service role exist for the Node backend, but Spring JDBC requires direct PostgreSQL settings:
+  - `DB_HOST`
+  - `DB_PORT`
+  - `DB_NAME`
+  - `DB_USER`
+  - `DB_PASSWORD`
 
 Not executable in this local environment:
 
