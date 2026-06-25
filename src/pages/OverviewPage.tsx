@@ -53,6 +53,29 @@ export function OverviewPage({
       </section>
 
       <section className="overview-layout">
+        <SectionCard title="Spring AI Engine" eyebrow="RAG / Agent platform core" className="span-12">
+          <div className="spring-ai-grid">
+            <MetricCard label="Spring AI Status" value={data.axReadiness?.currentMode === "spring_ai_target" ? "Target" : "Active foundation"} status={data.axReadiness ? "working" : "unknown"} />
+            <MetricCard label="ChatModel" value={data.endpointHealth?.endpoints.find((endpoint) => endpoint.path === "/api/rag/ask")?.status || "unknown"} status={data.endpointHealth?.endpoints.find((endpoint) => endpoint.path === "/api/rag/ask")?.status || "unknown"} />
+            <MetricCard label="EmbeddingModel" value={data.endpointHealth?.endpoints.find((endpoint) => endpoint.path === "/api/rag/search")?.status || "unknown"} status={data.endpointHealth?.endpoints.find((endpoint) => endpoint.path === "/api/rag/search")?.status || "unknown"} />
+            <MetricCard label="VectorStore" value={overview.memorySummary.relations > 0 ? "indexed" : "pending"} status={overview.memorySummary.relations > 0 ? "healthy" : "warning"} />
+            <MetricCard label="pgvector" value={overview.memorySummary.ragReady ? "ready" : "not verified"} status={overview.memorySummary.ragReady ? "healthy" : "warning"} />
+            <MetricCard label="Obsidian Sync" value={data.historian?.lastExport ? formatTimeAgo(data.historian.lastExport.createdAt) : "no export"} status={data.historian?.enabled ? "healthy" : "not_configured"} />
+            <MetricCard label="RAG Ready" value={overview.memorySummary.ragReady ? "Yes" : "No"} status={overview.memorySummary.ragReady ? "healthy" : "warning"} />
+            <MetricCard label="Last RAG Check" value={data.axReadiness?.generatedAt ? formatTimeAgo(data.axReadiness.generatedAt) : "unknown"} status={data.axReadiness ? "healthy" : "unknown"} />
+          </div>
+        </SectionCard>
+
+        <SectionCard title="RAG Pipeline Flow" eyebrow="Spring AI execution path" className="span-12">
+          <div className="rag-pipeline">
+            {["Markdown", "Chunking", "Embedding", "VectorStore", "Retriever", "ChatModel", "Answer + References"].map((step, index) => (
+              <div className={`rag-pipeline-step ${index <= 2 || overview.memorySummary.ragReady ? "ready" : "pending"}`} key={step}>
+                <span>{step}</span>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+
         <SectionCard title="Runtime Flow" eyebrow="Current execution path" className="span-8">
           <div className="runtime-flow">
             {overview.runtimeFlow.map((stage) => (

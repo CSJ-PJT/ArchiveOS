@@ -1,5 +1,36 @@
 # ArchiveOS
 
+ArchiveOS is a Spring Boot 3 + Spring AI centered AX operations platform.
+
+Technology priority:
+
+1. Spring Boot 3
+2. Spring AI
+3. ChatModel
+4. EmbeddingModel
+5. VectorStore
+6. PostgreSQL + pgvector
+7. Obsidian RAG
+8. Node/Express Operations Backend
+9. React Dashboard
+
+Runtime responsibility:
+
+- `archiveos-ai`: Obsidian sync, heading-aware chunking, OpenAI embeddings, pgvector storage, vector search, RAG answer generation, and future AI Agent engine.
+- `backend`: PM operations, Agent/runtime visibility, MCP visibility, Discord notifications, Supabase operational history, and proxy calls to Spring AI.
+- `frontend`: Overview, Workflows, Knowledge, History, and Settings screens.
+
+Key RAG flow:
+
+```text
+Markdown -> Chunking -> Embedding -> VectorStore -> Retriever -> ChatModel -> Answer + References
+```
+
+See:
+
+- `docs/architecture/spring-ai-engine.md`
+- `docs/ui/spring-ai-dashboard.md`
+
 ArchiveOS는 AI 에이전트 작업 상태, PM 의사결정, 지식 검색, 자동화 실행 이력을 한곳에서 관리하기 위한 운영형 대시보드입니다.
 
 현재 구조는 운영 기능과 AI/RAG 기능을 분리합니다.

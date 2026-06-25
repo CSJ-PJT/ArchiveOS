@@ -39,13 +39,22 @@ function KnowledgeOverview({ data }: { data: AppData }) {
       <MetricCard label="Documents" value={data.knowledge?.countsByType.obsidian_note ?? 0} status="healthy" />
       <MetricCard label="Chunks" value={data.knowledge?.latestNodes.length ?? 0} status={data.knowledge ? "healthy" : "unknown"} />
       <MetricCard label="Embeddings" value={data.knowledge?.totalNodes ?? 0} status={data.knowledge?.totalNodes ? "healthy" : "empty"} />
-      <MetricCard label="Nodes" value={data.knowledge?.totalNodes ?? 0} status="healthy" />
-      <MetricCard label="Edges" value={data.knowledge?.totalEdges ?? 0} status="healthy" />
+      <MetricCard label="Vector Index" value={data.knowledge?.totalEdges ? "available" : "pending"} status={data.knowledge?.totalEdges ? "healthy" : "warning"} />
+      <MetricCard label="Similarity Search" value={data.endpointHealth?.endpoints.find((endpoint) => endpoint.path === "/api/rag/search")?.status || "unknown"} status={data.endpointHealth?.endpoints.find((endpoint) => endpoint.path === "/api/rag/search")?.status || "unknown"} />
+      <MetricCard label="References" value={data.knowledge?.totalEdges ?? 0} status="healthy" />
       <MetricCard label="Last Sync" value={data.historian?.lastExport ? formatTimeAgo(data.historian.lastExport.createdAt) : "Unknown"} status={data.historian?.enabled ? "healthy" : "not_configured"} />
-      <SectionCard title="Knowledge Health" eyebrow="Operational memory status" className="span-12">
+      <MetricCard label="RAG Status" value={data.axReadiness?.currentMode === "spring_ai_target" ? "target" : "foundation"} status={data.axReadiness ? "working" : "unknown"} />
+      <SectionCard title="Spring AI Knowledge Engine" eyebrow="Obsidian RAG core" className="span-12">
         <p className="body-copy">
-          ArchiveOS stores operational memory as nodes and relationships. RAG and Obsidian are shown here as status, search, and references.
+          ArchiveOS uses Spring Boot 3 + Spring AI as the dedicated RAG engine. React displays operations, Node/Express proxies operational APIs, and archiveos-ai handles Obsidian sync, chunking, embeddings, pgvector search, ChatModel answers, and references.
         </p>
+        <div className="rag-pipeline">
+          {["Documents", "Chunks", "Embeddings", "Vector Index", "Similarity Search", "References", "RAG Answer"].map((step, index) => (
+            <div className={`rag-pipeline-step ${index < 3 || data.knowledge?.totalNodes ? "ready" : "pending"}`} key={step}>
+              <span>{step}</span>
+            </div>
+          ))}
+        </div>
         <div className="event-list compact">
           {(data.knowledge?.latestNodes || []).slice(0, 6).map((node) => (
             <article className="event-row" key={node.id}>
