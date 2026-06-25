@@ -4,6 +4,12 @@ server:
 spring:
   application:
     name: archiveos-ai
+  config:
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:../.env.local[.properties]
+      - optional:file:.env[.properties]
+      - optional:file:.env.local[.properties]
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:archiveos}
     username: ${DB_USER:archiveos}
