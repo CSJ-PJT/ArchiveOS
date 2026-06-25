@@ -15,6 +15,79 @@ body {
   min-height: 100vh;
 }
 
+[data-theme="light"] {
+  background: #f6f8fb;
+  color: #172033;
+}
+
+[data-theme="light"] body {
+  background: #f6f8fb;
+}
+
+[data-theme="light"] .archiveos-shell {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(14, 165, 233, 0.12), transparent 28%),
+    linear-gradient(180deg, #f8fafc 0%, #eef3f8 100%) !important;
+  color: #172033 !important;
+}
+
+[data-theme="light"] .archiveos-shell .bg-\[\#07090d\],
+[data-theme="light"] .archiveos-shell .bg-\[\#0d1117\],
+[data-theme="light"] .archiveos-shell .bg-\[\#0a0d12\] {
+  background-color: #ffffff !important;
+}
+
+[data-theme="light"] .archiveos-shell .bg-black\/20,
+[data-theme="light"] .archiveos-shell .bg-black\/25,
+[data-theme="light"] .archiveos-shell .bg-black\/30,
+[data-theme="light"] .archiveos-shell .bg-black\/40,
+[data-theme="light"] .archiveos-shell .bg-slate-950\/50,
+[data-theme="light"] .archiveos-shell .bg-slate-950\/60,
+[data-theme="light"] .archiveos-shell .bg-slate-950\/80,
+[data-theme="light"] .archiveos-shell .bg-white\/\[0\.03\] {
+  background-color: rgba(255, 255, 255, 0.78) !important;
+}
+
+[data-theme="light"] .archiveos-shell .border-white\/5,
+[data-theme="light"] .archiveos-shell .border-white\/10 {
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+[data-theme="light"] .archiveos-shell .text-white,
+[data-theme="light"] .archiveos-shell .text-slate-100,
+[data-theme="light"] .archiveos-shell .text-slate-200,
+[data-theme="light"] .archiveos-shell .text-slate-300 {
+  color: #172033 !important;
+}
+
+[data-theme="light"] .archiveos-shell .text-slate-400,
+[data-theme="light"] .archiveos-shell .text-slate-500,
+[data-theme="light"] .archiveos-shell .text-slate-600 {
+  color: #64748b !important;
+}
+
+[data-theme="light"] .archiveos-shell input,
+[data-theme="light"] .archiveos-shell textarea,
+[data-theme="light"] .archiveos-shell select {
+  border-color: rgba(15, 23, 42, 0.14) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: #172033 !important;
+}
+
+[data-theme="light"] .panel,
+[data-theme="light"] .metric-card,
+[data-theme="light"] .empty-state,
+[data-theme="light"] .active-operational-chains {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+[data-theme="light"] .panel h2,
+[data-theme="light"] .metric-card strong,
+[data-theme="light"] .empty-state strong {
+  color: #172033;
+}
+
 button,
 input,
 textarea,
