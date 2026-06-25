@@ -57,7 +57,10 @@ export function SettingsPage({
 
           <SettingsRow title="Spring AI" status={data.platformReadiness ? "connected" : "unknown"} open={open === "Spring AI"} onToggle={() => setOpen(open === "Spring AI" ? "" : "Spring AI")}>
             <KeyValue label="AX readiness score" value={data.platformReadiness ? `${data.platformReadiness.score} (${data.platformReadiness.grade})` : "Unknown"} />
-            <KeyValue label="RAG proxy" value={data.endpointHealth?.endpoints.find((endpoint) => endpoint.path.includes("rag"))?.status || "unknown"} />
+            <KeyValue label="Runtime status" value={data.aiRuntime?.status || "unknown"} />
+            <KeyValue label="ChatModel" value={data.aiRuntime ? `${data.aiRuntime.chatModel.model} / ${data.aiRuntime.chatModel.available ? "available" : "unavailable"}` : "unknown"} />
+            <KeyValue label="EmbeddingModel" value={data.aiRuntime ? `${data.aiRuntime.embeddingModel.model} / ${data.aiRuntime.embeddingModel.dimensions}d` : "unknown"} />
+            <KeyValue label="RAG ready" value={data.aiRuntime?.rag.ready ? "yes" : "no"} />
           </SettingsRow>
 
           <SettingsRow title="Database" status={data.knowledge ? "connected" : "unknown"} open={open === "Database"} onToggle={() => setOpen(open === "Database" ? "" : "Database")}>

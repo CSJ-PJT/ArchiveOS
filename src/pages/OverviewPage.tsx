@@ -55,21 +55,32 @@ export function OverviewPage({
       <section className="overview-layout">
         <SectionCard title="Spring AI Engine" eyebrow="RAG / Agent platform core" className="span-12">
           <div className="spring-ai-grid">
-            <MetricCard label="Spring AI Status" value={data.axReadiness?.currentMode === "spring_ai_target" ? "Target" : "Active foundation"} status={data.axReadiness ? "working" : "unknown"} />
-            <MetricCard label="ChatModel" value={data.endpointHealth?.endpoints.find((endpoint) => endpoint.path === "/api/rag/ask")?.status || "unknown"} status={data.endpointHealth?.endpoints.find((endpoint) => endpoint.path === "/api/rag/ask")?.status || "unknown"} />
-            <MetricCard label="EmbeddingModel" value={data.endpointHealth?.endpoints.find((endpoint) => endpoint.path === "/api/rag/search")?.status || "unknown"} status={data.endpointHealth?.endpoints.find((endpoint) => endpoint.path === "/api/rag/search")?.status || "unknown"} />
-            <MetricCard label="VectorStore" value={overview.memorySummary.relations > 0 ? "indexed" : "pending"} status={overview.memorySummary.relations > 0 ? "healthy" : "warning"} />
-            <MetricCard label="pgvector" value={overview.memorySummary.ragReady ? "ready" : "not verified"} status={overview.memorySummary.ragReady ? "healthy" : "warning"} />
-            <MetricCard label="Obsidian Sync" value={data.historian?.lastExport ? formatTimeAgo(data.historian.lastExport.createdAt) : "no export"} status={data.historian?.enabled ? "healthy" : "not_configured"} />
-            <MetricCard label="RAG Ready" value={overview.memorySummary.ragReady ? "Yes" : "No"} status={overview.memorySummary.ragReady ? "healthy" : "warning"} />
-            <MetricCard label="Last RAG Check" value={data.axReadiness?.generatedAt ? formatTimeAgo(data.axReadiness.generatedAt) : "unknown"} status={data.axReadiness ? "healthy" : "unknown"} />
+            <MetricCard label="Spring Boot" value={`${data.aiRuntime?.springBoot.status || "unknown"} ${data.aiRuntime?.springBoot.version || ""}`.trim()} status={data.aiRuntime?.springBoot.status || "unknown"} />
+            <MetricCard label="Spring AI" value={`${data.aiRuntime?.springAi.status || "unknown"} ${data.aiRuntime?.springAi.version || ""}`.trim()} status={data.aiRuntime?.springAi.status || "unknown"} />
+            <MetricCard label="ChatModel" value={data.aiRuntime ? `${data.aiRuntime.chatModel.model} / ${data.aiRuntime.chatModel.available ? "available" : "unavailable"}` : "unknown"} status={data.aiRuntime?.chatModel.available ? "healthy" : data.aiRuntime?.chatModel.configured ? "degraded" : "not_configured"} />
+            <MetricCard label="EmbeddingModel" value={data.aiRuntime ? `${data.aiRuntime.embeddingModel.model} / ${data.aiRuntime.embeddingModel.dimensions}d` : "unknown"} status={data.aiRuntime?.embeddingModel.available ? "healthy" : data.aiRuntime?.embeddingModel.configured ? "degraded" : "not_configured"} />
+            <MetricCard label="VectorStore / pgvector" value={data.aiRuntime ? `${data.aiRuntime.vectorStore.type} / ${data.aiRuntime.vectorStore.databaseConnected ? "connected" : "down"}` : "unknown"} status={data.aiRuntime?.vectorStore.available ? "healthy" : data.aiRuntime?.vectorStore.databaseConnected ? "degraded" : "unavailable"} />
+            <MetricCard label="Vector Index" value={data.aiRuntime ? `${data.aiRuntime.vectorStore.indexReady ? "ready" : "not ready"} / ${data.aiRuntime.vectorStore.indexType}` : "unknown"} status={data.aiRuntime?.vectorStore.indexReady ? "healthy" : "degraded"} />
+            <MetricCard label="Obsidian Sync" value={data.aiRuntime?.knowledge.lastSyncAt ? formatTimeAgo(data.aiRuntime.knowledge.lastSyncAt) : "no sync"} status={data.aiRuntime?.obsidian.reachable ? "healthy" : data.aiRuntime?.obsidian.configured ? "degraded" : "not_configured"} />
+            <MetricCard label="RAG Ready" value={data.aiRuntime?.rag.ready ? "Yes" : "No"} status={data.aiRuntime?.rag.ready ? "healthy" : data.aiRuntime ? "degraded" : "unknown"} />
+            <MetricCard label="Recent Latency" value={data.aiRuntime?.rag.lastLatencyMs != null ? `${data.aiRuntime.rag.lastLatencyMs}ms` : "none"} status={data.aiRuntime?.rag.lastLatencyMs != null ? "healthy" : "unknown"} />
+            <MetricCard label="Recent References" value={data.aiRuntime?.rag.lastReferenceCount ?? 0} status={(data.aiRuntime?.rag.lastReferenceCount ?? 0) > 0 ? "healthy" : "empty"} />
+            <MetricCard label="Last RAG Check" value={data.aiRuntime?.checkedAt ? formatTimeAgo(data.aiRuntime.checkedAt) : "unknown"} status={data.aiRuntime?.status || "unknown"} />
           </div>
         </SectionCard>
 
         <SectionCard title="RAG Pipeline Flow" eyebrow="Spring AI execution path" className="span-12">
           <div className="rag-pipeline">
-            {["Markdown", "Chunking", "Embedding", "VectorStore", "Retriever", "ChatModel", "Answer + References"].map((step, index) => (
-              <div className={`rag-pipeline-step ${index <= 2 || overview.memorySummary.ragReady ? "ready" : "pending"}`} key={step}>
+            {[
+              ["Markdown", data.aiRuntime?.obsidian.reachable],
+              ["Chunking", (data.aiRuntime?.knowledge.chunks ?? 0) > 0],
+              ["Embedding", (data.aiRuntime?.knowledge.embeddedChunks ?? 0) > 0],
+              ["VectorStore", data.aiRuntime?.vectorStore.available],
+              ["Retriever", data.aiRuntime?.vectorStore.indexReady],
+              ["ChatModel", data.aiRuntime?.chatModel.available],
+              ["Answer + References", data.aiRuntime?.rag.ready],
+            ].map(([step, ready]) => (
+              <div className={`rag-pipeline-step ${ready ? "ready" : "pending"}`} key={String(step)}>
                 <span>{step}</span>
               </div>
             ))}
@@ -113,7 +124,7 @@ export function OverviewPage({
               <MetricCard label="Nodes" value={overview.memorySummary.nodes} status="healthy" />
               <MetricCard label="Relations" value={overview.memorySummary.relations} status="healthy" />
               <MetricCard label="Recent Memory" value={overview.memorySummary.recentMemory} status="working" />
-              <MetricCard label="RAG Ready" value={overview.memorySummary.ragReady ? "Yes" : "No"} status={overview.memorySummary.ragReady ? "healthy" : "warning"} />
+              <MetricCard label="RAG Ready" value={data.aiRuntime?.rag.ready ? "Yes" : "No"} status={data.aiRuntime?.rag.ready ? "healthy" : data.aiRuntime ? "degraded" : "unknown"} />
             </div>
           </div>
         </SectionCard>

@@ -41,7 +41,6 @@ export type OverviewViewModel = {
     recentMemory: number;
     staleMemory: number;
     lastSync: string;
-    ragReady: boolean;
   };
   activeChain: {
     task: string;
@@ -187,7 +186,6 @@ export function buildOverviewViewModel(input: {
       recentMemory: knowledge?.latestNodes?.length ?? 0,
       staleMemory: Math.max(0, (knowledge?.totalNodes ?? 0) - (knowledge?.latestNodes?.length ?? 0)),
       lastSync: historian?.lastExport?.createdAt || "Unknown",
-      ragReady: Boolean(knowledge?.totalNodes && knowledge.totalNodes > 0),
     },
     activeChain:
       activeTask === "No active task"

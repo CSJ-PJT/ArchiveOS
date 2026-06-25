@@ -1,6 +1,7 @@
 package com.archiveos.ai.obsidian;
 
 import com.archiveos.ai.config.ArchiveOsAiProperties;
+import com.archiveos.ai.runtime.AiRuntimeState;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -22,6 +23,7 @@ public class ObsidianRagService {
     private final ObsidianJdbcRepository repository;
     private final ObjectProvider<EmbeddingModel> embeddingModel;
     private final ObjectProvider<ChatModel> chatModel;
+    private final AiRuntimeState runtimeState;
 
     public ObsidianRagService(
             ArchiveOsAiProperties properties,
@@ -30,7 +32,8 @@ public class ObsidianRagService {
             ObsidianVaultResolver vaultResolver,
             ObsidianJdbcRepository repository,
             ObjectProvider<EmbeddingModel> embeddingModel,
-            ObjectProvider<ChatModel> chatModel) {
+            ObjectProvider<ChatModel> chatModel,
+            AiRuntimeState runtimeState) {
         this.properties = properties;
         this.vaultReader = vaultReader;
         this.chunker = chunker;
@@ -38,51 +41,65 @@ public class ObsidianRagService {
         this.repository = repository;
         this.embeddingModel = embeddingModel;
         this.chatModel = chatModel;
+        this.runtimeState = runtimeState;
     }
 
     public ObsidianSyncResult syncVault() throws IOException {
-        requireConfigured();
-        Path vaultPath = vaultResolver.resolveVaultPath();
-        if (!vaultPath.toFile().isDirectory()) {
-            return new ObsidianSyncResult(false, 0, 0, 0, 0, 0, 0, "OBSIDIAN_VAULT_PATH not configured");
-        }
-
-        repository.ensureSchema();
-        List<MarkdownDocument> documents = vaultReader.readVault(vaultPath);
-        int created = 0;
-        int updated = 0;
-        int skipped = 0;
-        int deletedChunks = 0;
-        int embeddedChunks = 0;
-
-        for (MarkdownDocument document : documents) {
-            var existing = repository.findByPath(document.relativePath());
-            if (existing != null && existing.contentHash().equals(document.contentHash())) {
-                skipped += 1;
-                continue;
+        Instant startedAt = Instant.now();
+        boolean success = false;
+        int embeddedTotal = 0;
+        Throwable failure = null;
+        try {
+            requireConfigured();
+            Path vaultPath = vaultResolver.resolveVaultPath();
+            if (!vaultPath.toFile().isDirectory()) {
+                return new ObsidianSyncResult(false, 0, 0, 0, 0, 0, 0, "OBSIDIAN_VAULT_PATH not configured");
             }
 
-            long documentId = repository.upsertDocument(document);
-            if (existing == null) created += 1;
-            else updated += 1;
+            repository.ensureSchema();
+            List<MarkdownDocument> documents = vaultReader.readVault(vaultPath);
+            int created = 0;
+            int updated = 0;
+            int skipped = 0;
+            int deletedChunks = 0;
+            int embeddedChunks = 0;
 
-            deletedChunks += repository.deleteChunks(documentId);
-            List<MarkdownChunk> chunks = chunker.chunk(document.content(), properties.obsidianChunkSize(), properties.obsidianChunkOverlap());
+            for (MarkdownDocument document : documents) {
+                var existing = repository.findByPath(document.relativePath());
+                if (existing != null && existing.contentHash().equals(document.contentHash())) {
+                    skipped += 1;
+                    continue;
+                }
 
-            for (int index = 0; index < chunks.size(); index += 1) {
-                MarkdownChunk chunk = chunks.get(index);
-                float[] embedding = embed(chunk.text());
-                repository.insertChunk(documentId, index, chunk, embedding, Map.of(
-                        "file_path", document.relativePath(),
-                        "title", document.title(),
-                        "chunk_size", chunk.text().length(),
-                        "embedding_status", "embedded",
-                        "embedded_at", Instant.now().toString()));
-                embeddedChunks += 1;
+                long documentId = repository.upsertDocument(document);
+                if (existing == null) created += 1;
+                else updated += 1;
+
+                deletedChunks += repository.deleteChunks(documentId);
+                List<MarkdownChunk> chunks = chunker.chunk(document.content(), properties.obsidianChunkSize(), properties.obsidianChunkOverlap());
+
+                for (int index = 0; index < chunks.size(); index += 1) {
+                    MarkdownChunk chunk = chunks.get(index);
+                    float[] embedding = embed(chunk.text());
+                    repository.insertChunk(documentId, index, chunk, embedding, Map.of(
+                            "file_path", document.relativePath(),
+                            "title", document.title(),
+                            "chunk_size", chunk.text().length(),
+                            "embedding_status", "embedded",
+                            "embedded_at", Instant.now().toString()));
+                    embeddedChunks += 1;
+                    embeddedTotal += 1;
+                }
             }
-        }
 
-        return new ObsidianSyncResult(true, documents.size(), created, updated, skipped, deletedChunks, embeddedChunks, null);
+            success = true;
+            return new ObsidianSyncResult(true, documents.size(), created, updated, skipped, deletedChunks, embeddedChunks, null);
+        } catch (IOException | RuntimeException error) {
+            failure = error;
+            throw error;
+        } finally {
+            runtimeState.recordSync(startedAt, success, embeddedTotal, failure);
+        }
     }
 
     public List<Map<String, Object>> listDocuments(int limit) {
@@ -91,21 +108,56 @@ public class ObsidianRagService {
     }
 
     public List<RagReference> search(String query, int limit) {
-        requireConfigured();
-        repository.ensureSchema();
-        return repository.search(embed(query), limit);
+        Instant startedAt = Instant.now();
+        boolean success = false;
+        List<RagReference> references = List.of();
+        Throwable failure = null;
+        try {
+            requireConfigured();
+            repository.ensureSchema();
+            references = repository.search(embed(query), limit);
+            success = true;
+            return references;
+        } catch (RuntimeException error) {
+            failure = error;
+            throw error;
+        } finally {
+            runtimeState.recordSearch(startedAt, success, references.size(), failure);
+        }
     }
 
     public RagAnswer answer(String question) {
-        requireConfigured();
-        List<RagReference> references = search(question, properties.ragMaxReferences());
-        if (references.isEmpty()) {
-            return new RagAnswer("관련 Obsidian 문맥을 찾지 못했습니다. 먼저 /api/obsidian/sync로 문서를 동기화하세요.", List.of());
-        }
+        Instant startedAt = Instant.now();
+        boolean success = false;
+        int referenceCount = 0;
+        Throwable failure = null;
+        try {
+            requireConfigured();
+            List<RagReference> references = search(question, properties.ragMaxReferences());
+            referenceCount = references.size();
+            if (references.isEmpty()) {
+                success = true;
+                return new RagAnswer("관련 Obsidian 문맥을 찾지 못했습니다. 먼저 /api/obsidian/sync로 문서를 동기화하세요.", List.of());
+            }
 
-        String promptText = buildPrompt(question, references);
-        String answer = chatModel.getObject().call(new Prompt(promptText)).getResult().getOutput().getText();
-        return new RagAnswer(answer, references);
+            String promptText = buildPrompt(question, references);
+            long chatStarted = System.currentTimeMillis();
+            String answer;
+            try {
+                answer = chatModel.getObject().call(new Prompt(promptText)).getResult().getOutput().getText();
+                runtimeState.recordChatSuccess(System.currentTimeMillis() - chatStarted);
+            } catch (RuntimeException error) {
+                runtimeState.recordChatFailure(error, System.currentTimeMillis() - chatStarted);
+                throw error;
+            }
+            success = true;
+            return new RagAnswer(answer, references);
+        } catch (RuntimeException error) {
+            failure = error;
+            throw error;
+        } finally {
+            runtimeState.recordAsk(startedAt, success, referenceCount, referenceCount, failure);
+        }
     }
 
     private void requireConfigured() {
@@ -121,7 +173,15 @@ public class ObsidianRagService {
     }
 
     private float[] embed(String text) {
-        return embeddingModel.getObject().embed(text);
+        long started = System.currentTimeMillis();
+        try {
+            float[] vector = embeddingModel.getObject().embed(text);
+            runtimeState.recordEmbeddingSuccess(System.currentTimeMillis() - started);
+            return vector;
+        } catch (RuntimeException error) {
+            runtimeState.recordEmbeddingFailure(error, System.currentTimeMillis() - started);
+            throw error;
+        }
     }
 
     private String buildPrompt(String question, List<RagReference> references) {
