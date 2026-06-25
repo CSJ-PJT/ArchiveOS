@@ -19,7 +19,31 @@ Key APIs:
 
 `OPENAI_API_KEY`, Supabase service role keys, Discord webhooks, and local vault paths remain backend-only. If `OPENAI_API_KEY` is missing, RAG endpoints return HTTP 503 instead of fake success.
 
-For real vector RAG sync/search/ask, configure direct PostgreSQL settings for Supabase PostgreSQL + pgvector or the local docker-compose pgvector database:
+For local development, Docker Compose is the default Vector DB path. It starts PostgreSQL + pgvector and mounts `./docs` as the default read-only Obsidian vault inside the `archiveos-ai` container at `/vault`.
+
+```bash
+cp .env.example .env
+# set OPENAI_API_KEY in .env
+docker compose up --build
+```
+
+Then run:
+
+```bash
+curl -X POST http://localhost:4100/api/obsidian/sync
+curl "http://localhost:4100/api/rag/search?query=ArchiveOS&limit=5"
+curl -X POST http://localhost:4100/api/rag/ask ^
+  -H "Content-Type: application/json" ^
+  -d "{\"question\":\"ArchiveOS AX RAG 구조를 요약해줘\"}"
+```
+
+To use a real Obsidian vault in Docker, set:
+
+```bash
+HOST_OBSIDIAN_VAULT_PATH=C:\path\to\your\vault
+```
+
+Supabase PostgreSQL + pgvector remains an optional production-like target. To use Supabase instead of the local Docker database, override:
 
 ```bash
 DB_HOST=

@@ -56,13 +56,16 @@ Current responsibility split:
 
 ### Database
 
-Default Vector DB:
+Default development Vector DB:
+
+- Docker Compose PostgreSQL + pgvector
+- `docker-compose.yml` starts `pgvector/pgvector:pg16`
+- `archiveos-ai` connects to the compose `postgres` service
+- `./docs` is mounted as `/vault` by default
+
+Optional production-like Vector DB:
 
 - Supabase PostgreSQL + pgvector
-
-Local fallback:
-
-- `docker-compose.yml` PostgreSQL using `pgvector/pgvector:pg16`
 
 Schema includes:
 
@@ -133,11 +136,21 @@ Blocked locally:
   - `DB_PORT`
   - `DB_NAME`
   - `DB_USER`
-  - `DB_PASSWORD`
+- `DB_PASSWORD`
 
 Not executable in this local environment:
 
 - Docker build / compose execution, because `docker` is not installed or not on PATH.
+
+Expected Docker development flow:
+
+```bash
+cp .env.example .env
+# set OPENAI_API_KEY in .env
+docker compose up --build
+curl -X POST http://localhost:4100/api/obsidian/sync
+curl "http://localhost:4100/api/rag/search?query=ArchiveOS&limit=5"
+```
 
 Static Docker assets are present:
 
