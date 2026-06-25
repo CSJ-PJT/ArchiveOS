@@ -55,13 +55,13 @@ const phases: AxRoadmapPhase[] = [
   {
     id: "phase-1",
     title: "Spring AI Foundation",
-    status: "planned",
-    summary: "Add a separate Spring Boot + Spring AI service module for AI/RAG capabilities without disrupting the existing operations dashboard.",
+    status: "partial",
+    summary: "A separate Spring Boot archiveos-ai module now exists with backend-only environment wiring and a health endpoint; direct AI calls remain disabled until keys and approval gates are configured.",
     capabilities: [
-      { label: "Spring Boot 3.x module", status: "planned", evidence: "Target architecture only" },
+      { label: "Spring Boot 3.x module", status: "implemented", evidence: "archiveos-ai Gradle module" },
       { label: "Spring AI ChatModel", status: "planned", evidence: "No OpenAI API integration enabled in ArchiveOS UI" },
       { label: "EmbeddingModel", status: "planned", evidence: "No embedding pipeline active yet" },
-      { label: "AI health endpoint", status: "planned", evidence: "Target endpoint: GET /api/health for archiveos-ai" },
+      { label: "AI health endpoint", status: "implemented", evidence: "archiveos-ai GET /api/health" },
     ],
     risks: [
       "OpenAI/API key handling must remain backend-only.",
@@ -76,12 +76,12 @@ const phases: AxRoadmapPhase[] = [
     id: "phase-2",
     title: "Obsidian Knowledge Platform",
     status: "partial",
-    summary: "Markdown export already exists; the AX target adds ingestion, chunking, incremental sync, embeddings, and RAG retrieval.",
+    summary: "Markdown export, ingestion, chunking, incremental sync, and keyword-safe RAG retrieval now exist; embedding generation is prepared but not activated without backend-only AI configuration.",
     capabilities: [
       { label: "Obsidian Markdown export", status: "implemented", evidence: "Historian export writes Daily/Reports/Batches notes" },
-      { label: "Markdown ingestion", status: "planned", evidence: "Target API: POST /api/obsidian/sync" },
-      { label: "Incremental sync", status: "planned", evidence: "Target design uses path, modified time, and content hash" },
-      { label: "RAG search / ask", status: "planned", evidence: "Target APIs: GET /api/rag/search, POST /api/rag/ask" },
+      { label: "Markdown ingestion", status: "implemented", evidence: "POST /api/obsidian/sync" },
+      { label: "Incremental sync", status: "implemented", evidence: "file_path, last_modified_at, and content_hash" },
+      { label: "RAG search / ask", status: "partial", evidence: "GET /api/rag/search and POST /api/rag/ask return grounded references without LLM calls" },
     ],
     risks: [
       "Vault absolute paths must never be exposed to the frontend.",
@@ -95,13 +95,13 @@ const phases: AxRoadmapPhase[] = [
   {
     id: "phase-3",
     title: "PostgreSQL + pgvector Schema",
-    status: "planned",
-    summary: "Add vector-ready document and chunk tables while preserving existing Supabase operational history tables.",
+    status: "implemented",
+    summary: "Vector-ready Obsidian document and chunk tables are defined alongside existing Supabase operational history tables.",
     capabilities: [
-      { label: "obsidian_documents", status: "planned", evidence: "DDL defined in ARCHITECTURE_FULL.md" },
-      { label: "obsidian_chunks", status: "planned", evidence: "DDL defined with vector(1536)" },
-      { label: "pgvector extension readiness", status: "planned", evidence: "Not validated by current backend health" },
-      { label: "Compatibility with existing Knowledge Graph", status: "planned", evidence: "Needs relationship mapping from chunks to knowledge_nodes" },
+      { label: "obsidian_documents", status: "implemented", evidence: "supabase/schema.sql" },
+      { label: "obsidian_chunks", status: "implemented", evidence: "supabase/schema.sql with embedding vector(1536)" },
+      { label: "pgvector extension readiness", status: "implemented", evidence: "create extension if not exists vector" },
+      { label: "Compatibility with existing Knowledge Graph", status: "partial", evidence: "RAG references coexist with knowledge_nodes; explicit graph edges are a next increment" },
     ],
     risks: [
       "Supabase pgvector extension must be enabled explicitly.",
@@ -146,7 +146,7 @@ export function getAxReadiness(): AxReadiness {
       "Human PM approval remains required before any future CUD or deployment workflow is considered complete.",
     ],
     recommendedNextStep:
-      "Implement the Spring AI service as a separate additive module with health/readiness endpoints before enabling RAG ingestion or AI answers.",
+      "Enable backend-only embedding generation after OpenAI/Spring AI credentials, pgvector migration, and approval guardrails are verified in the target environment.",
   };
 }
 

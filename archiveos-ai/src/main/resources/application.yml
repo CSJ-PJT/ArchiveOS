@@ -1,0 +1,16 @@
+server:
+  port: ${ARCHIVEOS_AI_PORT:4100}
+
+spring:
+  application:
+    name: archiveos-ai
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:archiveos}
+    username: ${DB_USER:archiveos}
+    password: ${DB_PASSWORD:archiveos}
+
+archiveos:
+  openai-api-key: ${OPENAI_API_KEY:}
+  obsidian-vault-path: ${OBSIDIAN_VAULT_PATH:}
+  deploy-compose-file: ${ARCHIVEOS_DEPLOY_COMPOSE_FILE:}
+  health-check-url: ${ARCHIVEOS_HEALTH_CHECK_URL:}

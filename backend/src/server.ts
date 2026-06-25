@@ -34,6 +34,7 @@ import {
 import { getLocalRuntimeStatus } from "./lib/localRuntime.js";
 import { getKpiOverview, normalizeRange } from "./kpi/index.js";
 import { getAgentMeshOverview } from "./mesh/index.js";
+import { answerRagQuestion, listObsidianDocuments, searchRagChunks, syncObsidianVault } from "./obsidian/index.js";
 import { getSecurityStatus, notifySecurityEvent } from "./security/securityModel.js";
 import {
   createPmTask,
@@ -122,6 +123,10 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Endpoint Matrix", method: "GET", path: "/api/health/endpoints", service: "backend", description: "Registered endpoint coverage." },
   { name: "AX Readiness", method: "GET", path: "/api/ax/readiness", service: "ax", description: "AX platform transition readiness from architecture document." },
   { name: "AX Roadmap", method: "GET", path: "/api/ax/roadmap", service: "ax", description: "AX architecture roadmap phases." },
+  { name: "Obsidian Sync", method: "POST", path: "/api/obsidian/sync", service: "knowledge", description: "Markdown vault incremental indexing." },
+  { name: "Obsidian Documents", method: "GET", path: "/api/obsidian/documents", service: "knowledge", description: "Indexed Obsidian document list." },
+  { name: "RAG Search", method: "GET", path: "/api/rag/search", service: "knowledge", description: "Keyword-safe RAG search over indexed chunks." },
+  { name: "RAG Ask", method: "POST", path: "/api/rag/ask", service: "knowledge", description: "Grounded RAG answer placeholder with references." },
   { name: "Dashboard", method: "GET", path: "/api/dashboard", service: "dailyReport", description: "Supabase dashboard data." },
   { name: "Work Logs", method: "GET", path: "/api/work-logs/recent", service: "dailyReport", description: "Recent work logs." },
   { name: "Record Work Log", method: "POST", path: "/api/work-logs", service: "dailyReport", description: "Recording-only work log write." },
@@ -229,6 +234,51 @@ app.get("/api/ax/readiness", (_request, response) => {
 
 app.get("/api/ax/roadmap", (_request, response) => {
   response.json({ data: getAxRoadmap() });
+});
+
+app.post("/api/obsidian/sync", async (_request, response) => {
+  try {
+    response.json({ data: await syncObsidianVault() });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Obsidian sync failed." });
+  }
+});
+
+app.get("/api/obsidian/documents", async (request, response) => {
+  try {
+    const limit = Number(request.query.limit ?? 100);
+    response.json({ data: await listObsidianDocuments(limit) });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Obsidian documents unavailable." });
+  }
+});
+
+app.get("/api/rag/search", async (request, response) => {
+  const query = String(request.query.query ?? "").trim();
+  if (!query) {
+    response.status(400).json({ error: "query is required." });
+    return;
+  }
+
+  try {
+    response.json({ data: await searchRagChunks(query, Number(request.query.limit ?? 10)) });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "RAG search failed." });
+  }
+});
+
+app.post("/api/rag/ask", async (request, response) => {
+  const question = typeof request.body?.question === "string" ? request.body.question.trim() : "";
+  if (!question) {
+    response.status(400).json({ error: "question is required." });
+    return;
+  }
+
+  try {
+    response.json({ data: await answerRagQuestion(question) });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "RAG ask failed." });
+  }
 });
 
 app.get("/api/platform/readiness", async (_request, response) => {

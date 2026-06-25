@@ -1,0 +1,12 @@
+node_modules
+dist
+backend/node_modules
+backend/dist
+archiveos-ai/build
+.git
+*.log
+.env
+.env.local
+tools/runtime/logs
+tools/runtime/pids
+tools/runtime/runtime.config.json

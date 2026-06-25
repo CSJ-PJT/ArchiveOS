@@ -1,4 +1,5 @@
 create extension if not exists pgcrypto;
+create extension if not exists vector;
 
 do $$
 begin
@@ -258,6 +259,28 @@ create table if not exists public.pm_task_events (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.obsidian_documents (
+  id bigserial primary key,
+  file_path text not null unique,
+  title text,
+  content_hash varchar(128) not null,
+  last_modified_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.obsidian_chunks (
+  id bigserial primary key,
+  document_id bigint not null references public.obsidian_documents(id) on delete cascade,
+  chunk_index integer not null,
+  heading text,
+  chunk_text text not null,
+  embedding vector(1536),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  constraint obsidian_chunks_document_chunk_key unique (document_id, chunk_index)
+);
+
 alter table public.daily_reports add column if not exists historian_exported boolean not null default false;
 alter table public.daily_reports add column if not exists historian_note_path text;
 alter table public.daily_reports add column if not exists historian_export_reason text;
@@ -333,6 +356,10 @@ create index if not exists pm_task_decisions_task_id_idx on public.pm_task_decis
 create index if not exists pm_task_decisions_created_at_idx on public.pm_task_decisions(created_at desc);
 create index if not exists pm_task_events_task_id_idx on public.pm_task_events(task_id);
 create index if not exists pm_task_events_event_type_created_at_idx on public.pm_task_events(event_type, created_at desc);
+create index if not exists obsidian_documents_updated_at_idx on public.obsidian_documents(updated_at desc);
+create index if not exists obsidian_documents_file_path_idx on public.obsidian_documents(file_path);
+create index if not exists obsidian_chunks_document_id_idx on public.obsidian_chunks(document_id);
+create index if not exists obsidian_chunks_metadata_gin_idx on public.obsidian_chunks using gin(metadata);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -374,6 +401,12 @@ before update on public.pm_tasks
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_obsidian_documents_updated_at on public.obsidian_documents;
+create trigger set_obsidian_documents_updated_at
+before update on public.obsidian_documents
+for each row
+execute function public.set_updated_at();
+
 alter table public.agents enable row level security;
 alter table public.tasks enable row level security;
 alter table public.work_logs enable row level security;
@@ -388,6 +421,8 @@ alter table public.knowledge_edges enable row level security;
 alter table public.pm_tasks enable row level security;
 alter table public.pm_task_decisions enable row level security;
 alter table public.pm_task_events enable row level security;
+alter table public.obsidian_documents enable row level security;
+alter table public.obsidian_chunks enable row level security;
 
 drop policy if exists "Allow public read agents" on public.agents;
 create policy "Allow public read agents"
@@ -487,6 +522,20 @@ for select
 to anon, authenticated
 using (true);
 
+drop policy if exists "Allow public read Obsidian documents" on public.obsidian_documents;
+create policy "Allow public read Obsidian documents"
+on public.obsidian_documents
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "Allow public read Obsidian chunks" on public.obsidian_chunks;
+create policy "Allow public read Obsidian chunks"
+on public.obsidian_chunks
+for select
+to anon, authenticated
+using (true);
+
 grant usage on schema public to anon, authenticated;
 grant select on public.agents to anon, authenticated;
 grant select on public.tasks to anon, authenticated;
@@ -502,3 +551,5 @@ grant select on public.knowledge_edges to anon, authenticated;
 grant select on public.pm_tasks to anon, authenticated;
 grant select on public.pm_task_decisions to anon, authenticated;
 grant select on public.pm_task_events to anon, authenticated;
+grant select on public.obsidian_documents to anon, authenticated;
+grant select on public.obsidian_chunks to anon, authenticated;
