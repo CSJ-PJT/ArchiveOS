@@ -8,6 +8,7 @@ import {
   createWorkLog,
   decidePmTask,
   getDashboardData,
+  getAxReadiness,
   getBackendHealth,
   getEndpointHealth,
   getHistorianStatus,
@@ -53,6 +54,8 @@ import {
   type EndpointHealth,
   type RelatedKnowledgeGroup,
   type PlatformHealth,
+  type AxReadiness,
+  type AxPhaseStatus,
   type PlatformReadiness,
   type PublicAccessStatus,
   type RuntimeVersion,
@@ -377,6 +380,7 @@ function OperationsLayout({
   const [kpiRange, setKpiRange] = useState<KpiRange>("7d");
   const [kpiError, setKpiError] = useState<string | null>(null);
   const [platformHealth, setPlatformHealth] = useState<PlatformHealth | null>(null);
+  const [axReadiness, setAxReadiness] = useState<AxReadiness | null>(null);
   const [endpointHealth, setEndpointHealth] = useState<EndpointHealth | null>(null);
   const [platformReadiness, setPlatformReadiness] = useState<PlatformReadiness | null>(null);
   const [publicAccessStatus, setPublicAccessStatus] = useState<PublicAccessStatus | null>(null);
@@ -568,14 +572,16 @@ function OperationsLayout({
     }
 
     try {
-      const [health, endpoints, readiness] = await Promise.all([
+      const [health, endpoints, readiness, ax] = await Promise.all([
         getPlatformHealth(),
         getEndpointHealth(),
         getPlatformReadiness(),
+        getAxReadiness(),
       ]);
       setPlatformHealth(health);
       setEndpointHealth(endpoints);
       setPlatformReadiness(readiness);
+      setAxReadiness(ax);
       const [publicAccess, version, security] = await Promise.all([
         getPublicAccessStatus(),
         getRuntimeVersion(),
@@ -701,6 +707,7 @@ function OperationsLayout({
           queueSummary={queueSummary}
           pmTasks={pmTasks}
           queueError={queueError}
+          axReadiness={axReadiness}
         />
       ) : null}
 
@@ -795,6 +802,7 @@ function OperationsLayout({
           platformHealthError={platformHealthError}
           runtimeVersion={runtimeVersion}
           securityStatus={securityStatus}
+          axReadiness={axReadiness}
           queueSummary={queueSummary}
           queueError={queueError}
         />
@@ -884,6 +892,7 @@ function DashboardView({
   platformHealth,
   endpointHealth,
   platformReadiness,
+  axReadiness,
   platformHealthError,
   publicAccessStatus,
   queueSummary,
@@ -909,6 +918,7 @@ function DashboardView({
   platformHealth: PlatformHealth | null;
   endpointHealth: EndpointHealth | null;
   platformReadiness: PlatformReadiness | null;
+  axReadiness: AxReadiness | null;
   platformHealthError: string | null;
   publicAccessStatus: PublicAccessStatus | null;
   queueSummary: QueueSummary | null;
@@ -939,6 +949,7 @@ function DashboardView({
           />
 
           <QueueSummaryPanel summary={queueSummary} tasks={pmTasks} error={queueError} compact />
+          <AxReadinessPanel axReadiness={axReadiness} compact />
 
           <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
             <DashboardAlerts
@@ -3059,6 +3070,89 @@ function IntegrationCard({
   );
 }
 
+function AxReadinessPanel({ axReadiness, compact = false }: { axReadiness: AxReadiness | null; compact?: boolean }) {
+  const phasePreview = compact ? axReadiness?.phases.slice(0, 3) ?? [] : axReadiness?.phases ?? [];
+
+  return (
+    <Panel title={compact ? "AX Platform Readiness" : "AX Transformation Roadmap"}>
+      <div className="grid gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Architecture source</p>
+            <p className="mt-1 text-sm leading-6 text-slate-400">
+              {axReadiness
+                ? "AX 교체 설계 문서를 현재 ArchiveOS 운영 플랫폼과 연결해 단계별 준비도를 추적합니다."
+                : "AX readiness endpoint is loading or unavailable."}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge className="bg-cyan-500/15 text-cyan-200 ring-cyan-400/25">
+              {axReadiness ? `Score ${axReadiness.score}` : "unknown"}
+            </StatusBadge>
+            <StatusBadge className="bg-violet-500/15 text-violet-200 ring-violet-400/25">
+              {axReadiness ? `Grade ${axReadiness.grade}` : "not loaded"}
+            </StatusBadge>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <RuntimeMetric label="Current mode" value={axReadiness?.currentMode ?? "unknown"} />
+          <RuntimeMetric label="Target mode" value={axReadiness?.targetMode ?? "Spring AI AX Platform"} />
+          <RuntimeMetric label="Architecture commit" value={axReadiness?.architectureCommit ?? "7ecbbb7"} copyable={Boolean(axReadiness?.architectureCommit)} />
+          <RuntimeMetric label="Architecture source" value={axReadiness?.architectureSource ?? "docs/ARCHITECTURE_FULL.md"} copyable />
+        </div>
+
+        {axReadiness ? (
+          <p className="rounded border border-cyan-300/20 bg-cyan-300/[0.04] p-3 text-sm leading-6 text-cyan-50">
+            {axReadiness.summary}
+          </p>
+        ) : (
+          <EmptyState title="AX readiness not loaded" detail="Restart the backend from latest main if /api/ax/readiness is missing." muted />
+        )}
+
+        {phasePreview.length ? (
+          <div className={`grid gap-3 ${compact ? "md:grid-cols-3" : "xl:grid-cols-2"}`}>
+            {phasePreview.map((phase) => (
+              <article key={phase.id} className="rounded-md border border-white/10 bg-black/20 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-white">{phase.title}</p>
+                  <StatusBadge className={getAxPhaseStatusStyle(phase.status)}>{phase.status}</StatusBadge>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-400">{phase.summary}</p>
+                <div className="mt-3 grid gap-2">
+                  {phase.capabilities.slice(0, compact ? 2 : 4).map((capability) => (
+                    <div key={capability.label} className="flex items-start justify-between gap-3 rounded border border-white/10 bg-slate-950/50 p-2">
+                      <span className="text-xs text-slate-300">{capability.label}</span>
+                      <StatusBadge className={getAxPhaseStatusStyle(capability.status)}>{capability.status}</StatusBadge>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : null}
+
+        {!compact && axReadiness ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            <article className="rounded-md border border-white/10 bg-black/20 p-4">
+              <p className="text-sm font-semibold text-white">Guardrails</p>
+              <ul className="mt-3 grid gap-2 text-xs leading-5 text-slate-400">
+                {axReadiness.guardrails.map((guardrail) => (
+                  <li key={guardrail}>- {guardrail}</li>
+                ))}
+              </ul>
+            </article>
+            <article className="rounded-md border border-white/10 bg-black/20 p-4">
+              <p className="text-sm font-semibold text-white">Recommended Next Step</p>
+              <p className="mt-3 text-sm leading-6 text-slate-300">{axReadiness.recommendedNextStep}</p>
+            </article>
+          </div>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
 function SettingsView({
   backendReachability,
   commandRunsReachability,
@@ -3074,6 +3168,7 @@ function SettingsView({
   platformHealthError,
   runtimeVersion,
   securityStatus,
+  axReadiness,
   queueSummary,
   queueError,
 }: {
@@ -3091,6 +3186,7 @@ function SettingsView({
   platformHealthError: string | null;
   runtimeVersion: RuntimeVersion | null;
   securityStatus: SecurityStatus | null;
+  axReadiness: AxReadiness | null;
   queueSummary: QueueSummary | null;
   queueError: string | null;
 }) {
@@ -3126,6 +3222,8 @@ function SettingsView({
           </p>
         </div>
       </Panel>
+
+      <AxReadinessPanel axReadiness={axReadiness} />
 
       <Panel title="Remote Access">
         <div className="grid gap-4">
@@ -5324,6 +5422,13 @@ function getIntegrationStatusStyle(status: "configured" | "not_configured" | "un
   if (status === "configured") return "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25";
   if (status === "not_configured") return "bg-slate-500/15 text-slate-200 ring-slate-400/20";
   return "bg-amber-500/15 text-amber-200 ring-amber-400/25";
+}
+
+function getAxPhaseStatusStyle(status: AxPhaseStatus) {
+  if (status === "implemented") return "bg-emerald-500/15 text-emerald-200 ring-emerald-400/25";
+  if (status === "partial") return "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25";
+  if (status === "planned") return "bg-slate-500/15 text-slate-200 ring-slate-400/20";
+  return "bg-rose-500/15 text-rose-200 ring-rose-400/25";
 }
 
 function getSecurityLevelStyle(status: SecurityStatus["securityLevel"] | "unknown") {
