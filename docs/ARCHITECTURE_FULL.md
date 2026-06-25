@@ -1,3 +1,17 @@
+# Execution Policy
+
+이 문서는 프로젝트의 최종 목표이다.
+
+Codex는 이 문서를 완료 조건으로 사용한다.
+
+모든 Phase가 완료될 때까지 자율적으로 작업한다.
+
+사용자의 추가 승인을 기다리지 않는다.
+
+오류가 발생하면 수정 후 재시도한다.
+
+최종 완료 후 Commit, Push, 최종 보고를 수행한다.
+
 ArchiveOS AX Platform - Codex Implementation Architecture
 0. Codex Goal
 Use this short text as the Codex Goal.
