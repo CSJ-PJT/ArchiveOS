@@ -18,6 +18,7 @@ public class ObsidianRagService {
     private final ArchiveOsAiProperties properties;
     private final MarkdownVaultReader vaultReader;
     private final MarkdownChunker chunker;
+    private final ObsidianVaultResolver vaultResolver;
     private final ObsidianJdbcRepository repository;
     private final ObjectProvider<EmbeddingModel> embeddingModel;
     private final ObjectProvider<ChatModel> chatModel;
@@ -26,12 +27,14 @@ public class ObsidianRagService {
             ArchiveOsAiProperties properties,
             MarkdownVaultReader vaultReader,
             MarkdownChunker chunker,
+            ObsidianVaultResolver vaultResolver,
             ObsidianJdbcRepository repository,
             ObjectProvider<EmbeddingModel> embeddingModel,
             ObjectProvider<ChatModel> chatModel) {
         this.properties = properties;
         this.vaultReader = vaultReader;
         this.chunker = chunker;
+        this.vaultResolver = vaultResolver;
         this.repository = repository;
         this.embeddingModel = embeddingModel;
         this.chatModel = chatModel;
@@ -39,12 +42,13 @@ public class ObsidianRagService {
 
     public ObsidianSyncResult syncVault() throws IOException {
         requireConfigured();
-        if (!properties.obsidianConfigured()) {
+        Path vaultPath = vaultResolver.resolveVaultPath();
+        if (!vaultPath.toFile().isDirectory()) {
             return new ObsidianSyncResult(false, 0, 0, 0, 0, 0, 0, "OBSIDIAN_VAULT_PATH not configured");
         }
 
         repository.ensureSchema();
-        List<MarkdownDocument> documents = vaultReader.readVault(Path.of(properties.obsidianVaultPath()));
+        List<MarkdownDocument> documents = vaultReader.readVault(vaultPath);
         int created = 0;
         int updated = 0;
         int skipped = 0;

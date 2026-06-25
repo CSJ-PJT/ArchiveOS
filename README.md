@@ -43,6 +43,16 @@ To use a real Obsidian vault in Docker, set:
 HOST_OBSIDIAN_VAULT_PATH=C:\path\to\your\vault
 ```
 
+If `OBSIDIAN_VAULT_PATH` is not provided for local `archiveos-ai` execution, ArchiveOS AI now auto-discovers a usable Markdown vault. Discovery priority is:
+
+1. Existing `OBSIDIAN_VAULT_PATH`
+2. Project `docs`
+3. User folders named Obsidian, Vault, Notes, ArchiveOS, DeepStake3D, or ETC
+4. Folders containing `.obsidian`
+5. Markdown folders with ArchiveOS/DeepStake3D/AX/Spring AI/RAG content
+
+The current local auto-selection selected the project `docs` directory because it contains the highest-scoring ArchiveOS AX/RAG markdown set.
+
 Supabase PostgreSQL + pgvector remains an optional production-like target. To use Supabase instead of the local Docker database, override:
 
 ```bash
