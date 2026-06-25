@@ -125,6 +125,10 @@ Completed locally:
 - OpenAI EmbeddingModel smoke call succeeded and returned 1536 dimensions
 - Obsidian vault path was found through local backend env and copied to `archiveos-ai/.env`
 - Obsidian vault exists and contains Markdown files
+- Obsidian vault auto-discovery was implemented in `archiveos-ai`
+- Local auto-discovery selected the project `docs` directory as the highest-scoring ArchiveOS AX/RAG Markdown vault
+- OpenAI ChatModel smoke call succeeded again after vault discovery changes
+- OpenAI EmbeddingModel smoke call succeeded again and returned 1536 dimensions
 
 Blocked locally:
 
