@@ -3,6 +3,8 @@ dist
 .env
 .env.local
 .DS_Store
+archiveos-ai/.gradle/
+archiveos-ai/build/
 *.tsbuildinfo
 *.log
 tools/runtime/runtime.config.json

@@ -8,9 +8,24 @@ spring:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:archiveos}
     username: ${DB_USER:archiveos}
     password: ${DB_PASSWORD:archiveos}
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:archiveos-disabled-key}
+      chat:
+        options:
+          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+      embedding:
+        options:
+          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+    vectorstore:
+      pgvector:
+        initialize-schema: false
 
 archiveos:
   openai-api-key: ${OPENAI_API_KEY:}
   obsidian-vault-path: ${OBSIDIAN_VAULT_PATH:}
+  obsidian-chunk-size: ${OBSIDIAN_CHUNK_SIZE:1200}
+  obsidian-chunk-overlap: ${OBSIDIAN_CHUNK_OVERLAP:160}
+  rag-max-references: ${RAG_MAX_REFERENCES:5}
   deploy-compose-file: ${ARCHIVEOS_DEPLOY_COMPOSE_FILE:}
   health-check-url: ${ARCHIVEOS_HEALTH_CHECK_URL:}

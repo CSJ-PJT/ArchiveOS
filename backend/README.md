@@ -1,5 +1,26 @@
 # ArchiveOS Backend
 
+## Current RAG Boundary
+
+The Node/Express backend keeps PM operations, Agent state, Dashboard, Discord, MCP visibility, and existing Supabase operational data.
+
+RAG and Obsidian ingestion are delegated to the Spring Boot `archiveos-ai` module.
+
+Set:
+
+```bash
+ARCHIVEOS_AI_BASE_URL=http://localhost:4100
+```
+
+The Node endpoints below proxy to `archiveos-ai`:
+
+- `POST /api/obsidian/sync`
+- `GET /api/obsidian/documents`
+- `GET /api/rag/search?query=...`
+- `POST /api/rag/ask`
+
+If `archiveos-ai` is unavailable or not configured, the backend returns a clear error instead of generating placeholder RAG output.
+
 ## AX / Obsidian / RAG APIs
 
 The backend now exposes the AX transition layer defined in `docs/ARCHITECTURE_FULL.md`.

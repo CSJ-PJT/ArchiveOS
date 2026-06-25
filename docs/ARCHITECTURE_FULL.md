@@ -1,5 +1,22 @@
 # Execution Policy (Mandatory)
 
+## Current Implementation Boundary
+
+ArchiveOS uses two backend responsibilities:
+
+- Node/Express backend: PM operations, Agent state, MCP visibility, Dashboard, Discord, and existing Supabase operational data.
+- `archiveos-ai` Spring Boot module: Obsidian ingestion, heading-aware chunking, OpenAI embeddings, pgvector storage, vector similarity search, RAG answer generation, and future AI Agent logic.
+
+Default Vector DB:
+
+- Supabase PostgreSQL + pgvector
+
+Local fallback:
+
+- Docker Compose PostgreSQL using `pgvector/pgvector:pg16`
+
+RAG must not return fake success. If `OPENAI_API_KEY` is not configured, RAG sync/search/ask must return HTTP 503 or a clearly disabled response.
+
 ## Continuous Execution
 
 이 문서는 작업의 최종 목표가 달성될 때까지 반드시 계속 수행한다.

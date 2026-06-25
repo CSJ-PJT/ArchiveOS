@@ -1,86 +1,138 @@
 # ArchiveOS AX Implementation Status
 
-ArchiveOS now tracks the `ARCHITECTURE_FULL.md` AX target as an executable roadmap.
+Baseline commit before this phase:
+
+- `3d1b89d9c8c0fd97d5ca3a244de694323fafa05e`
+
+Current responsibility split:
+
+- Node/Express backend: PM operations, Agent state, MCP visibility, Dashboard, Discord, existing Supabase operational data.
+- `archiveos-ai` Spring Boot module: Obsidian ingestion, Markdown chunking, embedding, pgvector storage, vector search, RAG answer generation, future AI Agent layer.
 
 ## Implemented
 
-- AX readiness API
-  - `GET /api/ax/readiness`
-  - `GET /api/ax/roadmap`
-- Spring Boot module skeleton
-  - `archiveos-ai`
-  - Java 21
-  - Spring Boot 3.x
+### Spring AI module
+
+- Java 21 Spring Boot service: `archiveos-ai`
+- Gradle Wrapper included: `archiveos-ai/gradlew`, `archiveos-ai/gradlew.bat`
+- Spring AI BOM configured
+- OpenAI ChatModel dependency configured
+- OpenAI EmbeddingModel dependency configured
+- PgVectorStore dependency configured
+- Runtime status endpoint:
   - `GET /api/health`
-- Obsidian ingestion foundation
-  - `POST /api/obsidian/sync`
-  - `GET /api/obsidian/documents`
-  - content hash based incremental sync
-  - Markdown heading-aware chunking
-  - code block preservation
-- RAG MVP
-  - `GET /api/rag/search?query=...`
-  - `POST /api/rag/ask`
-  - reference-first responses without frontend OpenAI exposure
-- PostgreSQL / pgvector schema foundation
-  - `obsidian_documents`
-  - `obsidian_chunks`
-  - `embedding vector(1536)`
-- Docker assets
-  - root frontend `Dockerfile`
-  - backend `Dockerfile`
-  - `archiveos-ai/Dockerfile`
-  - `docker-compose.yml`
+  - `GET /api/ai/runtime`
 
-## Intentionally Guarded
+### Obsidian ingestion
 
-- OpenAI calls are not exposed to the frontend.
-- `OPENAI_API_KEY`, `DISCORD_WEBHOOK_URL`, service role keys, and vault paths remain backend-only.
-- Codex, MCP, shell, deployment, and process control are not exposed as UI execution controls.
-- RAG ask currently returns grounded references and a deterministic answer message until Spring AI credentials and approval gates are configured.
+- `POST /api/obsidian/sync`
+- `GET /api/obsidian/documents`
+- Reads local Markdown vault from `OBSIDIAN_VAULT_PATH`
+- Heading-aware Markdown chunking
+- Code-block aware section splitting
+- Content hash based incremental sync
+- Re-indexes changed documents only
 
-## Required Environment
+### Vector RAG
 
-Backend:
+- Embeds chunks with Spring AI `EmbeddingModel`
+- Stores embeddings in `public.obsidian_chunks.embedding vector(1536)`
+- Uses PostgreSQL / pgvector cosine similarity search
+- `GET /api/rag/search?query=...`
+- `POST /api/rag/ask`
+- RAG answers are generated through Spring AI `ChatModel`
+- Answers include references:
+  - title
+  - path
+  - heading
+  - score
+
+### Safe disabled mode
+
+- If `OPENAI_API_KEY` is missing:
+  - server startup still succeeds
+  - RAG sync/search/ask returns HTTP 503
+  - no fake successful RAG answer is returned
+
+### Database
+
+Default Vector DB:
+
+- Supabase PostgreSQL + pgvector
+
+Local fallback:
+
+- `docker-compose.yml` PostgreSQL using `pgvector/pgvector:pg16`
+
+Schema includes:
+
+- `public.obsidian_documents`
+- `public.obsidian_chunks`
+- HNSW cosine index
+- `public.match_obsidian_chunks(query_embedding vector(1536), match_count integer)`
+
+### Node backend integration
+
+Node/Express no longer owns RAG logic.
+
+The existing Node endpoints now proxy to `archiveos-ai`:
+
+- `POST /api/obsidian/sync`
+- `GET /api/obsidian/documents`
+- `GET /api/rag/search`
+- `POST /api/rag/ask`
+
+Set:
+
+```bash
+ARCHIVEOS_AI_BASE_URL=http://localhost:4100
+```
+
+## Required environment
+
+For real RAG execution:
 
 ```bash
 OPENAI_API_KEY=
 OBSIDIAN_VAULT_PATH=
-OBSIDIAN_CHUNK_SIZE=1200
-OBSIDIAN_CHUNK_OVERLAP=160
-DB_HOST=localhost
+DB_HOST=
 DB_PORT=5432
-DB_NAME=archiveos
-DB_USER=archiveos
-DB_PASSWORD=archiveos
-ARCHIVEOS_DEPLOY_COMPOSE_FILE=../docker-compose.yml
-ARCHIVEOS_HEALTH_CHECK_URL=http://localhost:4000/health
+DB_NAME=
+DB_USER=
+DB_PASSWORD=
+ARCHIVEOS_AI_BASE_URL=http://localhost:4100
 ```
 
-Spring AI module:
+Supabase PostgreSQL is the recommended default target for production-like use.
 
-```bash
-cd archiveos-ai
-gradle bootRun
-```
+## Validation status
 
-Docker:
+Completed locally:
 
-```bash
-docker compose build
-docker compose up
-```
+- `npm run test`
+- `npm run build`
+- `cd backend && npm run test`
+- `cd backend && npm run typecheck`
+- `cd backend && npm run build`
+- `cd archiveos-ai && .\gradlew.bat test --no-daemon`
+- `cd archiveos-ai && .\gradlew.bat bootJar --no-daemon`
+- `archiveos-ai` jar startup smoke test
+- `POST /api/rag/ask` without key returns HTTP 503
 
-## Validation Notes
+Not executable in this local environment:
 
-The current local machine has Java 21 available.
+- Docker build / compose execution, because `docker` is not installed or not on PATH.
 
-Local validation status:
+Static Docker assets are present:
 
-- Frontend build: available through `npm run build`
-- Backend typecheck/build/test: available through backend npm scripts
-- Java runtime: available
-- Gradle CLI: not currently available in PATH
-- Docker CLI: not currently available in PATH
+- root frontend `Dockerfile`
+- backend `Dockerfile`
+- `archiveos-ai/Dockerfile`
+- `docker-compose.yml`
 
-The Docker and Spring module files are committed so the same repository can run `gradle test`, `docker compose build`, and `docker compose up` once Gradle/Docker are installed or exposed in PATH.
+## Remaining work
+
+- Run real Obsidian sync with a configured vault.
+- Verify Supabase pgvector connection with real DB credentials.
+- Verify real OpenAI embeddings and ChatModel answer generation with `OPENAI_API_KEY`.
+- Add richer integration tests using Testcontainers or a dedicated pgvector test database.

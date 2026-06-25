@@ -34,7 +34,6 @@ import {
 import { getLocalRuntimeStatus } from "./lib/localRuntime.js";
 import { getKpiOverview, normalizeRange } from "./kpi/index.js";
 import { getAgentMeshOverview } from "./mesh/index.js";
-import { answerRagQuestion, listObsidianDocuments, searchRagChunks, syncObsidianVault } from "./obsidian/index.js";
 import { getSecurityStatus, notifySecurityEvent } from "./security/securityModel.js";
 import {
   createPmTask,
@@ -123,10 +122,10 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Endpoint Matrix", method: "GET", path: "/api/health/endpoints", service: "backend", description: "Registered endpoint coverage." },
   { name: "AX Readiness", method: "GET", path: "/api/ax/readiness", service: "ax", description: "AX platform transition readiness from architecture document." },
   { name: "AX Roadmap", method: "GET", path: "/api/ax/roadmap", service: "ax", description: "AX architecture roadmap phases." },
-  { name: "Obsidian Sync", method: "POST", path: "/api/obsidian/sync", service: "knowledge", description: "Markdown vault incremental indexing." },
-  { name: "Obsidian Documents", method: "GET", path: "/api/obsidian/documents", service: "knowledge", description: "Indexed Obsidian document list." },
-  { name: "RAG Search", method: "GET", path: "/api/rag/search", service: "knowledge", description: "Keyword-safe RAG search over indexed chunks." },
-  { name: "RAG Ask", method: "POST", path: "/api/rag/ask", service: "knowledge", description: "Grounded RAG answer placeholder with references." },
+  { name: "Obsidian Sync", method: "POST", path: "/api/obsidian/sync", service: "knowledge", description: "Spring AI Obsidian vault sync proxy." },
+  { name: "Obsidian Documents", method: "GET", path: "/api/obsidian/documents", service: "knowledge", description: "Spring AI indexed Obsidian document proxy." },
+  { name: "RAG Search", method: "GET", path: "/api/rag/search", service: "knowledge", description: "Spring AI pgvector similarity search proxy." },
+  { name: "RAG Ask", method: "POST", path: "/api/rag/ask", service: "knowledge", description: "Spring AI ChatModel grounded RAG answer proxy." },
   { name: "Dashboard", method: "GET", path: "/api/dashboard", service: "dailyReport", description: "Supabase dashboard data." },
   { name: "Work Logs", method: "GET", path: "/api/work-logs/recent", service: "dailyReport", description: "Recent work logs." },
   { name: "Record Work Log", method: "POST", path: "/api/work-logs", service: "dailyReport", description: "Recording-only work log write." },
@@ -238,18 +237,18 @@ app.get("/api/ax/roadmap", (_request, response) => {
 
 app.post("/api/obsidian/sync", async (_request, response) => {
   try {
-    response.json({ data: await syncObsidianVault() });
+    response.status(200).json(await proxyArchiveOsAi("/api/obsidian/sync", { method: "POST" }));
   } catch (error) {
-    response.status(500).json({ error: error instanceof Error ? error.message : "Obsidian sync failed." });
+    sendProxyError(response, error, "Obsidian sync failed.");
   }
 });
 
 app.get("/api/obsidian/documents", async (request, response) => {
   try {
     const limit = Number(request.query.limit ?? 100);
-    response.json({ data: await listObsidianDocuments(limit) });
+    response.status(200).json(await proxyArchiveOsAi(`/api/obsidian/documents?limit=${encodeURIComponent(String(limit))}`));
   } catch (error) {
-    response.status(500).json({ error: error instanceof Error ? error.message : "Obsidian documents unavailable." });
+    sendProxyError(response, error, "Obsidian documents unavailable.");
   }
 });
 
@@ -261,9 +260,10 @@ app.get("/api/rag/search", async (request, response) => {
   }
 
   try {
-    response.json({ data: await searchRagChunks(query, Number(request.query.limit ?? 10)) });
+    const params = new URLSearchParams({ query, limit: String(Number(request.query.limit ?? 10)) });
+    response.status(200).json(await proxyArchiveOsAi(`/api/rag/search?${params.toString()}`));
   } catch (error) {
-    response.status(500).json({ error: error instanceof Error ? error.message : "RAG search failed." });
+    sendProxyError(response, error, "RAG search failed.");
   }
 });
 
@@ -275,9 +275,13 @@ app.post("/api/rag/ask", async (request, response) => {
   }
 
   try {
-    response.json({ data: await answerRagQuestion(question) });
+    response.status(200).json(await proxyArchiveOsAi("/api/rag/ask", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question }),
+    }));
   } catch (error) {
-    response.status(500).json({ error: error instanceof Error ? error.message : "RAG ask failed." });
+    sendProxyError(response, error, "RAG ask failed.");
   }
 });
 
@@ -1830,4 +1834,39 @@ function truncateOutput(value: string) {
   }
 
   return `${value.slice(0, maxLength)}\n[output truncated]`;
+}
+
+async function proxyArchiveOsAi(path: string, init?: RequestInit) {
+  const baseUrl = process.env.ARCHIVEOS_AI_BASE_URL?.trim() || "http://localhost:4100";
+  const response = await fetch(`${baseUrl}${path}`, init);
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (!response.ok) {
+    const message = typeof payload?.error === "string" ? payload.error : `ArchiveOS AI request failed with status ${response.status}.`;
+    throw new ArchiveOsAiProxyError(message, response.status, payload);
+  }
+
+  return payload;
+}
+
+function sendProxyError(response: any, error: unknown, fallback: string) {
+  if (error instanceof ArchiveOsAiProxyError) {
+    response.status(error.statusCode).json({ error: error.message, details: error.payload });
+    return;
+  }
+
+  response.status(502).json({
+    error: error instanceof Error ? error.message : fallback,
+    details: "ArchiveOS AI module is unavailable or not configured.",
+  });
+}
+
+class ArchiveOsAiProxyError extends Error {
+  constructor(
+    message: string,
+    public readonly statusCode: number,
+    public readonly payload: unknown,
+  ) {
+    super(message);
+  }
 }

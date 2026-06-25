@@ -1,5 +1,31 @@
 # ArchiveOS
 
+## Current AX RAG Implementation
+
+ArchiveOS now separates operational PM visibility from AI/RAG execution.
+
+- Node/Express backend: PM dashboard, runtime visibility, Discord, MCP status, existing Supabase operational data.
+- `archiveos-ai`: Spring Boot + Spring AI service for Obsidian ingestion, embeddings, pgvector search, and RAG answers.
+- Default Vector DB: Supabase PostgreSQL with pgvector.
+- Local fallback Vector DB: `docker-compose.yml` postgres service using `pgvector/pgvector:pg16`.
+
+Key APIs:
+
+- `POST /api/obsidian/sync`
+- `GET /api/obsidian/documents`
+- `GET /api/rag/search?query=...`
+- `POST /api/rag/ask`
+- `GET /api/ai/runtime` on `archiveos-ai`
+
+`OPENAI_API_KEY`, Supabase service role keys, Discord webhooks, and local vault paths remain backend-only. If `OPENAI_API_KEY` is missing, RAG endpoints return HTTP 503 instead of fake success.
+
+Run Java tests:
+
+```bash
+cd archiveos-ai
+.\gradlew.bat test --no-daemon
+```
+
 ## AX Platform Extension
 
 ArchiveOS now includes an AX roadmap implementation layer based on `docs/ARCHITECTURE_FULL.md`.
