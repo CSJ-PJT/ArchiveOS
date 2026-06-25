@@ -86,6 +86,7 @@ type DashboardData = {
 };
 
 type AppView = "dashboard" | "decisions" | "operators" | "timeline" | "knowledge" | "mesh" | "kpi" | "settings";
+type ThemeMode = "dark" | "light" | "system";
 
 type PipelineStage = {
   id: string;
@@ -240,6 +241,7 @@ const frontendBuildMetadata = {
 
 function App() {
   const [view, setView] = useState<AppView>("dashboard");
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => readSavedThemeMode());
   const [data, setData] = useState<DashboardData>({
     agents: [],
     tasks: [],
@@ -281,6 +283,11 @@ function App() {
     loadDashboard();
   }, [loadDashboard]);
 
+  useEffect(() => {
+    applyThemeMode(themeMode);
+    window.localStorage.setItem("archiveos-theme-mode", themeMode);
+  }, [themeMode]);
+
   const taskCounts = useMemo(
     () =>
       taskStatuses.map((status) => ({
@@ -292,7 +299,7 @@ function App() {
   );
 
   return (
-    <main className="min-h-screen bg-[#07090d] text-slate-100">
+    <main className={`archiveos-shell min-h-screen bg-[#07090d] text-slate-100 theme-${themeMode}`}>
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-3 py-4 sm:gap-8 sm:px-8 sm:py-6 lg:px-10">
         <header className="flex flex-col gap-5 border-b border-white/10 pb-5 md:flex-row md:items-end md:justify-between">
           <div>
@@ -334,6 +341,8 @@ function App() {
             view={view}
             setView={setView}
             reloadDashboard={loadDashboard}
+            themeMode={themeMode}
+            onThemeChange={setThemeMode}
           />
         )}
       </div>
@@ -347,12 +356,16 @@ function OperationsLayout({
   view,
   setView,
   reloadDashboard,
+  themeMode,
+  onThemeChange,
 }: {
   data: DashboardData;
   taskCounts: { status: TaskStatus; label: string; count: number }[];
   view: AppView;
   setView: (view: AppView) => void;
   reloadDashboard: (options?: { silent?: boolean }) => void;
+  themeMode: ThemeMode;
+  onThemeChange: (mode: ThemeMode) => void;
 }) {
   const [runtimeStatus, setRuntimeStatus] = useState<LocalRuntimeStatus | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
@@ -803,6 +816,8 @@ function OperationsLayout({
           runtimeVersion={runtimeVersion}
           securityStatus={securityStatus}
           axReadiness={axReadiness}
+          themeMode={themeMode}
+          onThemeChange={onThemeChange}
           queueSummary={queueSummary}
           queueError={queueError}
         />
@@ -3153,6 +3168,58 @@ function AxReadinessPanel({ axReadiness, compact = false }: { axReadiness: AxRea
   );
 }
 
+function ThemeSettingsPanel({
+  themeMode,
+  onThemeChange,
+}: {
+  themeMode: ThemeMode;
+  onThemeChange: (mode: ThemeMode) => void;
+}) {
+  const options: Array<{ id: ThemeMode; title: string; detail: string }> = [
+    { id: "dark", title: "Black", detail: "현재 ArchiveOS 기본 다크 테마를 유지합니다." },
+    { id: "light", title: "White", detail: "밝은 배경 중심의 제출/시연용 테마입니다." },
+    { id: "system", title: "Local Environment", detail: "브라우저/OS 로컬 환경 설정과 동일하게 맞춥니다." },
+  ];
+
+  return (
+    <Panel title="Theme">
+      <div className="grid gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Display preference</p>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            테마 설정은 이 브라우저에만 저장됩니다. 운영 데이터, webhook, token, secret 값에는 영향을 주지 않습니다.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {options.map((option) => {
+            const active = themeMode === option.id;
+            return (
+              <button
+                key={option.id}
+                className={`rounded-md border p-4 text-left transition ${
+                  active
+                    ? "border-cyan-300/50 bg-cyan-300/10 shadow-[0_0_18px_rgba(34,211,238,0.12)]"
+                    : "border-white/10 bg-black/20 hover:border-cyan-300/35 hover:bg-cyan-300/[0.06]"
+                }`}
+                onClick={() => onThemeChange(option.id)}
+                type="button"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-white">{option.title}</span>
+                  <StatusBadge className={active ? "bg-cyan-500/15 text-cyan-200 ring-cyan-400/25" : "bg-slate-500/15 text-slate-200 ring-slate-400/20"}>
+                    {active ? "active" : option.id}
+                  </StatusBadge>
+                </div>
+                <p className="mt-3 text-xs leading-5 text-slate-500">{option.detail}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 function SettingsView({
   backendReachability,
   commandRunsReachability,
@@ -3169,6 +3236,8 @@ function SettingsView({
   runtimeVersion,
   securityStatus,
   axReadiness,
+  themeMode,
+  onThemeChange,
   queueSummary,
   queueError,
 }: {
@@ -3187,6 +3256,8 @@ function SettingsView({
   runtimeVersion: RuntimeVersion | null;
   securityStatus: SecurityStatus | null;
   axReadiness: AxReadiness | null;
+  themeMode: ThemeMode;
+  onThemeChange: (mode: ThemeMode) => void;
   queueSummary: QueueSummary | null;
   queueError: string | null;
 }) {
@@ -3201,6 +3272,8 @@ function SettingsView({
 
   return (
     <div className="grid gap-5">
+      <ThemeSettingsPanel themeMode={themeMode} onThemeChange={onThemeChange} />
+
       <Panel title="Runtime & URLs">
         <div className="grid gap-4">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -5445,6 +5518,25 @@ function getVersionSyncStatus(runtimeVersion: RuntimeVersion | null) {
   }
 
   return runtimeVersion.commitSha === frontendBuildMetadata.commitSha ? "synced" : "version mismatch";
+}
+
+function readSavedThemeMode(): ThemeMode {
+  if (typeof window === "undefined") return "dark";
+  const saved = window.localStorage.getItem("archiveos-theme-mode");
+  return saved === "light" || saved === "system" || saved === "dark" ? saved : "dark";
+}
+
+function applyThemeMode(mode: ThemeMode) {
+  if (typeof document === "undefined") return;
+  const resolved =
+    mode === "system"
+      ? window.matchMedia?.("(prefers-color-scheme: light)").matches
+        ? "light"
+        : "dark"
+      : mode;
+
+  document.documentElement.dataset.theme = resolved;
+  document.documentElement.style.colorScheme = resolved;
 }
 
 function getArchitectStatusLabel(review: ArchitectureReview | null) {
