@@ -385,6 +385,8 @@ button {
 
 .badge-waiting,
 .badge-warning,
+.badge-degraded,
+.badge-stale,
 .badge.not_configured,
 .status-badge.warning,
 .status-badge.reviewing {

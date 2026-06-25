@@ -163,6 +163,45 @@ Static Docker assets are present:
 - `archiveos-ai/Dockerfile`
 - `docker-compose.yml`
 
+## Spring AI Runtime Observability
+
+`archiveos-ai`는 `GET /api/ai/runtime`으로 실제 runtime telemetry를 반환한다.
+
+반환 항목:
+
+- Spring Boot 상태와 버전
+- Spring AI 상태와 버전
+- ChatModel 설정 여부, Bean 사용 가능 여부, 최근 호출 성공/실패
+- EmbeddingModel 설정 여부, Bean 사용 가능 여부, 차원, 최근 호출 성공/실패
+- PostgreSQL 연결 상태
+- pgvector extension 설치 여부
+- vector index 존재 여부와 index 방식
+- `obsidian_documents` 실제 행 수
+- `obsidian_chunks` 실제 행 수
+- embedded/pending/failed chunk 수
+- 마지막 sync 시각
+- 최근 RAG search/ask/sync 시각
+- 최근 RAG latency
+- 최근 reference 수
+
+`POST /api/ai/runtime/check`는 명시적으로 호출할 때만 ChatModel과 EmbeddingModel smoke check를 수행한다.
+
+Node backend는 다음 endpoint를 proxy한다.
+
+- `GET /api/ai/runtime`
+- `POST /api/ai/runtime/check`
+
+React Overview와 Knowledge 화면은 Spring AI Engine 지표를 이 runtime API에 연결한다.
+
+더 이상 사용하지 않는 대체값:
+
+- Embeddings = Knowledge Graph totalNodes
+- Vector Index = Knowledge Graph totalEdges 존재 여부
+- References = Knowledge Graph totalEdges
+- Last RAG Check = AX readiness generatedAt
+- pgvector status = Knowledge relation count
+- ChatModel/EmbeddingModel status = endpoint 존재 여부
+
 ## Remaining work
 
 - Run real Obsidian sync with a configured vault.

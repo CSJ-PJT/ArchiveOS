@@ -3,6 +3,7 @@ package com.archiveos.ai.obsidian;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -149,6 +150,90 @@ public class ObsidianJdbcRepository {
                 Math.min(Math.max(limit, 1), 20));
     }
 
+    public KnowledgeStatistics safeKnowledgeStatistics() {
+        try {
+            boolean documentsTable = Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                    "select to_regclass('public.obsidian_documents') is not null",
+                    Boolean.class));
+            boolean chunksTable = Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                    "select to_regclass('public.obsidian_chunks') is not null",
+                    Boolean.class));
+            if (!documentsTable || !chunksTable) {
+                return new KnowledgeStatistics(0, 0, 0, 0, 0, 0, null, null);
+            }
+
+            Integer documents = jdbcTemplate.queryForObject("select count(*) from public.obsidian_documents", Integer.class);
+            Integer chunks = jdbcTemplate.queryForObject("select count(*) from public.obsidian_chunks", Integer.class);
+            Integer embedded = jdbcTemplate.queryForObject("select count(*) from public.obsidian_chunks where embedding is not null", Integer.class);
+            Integer failed = jdbcTemplate.queryForObject("""
+                    select count(*)
+                    from public.obsidian_chunks
+                    where metadata ->> 'embedding_status' = 'failed'
+                    """, Integer.class);
+            Integer pending = jdbcTemplate.queryForObject("""
+                    select count(*)
+                    from public.obsidian_chunks
+                    where embedding is null
+                      and coalesce(metadata ->> 'embedding_status', 'pending') <> 'failed'
+                    """, Integer.class);
+            Instant lastSync = jdbcTemplate.queryForObject(
+                    "select max(updated_at) from public.obsidian_documents",
+                    (rs, rowNum) -> rs.getTimestamp(1) == null ? null : rs.getTimestamp(1).toInstant());
+            Integer dimensions = jdbcTemplate.queryForObject("""
+                    select coalesce((select vector_dims(embedding) from public.obsidian_chunks where embedding is not null limit 1), 0)
+                    """, Integer.class);
+            return new KnowledgeStatistics(
+                    safeInt(documents),
+                    safeInt(chunks),
+                    safeInt(embedded),
+                    safeInt(pending),
+                    safeInt(failed),
+                    safeInt(dimensions),
+                    lastSync,
+                    null);
+        } catch (Exception error) {
+            return new KnowledgeStatistics(0, 0, 0, 0, 0, 0, null, sanitize(error));
+        }
+    }
+
+    public VectorStoreDiagnostics safeVectorDiagnostics() {
+        try {
+            jdbcTemplate.queryForObject("select 1", Integer.class);
+            boolean extension = Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                    "select exists(select 1 from pg_extension where extname = 'vector')",
+                    Boolean.class));
+            List<String> indexMethods = jdbcTemplate.queryForList("""
+                    select am.amname
+                    from pg_index i
+                    join pg_class c on c.oid = i.indexrelid
+                    join pg_class t on t.oid = i.indrelid
+                    join pg_am am on am.oid = c.relam
+                    join pg_namespace n on n.oid = t.relnamespace
+                    where n.nspname = 'public'
+                      and t.relname = 'obsidian_chunks'
+                      and c.relname like '%embedding%'
+                    """, String.class);
+            String indexType = indexMethods.isEmpty() ? "none" : indexMethods.get(0);
+            return new VectorStoreDiagnostics(true, extension, !indexMethods.isEmpty(), indexType, null);
+        } catch (Exception error) {
+            return new VectorStoreDiagnostics(false, false, false, "unknown", sanitize(error));
+        }
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private String sanitize(Throwable error) {
+        if (error == null) return null;
+        String message = error.getMessage();
+        if (message == null || message.isBlank()) return error.getClass().getSimpleName();
+        return message
+                .replaceAll("sk-[A-Za-z0-9_-]+", "[redacted-openai-key]")
+                .replaceAll("sk-proj-[A-Za-z0-9_-]+", "[redacted-openai-key]")
+                .replaceAll("password=([^\\s&]+)", "password=[redacted]");
+    }
+
     private RagReference mapReference(ResultSet rs) throws SQLException {
         return new RagReference(
                 rs.getString("title"),
@@ -168,4 +253,21 @@ public class ObsidianJdbcRepository {
     }
 
     public record ExistingDocument(long id, String contentHash) {}
+
+    public record KnowledgeStatistics(
+            int documents,
+            int chunks,
+            int embeddedChunks,
+            int pendingEmbeddings,
+            int failedEmbeddings,
+            int embeddingDimensions,
+            Instant lastSyncAt,
+            String lastError) {}
+
+    public record VectorStoreDiagnostics(
+            boolean databaseConnected,
+            boolean extensionInstalled,
+            boolean indexReady,
+            String indexType,
+            String lastError) {}
 }

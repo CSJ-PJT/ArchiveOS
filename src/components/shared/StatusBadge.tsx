@@ -14,7 +14,10 @@ export type SemanticStatus =
   | "empty"
   | "unknown"
   | "not_configured"
-  | "disconnected";
+  | "disconnected"
+  | "degraded"
+  | "unavailable"
+  | "stale";
 
 export function normalizeStatus(value: string | null | undefined): SemanticStatus {
   const status = (value || "unknown").toLowerCase();
@@ -24,10 +27,11 @@ export function normalizeStatus(value: string | null | undefined): SemanticStatu
   }
   if (["waiting", "queued", "pm_decision_required", "pending"].includes(status)) return "waiting";
   if (["warning", "hold", "stale", "skipped"].includes(status)) return "warning";
+  if (["degraded"].includes(status)) return "degraded";
   if (["critical", "error", "failed", "problem", "missing"].includes(status)) return "critical";
   if (["blocked", "stop", "rejected"].includes(status)) return "blocked";
   if (["success", "succeeded", "sent", "completed", "done", "approved"].includes(status)) return "success";
-  if (["offline", "not_detected", "disabled", "disconnected"].includes(status)) return "offline";
+  if (["offline", "not_detected", "disabled", "disconnected", "unavailable"].includes(status)) return "offline";
   if (["empty", "none"].includes(status)) return "empty";
   if (["not_configured"].includes(status)) return "not_configured";
   return "unknown";

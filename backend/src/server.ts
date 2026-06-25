@@ -123,6 +123,8 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "AX Readiness", method: "GET", path: "/api/ax/readiness", service: "ax", description: "AX platform transition readiness from architecture document." },
   { name: "AX Roadmap", method: "GET", path: "/api/ax/roadmap", service: "ax", description: "AX architecture roadmap phases." },
   { name: "Obsidian Sync", method: "POST", path: "/api/obsidian/sync", service: "knowledge", description: "Spring AI Obsidian vault sync proxy." },
+  { name: "Spring AI Runtime", method: "GET", path: "/api/ai/runtime", service: "knowledge", description: "archiveos-ai runtime telemetry proxy." },
+  { name: "Spring AI Runtime Check", method: "POST", path: "/api/ai/runtime/check", service: "knowledge", description: "Manual ChatModel and EmbeddingModel smoke check proxy." },
   { name: "Obsidian Documents", method: "GET", path: "/api/obsidian/documents", service: "knowledge", description: "Spring AI indexed Obsidian document proxy." },
   { name: "RAG Search", method: "GET", path: "/api/rag/search", service: "knowledge", description: "Spring AI pgvector similarity search proxy." },
   { name: "RAG Ask", method: "POST", path: "/api/rag/ask", service: "knowledge", description: "Spring AI ChatModel grounded RAG answer proxy." },
@@ -240,6 +242,22 @@ app.post("/api/obsidian/sync", async (_request, response) => {
     response.status(200).json(await proxyArchiveOsAi("/api/obsidian/sync", { method: "POST" }));
   } catch (error) {
     sendProxyError(response, error, "Obsidian sync failed.");
+  }
+});
+
+app.get("/api/ai/runtime", async (_request, response) => {
+  try {
+    response.status(200).json({ data: await proxyArchiveOsAi("/api/ai/runtime") });
+  } catch (error) {
+    sendProxyError(response, error, "ArchiveOS AI runtime is unavailable.");
+  }
+});
+
+app.post("/api/ai/runtime/check", async (_request, response) => {
+  try {
+    response.status(200).json({ data: await proxyArchiveOsAi("/api/ai/runtime/check", { method: "POST" }) });
+  } catch (error) {
+    sendProxyError(response, error, "ArchiveOS AI runtime check failed.");
   }
 });
 
@@ -1855,7 +1873,7 @@ function sendProxyError(response: any, error: unknown, fallback: string) {
     return;
   }
 
-  response.status(502).json({
+  response.status(503).json({
     error: error instanceof Error ? error.message : fallback,
     details: "ArchiveOS AI module is unavailable or not configured.",
   });

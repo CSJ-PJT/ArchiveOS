@@ -36,21 +36,31 @@ export function KnowledgePage({ data }: { data: AppData }) {
 function KnowledgeOverview({ data }: { data: AppData }) {
   return (
     <section className="overview-grid">
-      <MetricCard label="Documents" value={data.knowledge?.countsByType.obsidian_note ?? 0} status="healthy" />
-      <MetricCard label="Chunks" value={data.knowledge?.latestNodes.length ?? 0} status={data.knowledge ? "healthy" : "unknown"} />
-      <MetricCard label="Embeddings" value={data.knowledge?.totalNodes ?? 0} status={data.knowledge?.totalNodes ? "healthy" : "empty"} />
-      <MetricCard label="Vector Index" value={data.knowledge?.totalEdges ? "available" : "pending"} status={data.knowledge?.totalEdges ? "healthy" : "warning"} />
-      <MetricCard label="Similarity Search" value={data.endpointHealth?.endpoints.find((endpoint) => endpoint.path === "/api/rag/search")?.status || "unknown"} status={data.endpointHealth?.endpoints.find((endpoint) => endpoint.path === "/api/rag/search")?.status || "unknown"} />
-      <MetricCard label="References" value={data.knowledge?.totalEdges ?? 0} status="healthy" />
-      <MetricCard label="Last Sync" value={data.historian?.lastExport ? formatTimeAgo(data.historian.lastExport.createdAt) : "Unknown"} status={data.historian?.enabled ? "healthy" : "not_configured"} />
-      <MetricCard label="RAG Status" value={data.axReadiness?.currentMode === "spring_ai_target" ? "target" : "foundation"} status={data.axReadiness ? "working" : "unknown"} />
+      <MetricCard label="Documents" value={data.aiRuntime?.knowledge.documents ?? 0} status={data.aiRuntime ? "healthy" : "unknown"} />
+      <MetricCard label="Chunks" value={data.aiRuntime?.knowledge.chunks ?? 0} status={data.aiRuntime ? "healthy" : "unknown"} />
+      <MetricCard label="Embeddings" value={data.aiRuntime?.knowledge.embeddedChunks ?? 0} status={(data.aiRuntime?.knowledge.embeddedChunks ?? 0) > 0 ? "healthy" : "empty"} />
+      <MetricCard label="Pending" value={data.aiRuntime?.knowledge.pendingEmbeddings ?? 0} status={(data.aiRuntime?.knowledge.pendingEmbeddings ?? 0) > 0 ? "working" : "healthy"} />
+      <MetricCard label="Failed" value={data.aiRuntime?.knowledge.failedEmbeddings ?? 0} status={(data.aiRuntime?.knowledge.failedEmbeddings ?? 0) > 0 ? "critical" : "healthy"} />
+      <MetricCard label="Vector Index" value={data.aiRuntime ? `${data.aiRuntime.vectorStore.indexReady ? "ready" : "not ready"} / ${data.aiRuntime.vectorStore.indexType}` : "unknown"} status={data.aiRuntime?.vectorStore.indexReady ? "healthy" : "degraded"} />
+      <MetricCard label="Similarity Search" value={data.aiRuntime?.rag.lastSearchAt ? formatTimeAgo(data.aiRuntime.rag.lastSearchAt) : "not run"} status={data.aiRuntime?.rag.lastSearchAt ? "healthy" : "stale"} />
+      <MetricCard label="References" value={data.aiRuntime?.rag.lastReferenceCount ?? 0} status={(data.aiRuntime?.rag.lastReferenceCount ?? 0) > 0 ? "healthy" : "empty"} />
+      <MetricCard label="Last Sync" value={data.aiRuntime?.knowledge.lastSyncAt ? formatTimeAgo(data.aiRuntime.knowledge.lastSyncAt) : "Unknown"} status={data.aiRuntime?.knowledge.lastSyncAt ? "healthy" : "stale"} />
+      <MetricCard label="RAG Status" value={data.aiRuntime?.rag.ready ? "ready" : data.aiRuntime?.status || "unknown"} status={data.aiRuntime?.rag.ready ? "healthy" : data.aiRuntime?.status || "unknown"} />
       <SectionCard title="Spring AI Knowledge Engine" eyebrow="Obsidian RAG core" className="span-12">
         <p className="body-copy">
           ArchiveOS uses Spring Boot 3 + Spring AI as the dedicated RAG engine. React displays operations, Node/Express proxies operational APIs, and archiveos-ai handles Obsidian sync, chunking, embeddings, pgvector search, ChatModel answers, and references.
         </p>
         <div className="rag-pipeline">
-          {["Documents", "Chunks", "Embeddings", "Vector Index", "Similarity Search", "References", "RAG Answer"].map((step, index) => (
-            <div className={`rag-pipeline-step ${index < 3 || data.knowledge?.totalNodes ? "ready" : "pending"}`} key={step}>
+          {[
+            ["Documents", (data.aiRuntime?.knowledge.documents ?? 0) > 0],
+            ["Chunks", (data.aiRuntime?.knowledge.chunks ?? 0) > 0],
+            ["Embeddings", (data.aiRuntime?.knowledge.embeddedChunks ?? 0) > 0],
+            ["Vector Index", data.aiRuntime?.vectorStore.indexReady],
+            ["Similarity Search", Boolean(data.aiRuntime?.rag.lastSearchAt)],
+            ["References", (data.aiRuntime?.rag.lastReferenceCount ?? 0) > 0],
+            ["RAG Answer", Boolean(data.aiRuntime?.rag.lastAskAt)],
+          ].map(([step, ready]) => (
+            <div className={`rag-pipeline-step ${ready ? "ready" : "pending"}`} key={String(step)}>
               <span>{step}</span>
             </div>
           ))}

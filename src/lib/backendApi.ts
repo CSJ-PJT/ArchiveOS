@@ -116,6 +116,77 @@ export type RuntimeVersion = {
   checkedAt: string;
 };
 
+export type AiRuntimeStatus = "healthy" | "degraded" | "unavailable" | "unknown";
+
+export type AiRuntime = {
+  status: AiRuntimeStatus;
+  checkedAt: string;
+  springBoot: {
+    status: "up" | "down" | "unknown";
+    version: string;
+  };
+  springAi: {
+    status: "up" | "down" | "unknown";
+    version: string;
+  };
+  chatModel: {
+    configured: boolean;
+    beanAvailable: boolean;
+    lastCallSucceeded: boolean;
+    available: boolean;
+    provider: string;
+    model: string;
+    lastSuccessAt: string | null;
+    lastError: string | null;
+  };
+  embeddingModel: {
+    configured: boolean;
+    beanAvailable: boolean;
+    lastCallSucceeded: boolean;
+    available: boolean;
+    provider: string;
+    model: string;
+    dimensions: number;
+    lastSuccessAt: string | null;
+    lastError: string | null;
+  };
+  vectorStore: {
+    available: boolean;
+    type: "pgvector" | string;
+    databaseConnected: boolean;
+    extensionInstalled: boolean;
+    indexType: string;
+    indexReady: boolean;
+    lastError: string | null;
+  };
+  knowledge: {
+    documents: number;
+    chunks: number;
+    embeddedChunks: number;
+    pendingEmbeddings: number;
+    failedEmbeddings: number;
+    lastSyncAt: string | null;
+    lastError: string | null;
+  };
+  rag: {
+    ready: boolean;
+    lastSearchAt: string | null;
+    lastAskAt: string | null;
+    lastSyncAt: string | null;
+    lastSuccessAt: string | null;
+    lastLatencyMs: number | null;
+    lastReferenceCount: number;
+    lastSearchResultCount: number;
+    lastError: string | null;
+  };
+  obsidian: {
+    configured: boolean;
+    reachable: boolean;
+    documentCount: number;
+    lastSyncAt: string | null;
+  };
+};
+
 export type SecurityStatus = {
   checkedAt: string;
   authentication: {
@@ -598,6 +669,18 @@ export async function getPublicAccessStatus() {
 
 export async function getRuntimeVersion() {
   const response = await request<ApiEnvelope<RuntimeVersion>>("/api/runtime/version");
+  return response.data;
+}
+
+export async function getAiRuntime() {
+  const response = await request<ApiEnvelope<AiRuntime>>("/api/ai/runtime");
+  return response.data;
+}
+
+export async function checkAiRuntime() {
+  const response = await request<ApiEnvelope<Record<string, unknown>>>("/api/ai/runtime/check", {
+    method: "POST",
+  });
   return response.data;
 }
 

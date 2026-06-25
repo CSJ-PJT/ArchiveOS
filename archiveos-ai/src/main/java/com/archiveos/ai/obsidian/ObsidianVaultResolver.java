@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.stream.Stream;
 import org.springframework.stereotype.Component;
 
@@ -41,6 +42,15 @@ public class ObsidianVaultResolver {
                         .thenComparing(Candidate::markdownCount))
                 .map(Candidate::path)
                 .orElse(Path.of("docs").toAbsolutePath().normalize());
+    }
+
+    public Optional<Path> tryResolveVaultPath() {
+        try {
+            Path path = resolveVaultPath();
+            return Files.isDirectory(path) ? Optional.of(path) : Optional.empty();
+        } catch (RuntimeException error) {
+            return Optional.empty();
+        }
     }
 
     public List<Candidate> findCandidates() {

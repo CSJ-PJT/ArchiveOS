@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 const appShell = readFileSync("src/app/AppShell.tsx", "utf-8");
 const navigation = readFileSync("src/app/navigation.ts", "utf-8");
 const styles = readFileSync("src/styles.css", "utf-8");
+const overview = readFileSync("src/pages/OverviewPage.tsx", "utf-8");
+const knowledge = readFileSync("src/pages/KnowledgePage.tsx", "utf-8");
+const backendApi = readFileSync("src/lib/backendApi.ts", "utf-8");
 
 for (const label of ["Overview", "Workflows", "Knowledge", "History", "Settings"]) {
   if (!navigation.includes(label)) {
@@ -42,6 +45,22 @@ for (const token of [
 
 if (!appShell.includes("<OverviewPage") || !appShell.includes("<WorkflowsPage") || !appShell.includes("<KnowledgePage")) {
   throw new Error("AppShell is not composing the new page structure.");
+}
+
+if (!backendApi.includes("getAiRuntime") || !appShell.includes("getAiRuntime")) {
+  throw new Error("Spring AI runtime data is not wired through the frontend API layer.");
+}
+
+for (const forbidden of [
+  "Embeddings\" value={data.knowledge?.totalNodes",
+  "Vector Index\" value={data.knowledge?.totalEdges",
+  "References\" value={data.knowledge?.totalEdges",
+  "Last RAG Check\" value={data.axReadiness?.generatedAt",
+  "pgvector\" value={overview.memorySummary.ragReady",
+]) {
+  if (overview.includes(forbidden) || knowledge.includes(forbidden)) {
+    throw new Error(`Forbidden inferred Spring AI metric mapping found: ${forbidden}`);
+  }
 }
 
 console.log("archiveos ui information-architecture smoke-test passed");
