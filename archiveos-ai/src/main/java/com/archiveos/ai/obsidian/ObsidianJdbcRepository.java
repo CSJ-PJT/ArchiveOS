@@ -7,8 +7,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -91,29 +89,24 @@ public class ObsidianJdbcRepository {
     }
 
     public long upsertDocument(MarkdownDocument document) {
-        KeyHolder keyHolder = new GeneratedKeyHolder();
-        jdbcTemplate.update(connection -> {
-            var statement = connection.prepareStatement("""
-                    insert into public.obsidian_documents(file_path, title, content_hash, last_modified_at, updated_at)
-                    values (?, ?, ?, ?, now())
-                    on conflict (file_path)
-                    do update set
-                      title = excluded.title,
-                      content_hash = excluded.content_hash,
-                      last_modified_at = excluded.last_modified_at,
-                      updated_at = now()
-                    returning id
-                    """);
-            statement.setString(1, document.relativePath());
-            statement.setString(2, document.title());
-            statement.setString(3, document.contentHash());
-            statement.setTimestamp(4, Timestamp.from(document.lastModifiedAt()));
-            return statement;
-        }, keyHolder);
-
-        Number key = keyHolder.getKey();
+        Long key = jdbcTemplate.queryForObject("""
+                insert into public.obsidian_documents(file_path, title, content_hash, last_modified_at, updated_at)
+                values (?, ?, ?, ?, now())
+                on conflict (file_path)
+                do update set
+                  title = excluded.title,
+                  content_hash = excluded.content_hash,
+                  last_modified_at = excluded.last_modified_at,
+                  updated_at = now()
+                returning id
+                """,
+                Long.class,
+                document.relativePath(),
+                document.title(),
+                document.contentHash(),
+                Timestamp.from(document.lastModifiedAt()));
         if (key == null) throw new IllegalStateException("Document upsert did not return an id.");
-        return key.longValue();
+        return key;
     }
 
     public int deleteChunks(long documentId) {

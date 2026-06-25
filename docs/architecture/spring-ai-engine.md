@@ -23,7 +23,7 @@ React Dashboard
 
 - PM operations, Agent/runtime visibility, Discord notifications, Supabase 운영 이력, Task Queue 상태를 담당한다.
 - RAG 관련 요청은 `archiveos-ai`로 proxy한다.
-- `archiveos-ai`가 꺼져 있으면 fake healthy 응답 대신 HTTP 503과 unavailable 상태를 반환한다.
+- `archiveos-ai`가 꺼져 있으면 fake healthy 대신 HTTP 503과 unavailable 상태를 반환한다.
 
 ### archiveos-ai Spring Boot Module
 
@@ -48,7 +48,7 @@ Markdown
 
 ## API
 
-`archiveos-ai`가 제공하는 주요 API:
+`archiveos-ai` API:
 
 - `GET /api/health`
 - `GET /api/ai/runtime`
@@ -85,7 +85,7 @@ Node backend proxy:
 - 최근 latency
 - 최근 reference count
 
-`POST /api/ai/runtime/check`는 명시적으로 호출할 때만 실제 ChatModel/EmbeddingModel smoke check를 수행한다. Overview 화면 조회만으로 유료 모델 호출이 발생하지 않는다.
+`POST /api/ai/runtime/check`는 명시적으로 호출할 때만 실제 ChatModel/EmbeddingModel smoke check를 수행한다. Overview 조회만으로 유료 모델 호출이 발생하지 않는다.
 
 ## Vector Database
 
@@ -136,7 +136,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/runtime/verify-rag
 
 ## RAG Ready 기준
 
-다음 조건이 충족될 때 RAG ready로 판단한다.
+다음 조건을 만족하면 RAG ready로 판단한다.
 
 - OpenAI API key가 설정되어 있다.
 - ChatModel Bean을 사용할 수 있다.

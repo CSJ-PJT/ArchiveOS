@@ -30,6 +30,11 @@ function Assert-Command {
   }
 }
 
+function Write-JsonSummary {
+  param([Parameter(Mandatory = $true)]$Value)
+  $Value | ConvertTo-Json -Depth 10 | Out-Host
+}
+
 Push-Location (Resolve-Path "$PSScriptRoot\..\..")
 try {
   Assert-Command docker
@@ -40,7 +45,11 @@ try {
   docker info | Out-Host
 
   Write-Host "== Compose config =="
-  docker compose config | Out-Host
+  docker compose config *> $null
+  if ($LASTEXITCODE -ne 0) {
+    throw "docker compose config failed."
+  }
+  Write-Host "docker compose config: ok"
 
   if (-not $SkipComposeUp) {
     Write-Host "== Compose up =="
@@ -56,29 +65,93 @@ try {
   docker compose exec -T postgres psql -U archiveos -d archiveos -c "select to_regclass('public.obsidian_documents') as obsidian_documents, to_regclass('public.obsidian_chunks') as obsidian_chunks;"
 
   Write-Host "== archiveos-ai runtime =="
-  Invoke-JsonRequest -Uri "http://localhost:4100/api/health" | ConvertTo-Json -Depth 20 | Out-Host
+  $health = Invoke-JsonRequest -Uri "http://localhost:4100/api/health"
+  Write-JsonSummary ([pscustomobject]@{
+    status = $health.status
+    module = $health.module
+    database = $health.database
+    openAiConfigured = $health.openAiConfigured
+    obsidianVaultConfigured = $health.obsidianVaultConfigured
+  })
   $runtimeBefore = Invoke-JsonRequest -Uri "http://localhost:4100/api/ai/runtime"
-  $runtimeBefore | ConvertTo-Json -Depth 20 | Out-Host
+  Write-JsonSummary ([pscustomobject]@{
+    status = $runtimeBefore.status
+    springAi = $runtimeBefore.springAi.status
+    chatModel = $runtimeBefore.chatModel.model
+    embeddingModel = $runtimeBefore.embeddingModel.model
+    embeddingDimensions = $runtimeBefore.embeddingModel.dimensions
+    databaseConnected = $runtimeBefore.vectorStore.databaseConnected
+    extensionInstalled = $runtimeBefore.vectorStore.extensionInstalled
+    indexReady = $runtimeBefore.vectorStore.indexReady
+    indexType = $runtimeBefore.vectorStore.indexType
+    documents = $runtimeBefore.knowledge.documents
+    chunks = $runtimeBefore.knowledge.chunks
+    embeddedChunks = $runtimeBefore.knowledge.embeddedChunks
+    ragReady = $runtimeBefore.rag.ready
+  })
 
   Write-Host "== explicit model smoke check =="
-  Invoke-JsonRequest -Uri "http://localhost:4100/api/ai/runtime/check" -Method "POST" | ConvertTo-Json -Depth 20 | Out-Host
+  $check = Invoke-JsonRequest -Uri "http://localhost:4100/api/ai/runtime/check" -Method "POST"
+  Write-JsonSummary ([pscustomobject]@{
+    embeddingSuccess = $check.embedding.success
+    embeddingDimensions = $check.embedding.dimensions
+    chatSuccess = $check.chat.success
+    runtimeStatus = $check.runtime.status
+  })
 
   Write-Host "== Obsidian sync =="
-  Invoke-JsonRequest -Uri "http://localhost:4100/api/obsidian/sync" -Method "POST" | ConvertTo-Json -Depth 20 | Out-Host
+  $sync = Invoke-JsonRequest -Uri "http://localhost:4100/api/obsidian/sync" -Method "POST"
+  Write-JsonSummary $sync.data
 
   Write-Host "== RAG search =="
-  Invoke-JsonRequest -Uri "http://localhost:4100/api/rag/search?query=ArchiveOS&limit=5" | ConvertTo-Json -Depth 20 | Out-Host
+  $search = Invoke-JsonRequest -Uri "http://localhost:4100/api/rag/search?query=ArchiveOS&limit=5"
+  $firstSearch = $search.data | Select-Object -First 1
+  Write-JsonSummary ([pscustomobject]@{
+    count = ($search.data | Measure-Object).Count
+    firstTitle = $firstSearch.title
+    firstPath = $firstSearch.path
+    firstHeading = $firstSearch.heading
+    firstScore = $firstSearch.score
+  })
 
   Write-Host "== RAG ask =="
-  $askBody = @{ question = "ArchiveOS의 Spring AI RAG 구조를 요약해줘" } | ConvertTo-Json
-  Invoke-JsonRequest -Uri "http://localhost:4100/api/rag/ask" -Method "POST" -Body $askBody | ConvertTo-Json -Depth 20 | Out-Host
+  $askBody = @{ question = "Summarize the ArchiveOS Spring AI RAG architecture." } | ConvertTo-Json
+  $ask = Invoke-JsonRequest -Uri "http://localhost:4100/api/rag/ask" -Method "POST" -Body $askBody
+  $firstReference = $ask.data.references | Select-Object -First 1
+  Write-JsonSummary ([pscustomobject]@{
+    hasAnswer = -not [string]::IsNullOrWhiteSpace($ask.data.answer)
+    referenceCount = ($ask.data.references | Measure-Object).Count
+    firstReferenceTitle = $firstReference.title
+    firstReferencePath = $firstReference.path
+    firstReferenceScore = $firstReference.score
+  })
 
   Write-Host "== Node proxy =="
-  Invoke-JsonRequest -Uri "http://localhost:4000/api/ai/runtime" | ConvertTo-Json -Depth 20 | Out-Host
-  Invoke-JsonRequest -Uri "http://localhost:4000/api/ai/runtime/check" -Method "POST" | ConvertTo-Json -Depth 20 | Out-Host
+  $proxyRuntime = Invoke-JsonRequest -Uri "http://localhost:4000/api/ai/runtime"
+  Write-JsonSummary ([pscustomobject]@{
+    runtimeStatus = $proxyRuntime.data.status
+    databaseConnected = $proxyRuntime.data.vectorStore.databaseConnected
+    ragReady = $proxyRuntime.data.rag.ready
+  })
+  $proxyCheck = Invoke-JsonRequest -Uri "http://localhost:4000/api/ai/runtime/check" -Method "POST"
+  Write-JsonSummary ([pscustomobject]@{
+    embeddingSuccess = $proxyCheck.data.embedding.success
+    chatSuccess = $proxyCheck.data.chat.success
+    runtimeStatus = $proxyCheck.data.runtime.status
+  })
 
   Write-Host "== Runtime after RAG calls =="
-  Invoke-JsonRequest -Uri "http://localhost:4100/api/ai/runtime" | ConvertTo-Json -Depth 20 | Out-Host
+  $runtimeAfter = Invoke-JsonRequest -Uri "http://localhost:4100/api/ai/runtime"
+  Write-JsonSummary ([pscustomobject]@{
+    status = $runtimeAfter.status
+    documents = $runtimeAfter.knowledge.documents
+    chunks = $runtimeAfter.knowledge.chunks
+    embeddedChunks = $runtimeAfter.knowledge.embeddedChunks
+    ragReady = $runtimeAfter.rag.ready
+    lastLatencyMs = $runtimeAfter.rag.lastLatencyMs
+    lastReferenceCount = $runtimeAfter.rag.lastReferenceCount
+    lastSearchResultCount = $runtimeAfter.rag.lastSearchResultCount
+  })
 
   if (-not $KeepRunning) {
     Write-Host "== Compose down =="

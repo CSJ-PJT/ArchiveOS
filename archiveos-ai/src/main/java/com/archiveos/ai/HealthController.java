@@ -10,15 +10,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class HealthController {
     private final String openAiApiKey;
     private final String obsidianVaultPath;
-    private final String databaseHost;
+    private final String datasourceUrl;
 
     public HealthController(
             @Value("${archiveos.openai-api-key:}") String openAiApiKey,
             @Value("${archiveos.obsidian-vault-path:}") String obsidianVaultPath,
-            @Value("${archiveos.db-host:}") String databaseHost) {
+            @Value("${spring.datasource.url:}") String datasourceUrl) {
         this.openAiApiKey = openAiApiKey;
         this.obsidianVaultPath = obsidianVaultPath;
-        this.databaseHost = databaseHost;
+        this.datasourceUrl = datasourceUrl;
     }
 
     @GetMapping("/api/health")
@@ -29,6 +29,6 @@ public class HealthController {
                 "aiProvider", "openai",
                 "openAiConfigured", !openAiApiKey.isBlank(),
                 "obsidianVaultConfigured", !obsidianVaultPath.isBlank(),
-                "database", databaseHost.isBlank() ? "not_configured" : "configured"));
+                "database", datasourceUrl.isBlank() ? "not_configured" : "configured"));
     }
 }
