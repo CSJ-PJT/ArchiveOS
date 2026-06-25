@@ -9,6 +9,7 @@ import {
   getRecentArchitectureReviews,
   runArchitectReview,
 } from "./architect/index.js";
+import { getAxReadiness, getAxRoadmap } from "./ax/axReadiness.js";
 import { runDailyReportBatch } from "./batches/dailyReport.js";
 import { runNightlyReviewBatch } from "./batches/nightlyReview.js";
 import {
@@ -96,6 +97,7 @@ const seedCommandRunIds = [
 ];
 
 type HealthServiceKey =
+  | "ax"
   | "backend"
   | "runtime"
   | "knowledge"
@@ -118,6 +120,8 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Health", method: "GET", path: "/health", service: "backend", description: "Legacy backend liveness check." },
   { name: "API Health", method: "GET", path: "/api/health", service: "backend", description: "ArchiveOS service health summary." },
   { name: "Endpoint Matrix", method: "GET", path: "/api/health/endpoints", service: "backend", description: "Registered endpoint coverage." },
+  { name: "AX Readiness", method: "GET", path: "/api/ax/readiness", service: "ax", description: "AX platform transition readiness from architecture document." },
+  { name: "AX Roadmap", method: "GET", path: "/api/ax/roadmap", service: "ax", description: "AX architecture roadmap phases." },
   { name: "Dashboard", method: "GET", path: "/api/dashboard", service: "dailyReport", description: "Supabase dashboard data." },
   { name: "Work Logs", method: "GET", path: "/api/work-logs/recent", service: "dailyReport", description: "Recent work logs." },
   { name: "Record Work Log", method: "POST", path: "/api/work-logs", service: "dailyReport", description: "Recording-only work log write." },
@@ -202,6 +206,7 @@ app.get("/api/health", async (_request, response) => {
   response.json({
     status: "ok",
     services: {
+      ax: services.ax,
       runtime: services.runtime,
       knowledge: services.knowledge,
       mesh: services.mesh,
@@ -216,6 +221,14 @@ app.get("/api/health", async (_request, response) => {
 
 app.get("/api/health/endpoints", async (_request, response) => {
   response.json(await getEndpointHealthSnapshot());
+});
+
+app.get("/api/ax/readiness", (_request, response) => {
+  response.json({ data: getAxReadiness() });
+});
+
+app.get("/api/ax/roadmap", (_request, response) => {
+  response.json({ data: getAxRoadmap() });
 });
 
 app.get("/api/platform/readiness", async (_request, response) => {
@@ -1243,9 +1256,11 @@ async function getServiceHealth() {
     withTimeout(getLatestDailyReport(), 2500, "Daily report check timed out."),
     withTimeout(getQueueSummary(), 2500, "Queue summary check timed out."),
     withTimeout(getSecurityStatus(), 2500, "Security status check timed out."),
+    withTimeout(Promise.resolve(getAxReadiness()), 2500, "AX readiness check timed out."),
   ]);
 
   return {
+    ax: checks[8].status === "fulfilled",
     backend: true,
     runtime: checks[0].status === "fulfilled",
     knowledge: checks[1].status === "fulfilled",

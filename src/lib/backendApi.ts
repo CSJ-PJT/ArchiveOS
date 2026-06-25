@@ -32,6 +32,7 @@ type HealthResponse = {
 export type PlatformHealth = {
   status: "ok";
   services: {
+    ax: boolean;
     runtime: boolean;
     knowledge: boolean;
     mesh: boolean;
@@ -41,6 +42,36 @@ export type PlatformHealth = {
     queue: boolean;
     security: boolean;
   };
+};
+
+export type AxPhaseStatus = "implemented" | "partial" | "planned" | "blocked";
+
+export type AxRoadmapPhase = {
+  id: string;
+  title: string;
+  status: AxPhaseStatus;
+  summary: string;
+  capabilities: Array<{
+    label: string;
+    status: AxPhaseStatus;
+    evidence: string;
+  }>;
+  risks: string[];
+  nextActions: string[];
+};
+
+export type AxReadiness = {
+  generatedAt: string;
+  architectureCommit: string;
+  architectureSource: string;
+  score: number;
+  grade: string;
+  currentMode: "node_visibility_platform" | "spring_ai_target";
+  targetMode: "spring_ai_ax_platform";
+  summary: string;
+  phases: AxRoadmapPhase[];
+  guardrails: string[];
+  recommendedNextStep: string;
 };
 
 export type EndpointHealthStatus = "ok" | "missing" | "error" | "unknown";
@@ -549,6 +580,11 @@ export async function getBackendHealth() {
 
 export async function getPlatformHealth() {
   return request<PlatformHealth>("/api/health");
+}
+
+export async function getAxReadiness() {
+  const response = await request<ApiEnvelope<AxReadiness>>("/api/ax/readiness");
+  return response.data;
 }
 
 export async function getEndpointHealth() {
