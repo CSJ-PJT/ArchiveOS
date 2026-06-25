@@ -9,6 +9,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
+    "test": "tsx src/obsidian/markdownIndex.test.ts",
     "batch:nightly-review": "tsx src/batches/runBatch.ts nightly-review",
     "batch:daily-report": "tsx src/batches/runBatch.ts daily-report",
     "batch:supabase-keepalive": "tsx src/batches/runBatch.ts supabase-keepalive",
