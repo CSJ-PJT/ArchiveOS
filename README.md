@@ -1,199 +1,229 @@
-# ArchiveOS
+ArchiveOS
 
-ArchiveOS는 Spring Boot 3 + Spring AI 중심의 AX 운영 플랫폼이다. PM 운영 화면, Agent 상태 가시화, Obsidian 기반 장기 기억, PostgreSQL + pgvector RAG 엔진을 분리된 런타임으로 구성한다.
+«AI 프로젝트를 실행하고 관리하는 차세대 운영 플랫폼»
 
-## 기술 우선순위
+ArchiveOS는 AI 에이전트, 지능형 RPA, 배치 작업, 마이크로서비스, 이벤트 스트림, 외부 도구를 하나의 환경에서 실행하고 관제하는 엔터프라이즈 AI 런타임 플랫폼입니다.
 
-1. Spring Boot 3
-2. Spring AI
-3. ChatModel
-4. EmbeddingModel
-5. VectorStore
-6. PostgreSQL + pgvector
-7. Obsidian RAG
-8. Node/Express Operations Backend
-9. React Dashboard
+사람이 모든 시스템을 직접 운영하는 방식을 넘어, AI가 반복 업무와 시스템 운영을 지원하고 사람은 중요한 의사결정과 승인에 집중하는 환경을 지향합니다.
 
-## 런타임 책임
+---
 
-- `archiveos-ai`: Obsidian sync, heading-aware chunking, OpenAI embeddings, pgvector 저장, vector search, RAG answer generation, 향후 AI Agent engine.
-- `backend`: PM operations, Agent/runtime visibility, MCP visibility, Discord notifications, Supabase 운영 이력, Spring AI proxy.
-- `frontend`: Overview, Workflows, Knowledge, History, Settings 화면.
+Vision
 
-핵심 RAG 흐름:
+«AI가 일하고, 사람은 설계하고 결정한다.»
 
-```text
-Markdown -> Chunking -> Embedding -> VectorStore -> Retriever -> ChatModel -> Answer + References
-```
+ArchiveOS의 목표는 다양한 업무 애플리케이션과 자동화 워크플로우를 하나의 런타임에서 연결하고 오케스트레이션하는 것입니다.
 
-## 로컬 개발 환경
+ArchiveOS는 특정 산업이나 서비스에 종속되지 않습니다. 제조, 물류, 지식 관리, 개발 운영, 문서 처리 등 여러 도메인의 애플리케이션이 동일한 AI 런타임 위에서 동작할 수 있도록 설계합니다.
 
-### 1. 환경 파일 준비
+---
 
-```powershell
-Copy-Item .env.example .env
-```
+Core Features
 
-필수 값:
+AI Agent Runtime
 
-```env
-OPENAI_API_KEY=
-OPENAI_CHAT_MODEL=gpt-4o-mini
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=archiveos
-DB_USER=archiveos
-DB_PASSWORD=archiveos
-HOST_OBSIDIAN_VAULT_PATH=./docs
-ARCHIVEOS_AI_BASE_URL=http://localhost:4100
-```
+- AI Agent 실행 및 생명주기 관리
+- Multi-Agent 협업 구조
+- LLM 연동
+- Tool Calling
+- MCP 기반 외부 도구 연동
+- 메모리와 실행 문맥 관리
 
-실제 Obsidian vault를 사용할 때는 `HOST_OBSIDIAN_VAULT_PATH`를 해당 경로로 바꾼다. API key, DB password, webhook URL은 Git에 커밋하지 않는다.
+Workflow & Batch Engine
 
-### 2. Docker Desktop / Docker CLI 확인
+- Spring Batch 기반 Job 및 Step 실행
+- 스케줄링과 반복 작업 관리
+- 이벤트 기반 워크플로우
+- 병렬 처리 및 재시도
+- 실행 이력과 실패 원인 추적
 
-Windows 기준으로 먼저 아래를 확인한다.
+Intelligent RPA
 
-```powershell
-Test-Path "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
-Test-Path "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-docker --version
-docker compose version
-docker info
-```
+- AI 기반 작업 분류와 판단
+- 승인 기반 자동화
+- 실패 복구 및 재시도 추천
+- 외부 시스템 연동
+- 위험 작업에 대한 Approval Gate
 
-Docker Desktop이 설치되어 있는데 PATH만 빠진 경우 현재 세션에 임시로 추가한다.
+Knowledge & RAG
 
-```powershell
-$env:PATH = "C:\Program Files\Docker\Docker\resources\bin;$env:PATH"
-```
+- 문서 수집 및 동기화
+- 청크 생성과 임베딩
+- PostgreSQL 및 pgvector 기반 검색
+- 과거 사례와 운영 지식 검색
+- AI 응답과 출처 추적
 
-영구 등록은 Windows 환경 변수의 사용자 또는 시스템 `Path`에 아래 경로를 추가한다.
+Operations & Observability
 
-```text
-C:\Program Files\Docker\Docker\resources\bin
-```
+- 시스템 상태 대시보드
+- 서비스 Health Check
+- 로그, 메트릭, 트레이스 수집
+- 배치 및 워크플로우 실행 현황
+- 장애 감지와 알림
+- AI 기반 원인 분석 및 조치 추천
 
-Docker Desktop이 설치되어 있지 않으면 관리자 PowerShell에서 설치한다.
+Project Runtime
 
-```powershell
-choco install docker-desktop -y
-```
+ArchiveOS 위에서는 여러 독립 애플리케이션이 동작할 수 있습니다.
 
-설치 후 Docker Desktop을 실행하고 `docker info`가 성공하는지 확인한다.
+첫 번째 산업 애플리케이션은 Archive-Nexus입니다.
 
-### 3. Docker Compose 실행
+- Archive-Nexus: 가상 공장, 재고, 물류, 품질, 정비 시스템을 연결하는 제조 AX 애플리케이션
+- 향후 다양한 산업과 업무 도메인의 애플리케이션으로 확장 가능
 
-```powershell
-docker compose config
-docker compose up --build -d
-docker compose ps
-```
+---
 
-성공 조건:
+Architecture
 
-- `postgres` 컨테이너 running
-- `archiveos-ai` 컨테이너 running
-- `backend` 컨테이너 running
-- `frontend` 컨테이너 running 또는 접근 가능
+ArchiveOS
+├── AI Agent Runtime
+├── Spring AI
+├── Spring Batch
+├── Intelligent RPA
+├── Workflow Engine
+├── RAG Engine
+├── MCP / Tool Registry
+├── Scheduler
+├── Event Bus
+├── Authentication
+├── Observability
+└── Project Runtime
+    ├── Archive-Nexus
+    └── Future Applications
 
-기본 포트:
+ArchiveOS는 플랫폼과 애플리케이션의 책임을 분리합니다.
 
-| 서비스 | 포트 | 역할 |
-|---|---:|---|
-| Frontend | 5173 | 운영 대시보드 |
-| Node backend | 4000 | PM/Agent/운영 API |
-| archiveos-ai | 4100 | Spring AI/RAG API |
-| PostgreSQL | 5432 | pgvector 저장소 |
+- ArchiveOS
+  AI 실행, 배치, 워크플로우, RPA, 지식 검색, 관제를 담당하는 공통 런타임
 
-## RAG End-to-End 검증
+- Archive-Nexus
+  ArchiveOS 위에서 동작하는 제조 AX 애플리케이션
 
-Docker가 정상 설치되어 있으면 아래 스크립트로 전체 흐름을 확인한다.
+---
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/runtime/verify-rag-e2e.ps1
-```
+Tech Stack
 
-스크립트가 수행하는 검증:
+Backend
 
-1. Docker CLI, Compose, Docker daemon 확인
-2. `docker compose config`
-3. `docker compose up --build -d`
-4. PostgreSQL 접속 및 `vector` extension 확인
-5. `obsidian_documents`, `obsidian_chunks`, embedding index 확인
-6. `GET /api/health`
-7. `GET /api/ai/runtime`
-8. `POST /api/ai/runtime/check`
-9. `POST /api/obsidian/sync`
-10. `GET /api/rag/search?query=ArchiveOS&limit=5`
-11. `POST /api/rag/ask`
-12. Node proxy `GET/POST /api/ai/runtime`
+- Java 21
+- Spring Boot
+- Spring AI
+- Spring Batch
+- Spring Data JPA
+- PostgreSQL
+- pgvector
 
-수동 검증 명령:
+Frontend
 
-```powershell
-curl http://localhost:4100/api/health
-curl http://localhost:4100/api/ai/runtime
-curl -X POST http://localhost:4100/api/ai/runtime/check
-curl -X POST http://localhost:4100/api/obsidian/sync
-curl "http://localhost:4100/api/rag/search?query=ArchiveOS&limit=5"
-curl -X POST http://localhost:4100/api/rag/ask -H "Content-Type: application/json" -d "{\"question\":\"ArchiveOS의 Spring AI RAG 구조를 요약해줘\"}"
-curl http://localhost:4000/api/ai/runtime
-curl -X POST http://localhost:4000/api/ai/runtime/check
-```
+- React
+- Vite
+- TypeScript
 
-성공 기준:
+Infrastructure
 
-- `/api/ai/runtime`이 실제 DB 연결 상태를 반환한다.
-- `vectorStore.databaseConnected=true`
-- `vectorStore.extensionInstalled=true`
-- Obsidian sync 후 `knowledge.documents`, `knowledge.chunks`, `knowledge.embeddedChunks`가 증가한다.
-- RAG search가 `score`가 있는 references를 반환한다.
-- RAG ask가 `answer`와 `references`를 반환한다.
-- runtime telemetry에 latency와 reference count가 기록된다.
-- 응답에 API key, DB password, webhook URL, 로컬 vault 절대 경로가 노출되지 않는다.
+- Docker
+- Docker Compose
+- Kubernetes
+- Prometheus
+- Grafana
+- OpenTelemetry
 
-## 개발 명령
+Integration
 
-Frontend:
+- MCP
+- REST API
+- Webhook
+- Discord
+- GitHub
 
-```powershell
-npm install
-npm run test
-npm run build
-```
+---
 
-Node backend:
+Philosophy
 
-```powershell
-cd backend
-npm install
-npm run test
-npm run typecheck
-npm run build
-```
+One AI Runtime, Infinite Business Applications
 
-Spring AI backend:
+ArchiveOS는 하나의 AI 런타임 위에서 다양한 업무 애플리케이션을 실행하는 것을 목표로 합니다.
 
-```powershell
-cd archiveos-ai
-.\gradlew.bat test --no-daemon
-.\gradlew.bat bootJar --no-daemon
-```
+플랫폼은 공통 실행 환경을 제공하고, 각 애플리케이션은 자신의 도메인 문제에 집중합니다.
 
-## 문서
+Human-in-the-Loop
 
-- [Spring AI Engine Architecture](docs/architecture/spring-ai-engine.md)
-- [Spring AI Dashboard UI](docs/ui/spring-ai-dashboard.md)
-- [Developer Guide](docs/operations/developer-guide.md)
-- [AX 구현 상태](docs/AX_IMPLEMENTATION_STATUS.md)
-- [전체 아키텍처](docs/ARCHITECTURE_FULL.md)
+AI는 반복 작업, 분석, 추천, 요약을 수행하지만 위험하거나 중요한 작업은 사용자의 승인 이후에 실행합니다.
 
-## 운영 원칙
+Platform First
 
-- ArchiveOS UI는 visibility-first 원칙을 유지한다.
-- shell, MCP, Codex, process control을 UI에서 직접 실행하지 않는다.
-- PM decision 기능은 ArchiveOS task state와 decision log를 기록하는 용도다.
-- Secret 값은 backend/local runtime에서만 사용하고 frontend에 노출하지 않는다.
-- RAG 실패는 fake success가 아니라 명확한 unavailable/degraded 상태로 표시한다.
+ArchiveOS는 특정 프로젝트에 종속되지 않는 범용 플랫폼을 지향합니다.
+
+제조, 물류, 개발 운영, 지식 관리 등 여러 애플리케이션이 동일한 방식으로 ArchiveOS에 연결될 수 있어야 합니다.
+
+Observable by Default
+
+모든 Job, Step, Agent, RPA 작업은 실행 이력과 상태를 남깁니다.
+
+실패 원인, 재시도 여부, 승인 상태, 실행 결과를 추적할 수 있어야 합니다.
+
+---
+
+Archive-Nexus
+
+Archive-Nexus는 ArchiveOS 위에서 동작하는 첫 번째 산업 애플리케이션입니다.
+
+여러 가상 공장, 재고 허브, 물류 시스템, 품질 시스템, 정비 시스템을 하나의 생태계로 연결합니다.
+
+ArchiveOS의 AI Runtime과 지능형 RPA를 활용하여 다음 기능을 수행합니다.
+
+- 공장별 생산 데이터 수집
+- 설비 이상 감지
+- 품질 이상 분석
+- 재고 부족 및 납기 지연 감지
+- 과거 사례 기반 원인 분석
+- AI 조치 추천
+- 승인 기반 RPA 실행
+- 공장과 물류 시스템 통합 관제
+
+ArchiveOS
+    │
+    ├── AI Runtime
+    ├── Batch / Workflow
+    ├── RPA / Approval
+    └── Observability
+          │
+          ▼
+Archive-Nexus
+    ├── Virtual Factories
+    ├── Inventory
+    ├── Logistics
+    ├── Quality
+    └── Maintenance
+
+---
+
+Roadmap
+
+- [ ] AI Agent Runtime 고도화
+- [ ] Spring Batch 기반 작업 오케스트레이션
+- [ ] Intelligent RPA 및 Approval Gate
+- [ ] Workflow Designer
+- [ ] MCP 기반 Tool Registry
+- [ ] Multi-Agent 협업
+- [ ] RAG 및 지식 동기화
+- [ ] 프로젝트별 Runtime 관리
+- [ ] Observability 대시보드
+- [ ] Archive-Nexus 연동
+- [ ] Kubernetes 배포
+- [ ] Plugin SDK
+- [ ] Multi-LLM 지원
+
+---
+
+Slogan
+
+«AI가 일하는 플랫폼, 사람은 설계하고 결정하는 플랫폼.»
+
+«One AI Runtime. Infinite Business Applications.»
+
+---
+
+License
+
+라이선스 정책은 프로젝트 운영 방침에 따라 추후 정의합니다.
