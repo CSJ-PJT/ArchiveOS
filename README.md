@@ -1,154 +1,119 @@
 # ArchiveOS
 
-ArchiveOS는 AI Agent, 지능형 RPA, 배치 작업, 운영 대시보드, RAG 지식 엔진을 하나의 환경에서 실행하고 관제하는 AX 운영 플랫폼이다.
+ArchiveOS는 AI Agent 운영, Spring Batch 기반 RPA, Obsidian/RAG 지식 엔진, PM 승인 흐름을 한 화면에서 관제하는 AX 운영 플랫폼이다.
 
-목표는 사람이 모든 시스템을 직접 운영하는 방식에서 벗어나, AI가 반복 업무와 운영 판단을 보조하고 사람은 중요한 승인과 의사결정에 집중하는 구조를 만드는 것이다.
+목표는 사람이 모든 반복 운영을 직접 처리하는 구조에서 벗어나, AI와 배치 시스템이 판단 자료를 만들고 PM이 중요한 승인과 의사결정에 집중하는 구조를 만드는 것이다.
 
-## Vision
-
-AI가 일하고, 사람은 설계하고 결정한다.
-
-ArchiveOS는 특정 산업이나 서비스에 종속되지 않는 공통 AI 운영 런타임을 지향한다. 제조, 물류, 개발 운영, 문서 처리, 지식 관리 등 여러 도메인의 애플리케이션이 동일한 런타임 위에서 동작할 수 있도록 설계한다.
-
-## Core Features
-
-### AI Agent Runtime
-
-- AI Agent 실행 및 생명주기 관리
-- Multi-Agent 협업 구조
-- LLM 연동
-- Tool Calling
-- MCP 기반 외부 도구 연동 준비
-- 메모리와 실행 문맥 관리
-
-### Workflow & Batch Engine
-
-- Spring Batch 기반 Job 및 Step 실행
-- 스케줄링과 반복 작업 관리
-- 이벤트 기반 워크플로우
-- 병렬 처리 및 재시도
-- 실행 이력과 실패 원인 추적
-
-### Intelligent RPA
-
-- AI 기반 작업 분류와 판단
-- 승인 기반 자동화
-- 실패 복구 및 재시도 추천
-- 외부 시스템 연동
-- 위험 작업에 대한 Approval Gate
-- Spring Batch 기반 RPA 분류 Job과 실행 이력 저장
-
-### Knowledge & RAG
-
-- Obsidian Markdown 문서 수집 및 동기화
-- heading-aware chunking
-- OpenAI EmbeddingModel 기반 embedding 생성
-- PostgreSQL + pgvector 기반 vector search
-- Spring AI ChatModel 기반 RAG answer generation
-- 답변 출처와 score 추적
-
-### Operations & Observability
-
-- 시스템 상태 대시보드
-- 서비스 health check
-- 배치 및 워크플로우 실행 현황
-- 장애 감지와 Discord 알림
-- AI 기반 원인 분석 및 조치 추천 준비
-
-## Project Runtime
-
-ArchiveOS 위에서는 여러 독립 애플리케이션이 동작할 수 있다.
-
-첫 번째 산업 애플리케이션은 Archive-Nexus다.
-
-- Archive-Nexus: 가상 공장, 재고, 물류, 품질, 정비 시스템을 연결하는 제조 AX 애플리케이션
-- 향후 다양한 산업과 업무 도메인의 애플리케이션으로 확장 가능
+## 현재 구성
 
 ```text
-ArchiveOS
-  ├─ AI Runtime
-  ├─ Batch / Workflow
-  ├─ RPA / Approval
-  ├─ RAG / Knowledge
-  └─ Observability
-       │
-       ▼
-Archive-Nexus
-  ├─ Virtual Factories
-  ├─ Inventory
-  ├─ Logistics
-  ├─ Quality
-  └─ Maintenance
+React frontend
+  -> Node/Express operations backend
+       -> archiveos-ai Spring Boot + Spring AI + Spring Batch
+            -> PostgreSQL + pgvector
+            -> Obsidian Markdown Vault
+            -> OpenAI ChatModel / EmbeddingModel
 ```
 
-## 구성 요소
+역할:
 
-1. React Dashboard
-2. Node/Express Operations Backend
-3. `archiveos-ai` Spring Boot + Spring AI module
-4. PostgreSQL + pgvector
-5. Obsidian Markdown Vault
-6. OpenAI ChatModel / EmbeddingModel
-7. Docker Compose local runtime
+- `frontend`: Overview, Workflows, Knowledge, History, Settings 화면
+- `backend`: PM 운영, Agent/runtime visibility, Discord, Supabase 운영 데이터, Spring API proxy
+- `archiveos-ai`: Obsidian sync, chunking, embedding, pgvector 저장, vector search, RAG answer, Spring Batch RPA
+- `postgres`: local PostgreSQL + pgvector 개발 Vector DB
 
-역할 분리:
+## 운영 화면
 
-- `frontend`: Overview, Workflows, Knowledge, History, Settings 화면.
-- `backend`: PM 운영, Agent/runtime visibility, Discord 알림, Supabase 운영 데이터, Spring AI proxy.
-- `archiveos-ai`: Obsidian sync, heading-aware chunking, OpenAI embedding, pgvector 저장, vector search, RAG answer generation, Spring Batch RPA classification.
-- `postgres`: local PostgreSQL + pgvector 개발 Vector DB.
+### Overview
 
-RAG 흐름:
+- 시스템 상태
+- 현재 작업
+- Queue 요약
+- 승인 필요 항목
+- 최근 경고
+- Knowledge/RAG 요약
+
+### Workflows
+
+- PM task queue
+- Runtime flow
+- PM decision record
+- Spring Batch Jobs
+- Batch execution detail
+- RPA decision history
+- RAG health check job result
+
+### Knowledge
+
+- Obsidian status
+- Documents / chunks / embeddings
+- RAG search / answer
+- Operational memory graph
+
+### History
+
+- Events
+- Commands
+- Agent runs
+- Decisions
+- Errors
+- KPI history
+
+### Settings
+
+- Backend / Spring AI / Database / Docker 상태
+- Discord / Supabase / Obsidian 설정 여부
+- Public access
+- Security
+- Build information
+
+## 현재 운영 흐름
 
 ```text
-Markdown -> Chunking -> Embedding -> pgvector -> Vector Search -> ChatModel -> Answer + References
+PM request
+  -> Workflows
+  -> RPA classify
+  -> Spring Batch archiveosRpaClassifyJob
+  -> PM approval history
+  -> Knowledge/RAG context
 ```
 
-## Tech Stack
+Spring Batch 운영 Job:
 
-Backend:
+- `obsidianSyncJob`: Obsidian 문서 동기화, chunking, embedding, pgvector 저장
+- `ragHealthCheckJob`: Spring AI, pgvector, RAG readiness 점검
+- `archiveosRpaClassifyJob`: PM task 분류와 approval gate 판단
 
-- Java 21
-- Spring Boot
-- Spring AI
-- Spring Batch
-- Spring Data JDBC/JPA
-- Node.js / Express
-- PostgreSQL
-- pgvector
+`archiveosRpaClassifyJob`은 전용 task id가 필요하므로 Batch Jobs 화면에서 직접 실행하지 않고 RPA classify API를 통해 실행한다.
 
-Frontend:
+## 주요 API
 
-- React
-- Vite
-- TypeScript
+### Spring AI / RAG
 
-Infrastructure:
+- `GET /api/ai/runtime`
+- `POST /api/ai/runtime/check`
+- `POST /api/obsidian/sync`
+- `GET /api/obsidian/documents`
+- `GET /api/rag/search?query=ArchiveOS&limit=5`
+- `POST /api/rag/ask`
 
-- Docker
-- Docker Compose
-- Kubernetes 준비
-- Prometheus / Grafana 준비
-- OpenTelemetry 준비
+### Spring Batch
 
-Integration:
+- `GET /api/batch/jobs`
+- `POST /api/batch/jobs/{jobName}/run`
+- `GET /api/batch/executions`
+- `GET /api/batch/executions/{id}`
 
-- MCP
-- REST API
-- Webhook
-- Discord
-- GitHub
-- Obsidian Markdown
+### RPA
 
-## 환경 파일
+- `POST /api/rpa/classify`
+- `GET /api/rpa/tasks/recent`
+- `GET /api/rpa/tasks/{id}`
+- `POST /api/rpa/tasks/{id}/decision`
 
-루트 `.env`는 Git에 커밋하지 않는다.
+## 환경 변수
 
-```powershell
-Copy-Item .env.example .env
-```
-
-주요 값:
+실제 secret은 커밋하지 않는다.
 
 ```env
 OPENAI_API_KEY=
@@ -161,32 +126,7 @@ DB_USER=archiveos
 DB_PASSWORD=archiveos
 HOST_OBSIDIAN_VAULT_PATH=./docs
 ARCHIVEOS_AI_BASE_URL=http://localhost:4100
-```
-
-실제 Obsidian vault를 사용할 때는 `HOST_OBSIDIAN_VAULT_PATH`를 해당 경로로 바꾼다. API key, DB password, webhook URL, service role key는 절대 커밋하지 않는다.
-
-## Docker Desktop / Docker CLI 확인
-
-Windows 기준 확인 명령:
-
-```powershell
-Test-Path "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
-Test-Path "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-docker --version
-docker compose version
-docker info
-```
-
-Docker Desktop은 설치되어 있으나 PATH만 빠진 경우:
-
-```powershell
-$env:PATH = "C:\Program Files\Docker\Docker\resources\bin;$env:PATH"
-```
-
-영구 반영은 Windows 환경 변수 `Path`에 아래 경로를 추가한다.
-
-```text
-C:\Program Files\Docker\Docker\resources\bin
+DISCORD_WEBHOOK_URL=
 ```
 
 ## Docker Compose 실행
@@ -204,16 +144,7 @@ docker compose ps
 - `backend`: running
 - `frontend`: running
 
-기본 포트:
-
-| Service | Port | Role |
-|---|---:|---|
-| Frontend | 5173 | React 운영 화면 |
-| Node backend | 4000 | PM/Agent/운영 API |
-| archiveos-ai | 4100 | Spring AI/RAG API |
-| PostgreSQL | 5432 | pgvector 저장소 |
-
-## RAG End-to-End 검증
+## RAG / Batch / RPA E2E 검증
 
 자동 검증:
 
@@ -221,7 +152,11 @@ docker compose ps
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/runtime/verify-rag-e2e.ps1
 ```
 
-검증 스크립트는 `docker compose config`의 원문 환경변수를 출력하지 않고, API 응답도 상태 요약만 출력한다.
+이미 compose가 실행 중이면:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/runtime/verify-rag-e2e.ps1 -SkipComposeUp -KeepRunning
+```
 
 수동 검증:
 
@@ -232,34 +167,33 @@ curl -X POST http://localhost:4100/api/ai/runtime/check
 curl -X POST http://localhost:4100/api/obsidian/sync
 curl "http://localhost:4100/api/rag/search?query=ArchiveOS&limit=5"
 curl -X POST http://localhost:4100/api/rag/ask -H "Content-Type: application/json" -d "{\"question\":\"Summarize the ArchiveOS Spring AI RAG architecture.\"}"
+
 curl http://localhost:4100/api/batch/jobs
 curl -X POST http://localhost:4100/api/batch/jobs/ragHealthCheckJob/run
 curl "http://localhost:4100/api/batch/executions?limit=5"
+
 curl -X POST http://localhost:4100/api/rpa/classify -H "Content-Type: application/json" -d "{\"title\":\"Verify RAG deployment\",\"description\":\"Check pgvector schema and deployment risk before running any shell commands.\",\"targetProject\":\"ArchiveOS\"}"
 curl -X POST http://localhost:4100/api/rpa/tasks/{taskId}/decision -H "Content-Type: application/json" -d "{\"action\":\"approve\",\"reason\":\"PM approved the classification record only.\",\"decidedBy\":\"pm\"}"
+
 curl http://localhost:4000/api/ai/runtime
-curl -X POST http://localhost:4000/api/ai/runtime/check
 curl http://localhost:4000/api/batch/jobs
-curl -X POST http://localhost:4000/api/rpa/classify -H "Content-Type: application/json" -d "{\"title\":\"Verify RAG deployment\",\"description\":\"Check pgvector schema and deployment risk before running any shell commands.\",\"targetProject\":\"ArchiveOS\"}"
 ```
 
 성공 기준:
 
-- `/api/ai/runtime`이 실제 DB 연결 상태를 반환한다.
 - `vectorStore.databaseConnected=true`
 - `vectorStore.extensionInstalled=true`
 - `vectorStore.indexReady=true`
-- Obsidian sync 후 documents/chunks/embeddedChunks가 증가한다.
-- RAG search가 score가 포함된 references를 반환한다.
-- RAG ask가 answer와 references를 반환한다.
-- Batch job catalog에 `obsidianSyncJob`, `ragHealthCheckJob`, `archiveosRpaClassifyJob`이 표시된다.
-- `ragHealthCheckJob` 수동 실행이 Spring Batch execution history에 기록된다.
-- RPA classify가 Spring Batch Job을 통해 `pm_approval_required` 상태와 risk/recommendation을 기록한다.
-- RPA decision이 `archiveos_rpa_decisions`에 승인/반려/보류/재시도 이력을 남긴다.
-- runtime telemetry에 latency와 reference count가 기록된다.
-- 응답에 API key, DB password, webhook URL, 로컬 vault 절대 경로가 노출되지 않는다.
+- sync 후 documents/chunks/embeddedChunks 증가
+- RAG search가 score 포함 결과 반환
+- RAG ask가 answer와 references 반환
+- Batch job catalog에 `obsidianSyncJob`, `ragHealthCheckJob`, `archiveosRpaClassifyJob` 표시
+- `ragHealthCheckJob` 실행 이력이 Spring Batch metadata에 기록
+- RPA classify가 `pm_approval_required`와 risk/recommendation 기록
+- RPA decision이 `archiveos_rpa_decisions`에 기록
+- API key, DB password, webhook URL, vault 절대 경로 미노출
 
-## 개발 명령
+## Test / Build
 
 Frontend:
 
@@ -289,30 +223,17 @@ cd archiveos-ai
 
 - UI는 visibility-first 원칙을 유지한다.
 - shell, MCP, Codex, process control은 UI에서 직접 실행하지 않는다.
-- PM decision 기능은 ArchiveOS task state와 decision log를 기록하는 용도다.
-- Secret 값은 backend/local runtime에서만 사용하고 frontend에는 노출하지 않는다.
-- RAG 실패 시 fake success를 반환하지 않고 명확한 unavailable/degraded 상태를 표시한다.
-
-## Roadmap
-
-- [ ] AI Agent Runtime 고도화
-- [ ] Spring Batch 기반 작업 오케스트레이션
-- [ ] Intelligent RPA 및 Approval Gate
-- [ ] Workflow Designer
-- [ ] MCP 기반 Tool Registry
-- [ ] Multi-Agent 협업
-- [ ] RAG 및 지식 동기화
-- [ ] 프로젝트별 Runtime 관리
-- [ ] Observability 대시보드
-- [ ] Archive-Nexus 연동
-- [ ] Kubernetes 배포
-- [ ] Plugin SDK
-- [ ] Multi-LLM 지원
+- PM decision은 task state와 decision log를 기록하는 용도다.
+- secret 값은 backend/local runtime에서만 사용하고 frontend에는 노출하지 않는다.
+- RAG 실패 시 fake success를 반환하지 않고 unavailable/degraded 상태를 표시한다.
+- 위험 작업은 PM Approval Gate 이전에 실행하지 않는다.
 
 ## 문서
 
 - [Spring AI Engine Architecture](docs/architecture/spring-ai-engine.md)
 - [Spring Batch 운영 구조](docs/architecture/spring-batch.md)
+- [RPA 승인 흐름](docs/architecture/rpa-approval-flow.md)
+- [RAG 점검 흐름](docs/architecture/rag-health-check-flow.md)
 - [Backend Migration Plan](docs/architecture/backend-migration-plan.md)
 - [RPA Workflows UI](docs/ui/rpa-workflows.md)
 - [Spring AI Dashboard UI](docs/ui/spring-ai-dashboard.md)
@@ -320,12 +241,10 @@ cd archiveos-ai
 - [AX 구현 상태](docs/AX_IMPLEMENTATION_STATUS.md)
 - [전체 아키텍처](docs/ARCHITECTURE_FULL.md)
 
-## Slogan
+## Roadmap
 
-AI가 일하는 플랫폼, 사람은 설계하고 결정하는 플랫폼.
-
-One AI Runtime. Infinite Business Applications.
-
-## License
-
-라이선스 정책은 프로젝트 운영 방침에 따라 추후 정의한다.
+- NightlyReviewJob / DailyReportJob Spring Batch 이전
+- KnowledgeMaintenanceJob / PipelineAuditJob 추가
+- Workflows 화면의 batch execution filter 강화
+- PM Approval Gate와 future execution boundary 강화
+- MCP/Tool execution allowlist 설계

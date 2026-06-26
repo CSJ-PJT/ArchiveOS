@@ -187,6 +187,77 @@ export type AiRuntime = {
   };
 };
 
+export type SpringBatchExecution = {
+  id: number;
+  jobName: string | null;
+  status: string;
+  exitCode: string;
+  exitDescription: string;
+  createTime: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  running: boolean;
+  parameters: Record<string, unknown>;
+  executionContext: Record<string, unknown>;
+  steps?: Array<{
+    stepName: string;
+    status: string;
+    exitCode: string;
+    readCount: number;
+    writeCount: number;
+    commitCount: number;
+    rollbackCount: number;
+    startTime: string | null;
+    endTime: string | null;
+    executionContext: Record<string, unknown>;
+  }>;
+};
+
+export type SpringBatchJob = {
+  name: string;
+  launchable: boolean;
+  manualRunAllowed: boolean;
+  description: string;
+  recentExecutions: SpringBatchExecution[];
+};
+
+export type RpaTaskRecord = {
+  id: string;
+  title: string;
+  description: string;
+  targetProject: string | null;
+  requestedBy: string | null;
+  status: string;
+  category: string | null;
+  riskLevel: string | null;
+  recommendation: string | null;
+  approvalRequired: boolean;
+  summary: string | null;
+  classificationSource: string | null;
+  error: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RpaDecisionRecord = {
+  id: string;
+  taskId: string;
+  action: "approve" | "reject" | "hold" | "request_retry";
+  reason: string | null;
+  decidedBy: string | null;
+  previousStatus: string;
+  nextStatus: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type RpaTaskDetail = {
+  task: RpaTaskRecord;
+  decisions: RpaDecisionRecord[];
+  safety: string;
+};
+
 export type SecurityStatus = {
   checkedAt: string;
   authentication: {
@@ -681,6 +752,38 @@ export async function checkAiRuntime() {
   const response = await request<ApiEnvelope<Record<string, unknown>>>("/api/ai/runtime/check", {
     method: "POST",
   });
+  return response.data;
+}
+
+export async function getSpringBatchJobs() {
+  const response = await request<ApiEnvelope<SpringBatchJob[]>>("/api/batch/jobs");
+  return response.data;
+}
+
+export async function runSpringBatchJob(jobName: string) {
+  const response = await request<ApiEnvelope<SpringBatchExecution>>(`/api/batch/jobs/${encodeURIComponent(jobName)}/run`, {
+    method: "POST",
+  });
+  return response.data;
+}
+
+export async function getSpringBatchExecutions(limit = 20) {
+  const response = await request<ApiEnvelope<SpringBatchExecution[]>>(`/api/batch/executions?limit=${limit}`);
+  return response.data;
+}
+
+export async function getSpringBatchExecution(id: number) {
+  const response = await request<ApiEnvelope<SpringBatchExecution>>(`/api/batch/executions/${id}`);
+  return response.data;
+}
+
+export async function getRpaTasks(limit = 20) {
+  const response = await request<ApiEnvelope<RpaTaskRecord[]>>(`/api/rpa/tasks/recent?limit=${limit}`);
+  return response.data;
+}
+
+export async function getRpaTaskDetail(id: string) {
+  const response = await request<ApiEnvelope<RpaTaskDetail>>(`/api/rpa/tasks/${encodeURIComponent(id)}`);
   return response.data;
 }
 
