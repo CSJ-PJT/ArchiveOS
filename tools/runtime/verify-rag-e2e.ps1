@@ -126,6 +126,24 @@ try {
     firstReferenceScore = $firstReference.score
   })
 
+  Write-Host "== Spring Batch RPA classify =="
+  $rpaBody = @{
+    title = "Verify RAG deployment"
+    description = "Check pgvector schema and deployment risk before running any shell commands."
+    targetProject = "ArchiveOS"
+    requestedBy = "verify-rag-e2e"
+  } | ConvertTo-Json
+  $rpa = Invoke-JsonRequest -Uri "http://localhost:4100/api/rpa/classify" -Method "POST" -Body $rpaBody
+  Write-JsonSummary ([pscustomobject]@{
+    batchStatus = $rpa.data.batchStatus
+    taskStatus = $rpa.data.task.status
+    riskLevel = $rpa.data.task.riskLevel
+    recommendation = $rpa.data.task.recommendation
+    approvalRequired = $rpa.data.task.approvalRequired
+    classificationSource = $rpa.data.task.classificationSource
+    safety = $rpa.data.safety
+  })
+
   Write-Host "== Node proxy =="
   $proxyRuntime = Invoke-JsonRequest -Uri "http://localhost:4000/api/ai/runtime"
   Write-JsonSummary ([pscustomobject]@{
@@ -138,6 +156,13 @@ try {
     embeddingSuccess = $proxyCheck.data.embedding.success
     chatSuccess = $proxyCheck.data.chat.success
     runtimeStatus = $proxyCheck.data.runtime.status
+  })
+  $proxyRpa = Invoke-JsonRequest -Uri "http://localhost:4000/api/rpa/classify" -Method "POST" -Body $rpaBody
+  Write-JsonSummary ([pscustomobject]@{
+    batchStatus = $proxyRpa.data.batchStatus
+    taskStatus = $proxyRpa.data.task.status
+    riskLevel = $proxyRpa.data.task.riskLevel
+    approvalRequired = $proxyRpa.data.task.approvalRequired
   })
 
   Write-Host "== Runtime after RAG calls =="

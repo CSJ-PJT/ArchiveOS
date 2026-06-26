@@ -1,13 +1,16 @@
 # Spring AI Engine Architecture
 
-ArchiveOS는 운영 화면과 AI/RAG 실행 계층을 분리한다. Node/Express backend는 PM 운영과 Agent 상태를 담당하고, `archiveos-ai` Spring Boot 모듈은 Obsidian 지식 수집, embedding, pgvector 저장, vector search, RAG answer generation을 담당한다.
+ArchiveOS는 운영 화면과 AI/RAG 실행 계층을 분리한다.
+
+- Node/Express backend: PM 운영, Agent 상태, Dashboard, Discord, Supabase 운영 데이터, Spring AI proxy 담당
+- `archiveos-ai`: Obsidian 수집, chunking, embedding, pgvector 저장, vector search, RAG answer generation, Spring Batch Intelligent RPA 담당
 
 ## 책임 분리
 
 ```text
 React Dashboard
   -> Node/Express Operations Backend
-       -> archiveos-ai Spring Boot + Spring AI
+       -> archiveos-ai Spring Boot + Spring AI + Spring Batch
             -> PostgreSQL + pgvector
             -> Obsidian Markdown Vault
             -> OpenAI ChatModel / EmbeddingModel
@@ -21,9 +24,9 @@ React Dashboard
 
 ### Node/Express Operations Backend
 
-- PM operations, Agent/runtime visibility, Discord notifications, Supabase 운영 이력, Task Queue 상태를 담당한다.
-- RAG 관련 요청은 `archiveos-ai`로 proxy한다.
-- `archiveos-ai`가 꺼져 있으면 fake healthy 대신 HTTP 503과 unavailable 상태를 반환한다.
+- 기존 PM 운영 API와 Supabase 기반 운영 데이터를 유지한다.
+- RAG 및 Intelligent RPA 요청은 `archiveos-ai`로 proxy한다.
+- `archiveos-ai`가 꺼져 있으면 fake healthy를 반환하지 않고 HTTP 503 또는 명확한 unavailable 상태를 반환한다.
 
 ### archiveos-ai Spring Boot Module
 
@@ -33,6 +36,7 @@ React Dashboard
 - PostgreSQL + pgvector에 chunk와 vector를 저장한다.
 - cosine similarity search를 수행한다.
 - Spring AI `ChatModel`로 references 기반 답변을 생성한다.
+- Spring Batch Job으로 Intelligent RPA 작업을 분류하고 PM 승인 필요 여부를 기록한다.
 
 ## RAG Flow
 
@@ -40,11 +44,50 @@ React Dashboard
 Markdown
   -> Heading-aware chunking
   -> EmbeddingModel
-  -> VectorStore / pgvector
-  -> Retriever
+  -> pgvector
+  -> Vector Search
   -> ChatModel
   -> Answer + References
 ```
+
+## Spring Batch Intelligent RPA
+
+`archiveos-ai`는 Node/Express에 남아 있던 batch/scheduler 책임을 Spring 쪽으로 이전하기 위한 첫 단계로 `archiveosRpaClassifyJob`을 제공한다.
+
+이 Job은 실제 shell, MCP, Codex, git, 배포 명령을 실행하지 않는다. 대신 PM 승인 전에 작업을 분류하고 위험도와 권장 조치를 DB에 기록한다.
+
+### API
+
+- `POST /api/rpa/classify`
+- `GET /api/rpa/tasks/recent`
+- `GET /api/rpa/tasks/{id}`
+
+### 저장 테이블
+
+- `archiveos_rpa_tasks`
+
+주요 필드:
+
+- `status`
+- `category`
+- `risk_level`
+- `recommendation`
+- `approval_required`
+- `classification_source`
+- `metadata`
+
+### 상태 흐름
+
+```text
+queued
+  -> Spring Batch archiveosRpaClassifyJob
+  -> running
+  -> pm_approval_required
+```
+
+Spring AI ChatModel이 설정되어 있으면 AI 분류를 사용한다. ChatModel이 없거나 호출이 실패하면 rule-based fallback을 사용하되 `classification_source`에 이를 기록한다.
+
+위험 실행, 배포, destructive DB 작업, secret/token 노출 가능성이 감지되면 `risk_level=high`, `recommendation=PM_APPROVAL_REQUIRED`로 기록한다.
 
 ## API
 
@@ -57,6 +100,9 @@ Markdown
 - `GET /api/obsidian/documents`
 - `GET /api/rag/search?query=...`
 - `POST /api/rag/ask`
+- `POST /api/rpa/classify`
+- `GET /api/rpa/tasks/recent`
+- `GET /api/rpa/tasks/{id}`
 
 Node backend proxy:
 
@@ -66,6 +112,9 @@ Node backend proxy:
 - `GET /api/obsidian/documents`
 - `GET /api/rag/search`
 - `POST /api/rag/ask`
+- `POST /api/rpa/classify`
+- `GET /api/rpa/tasks/recent`
+- `GET /api/rpa/tasks/:id`
 
 ## Runtime Observability
 
@@ -85,7 +134,7 @@ Node backend proxy:
 - 최근 latency
 - 최근 reference count
 
-`POST /api/ai/runtime/check`는 명시적으로 호출할 때만 실제 ChatModel/EmbeddingModel smoke check를 수행한다. Overview 조회만으로 유료 모델 호출이 발생하지 않는다.
+`POST /api/ai/runtime/check`는 명시적으로 호출될 때만 실제 ChatModel/EmbeddingModel smoke check를 수행한다.
 
 ## Vector Database
 
@@ -96,6 +145,7 @@ Node backend proxy:
 - tables:
   - `public.obsidian_documents`
   - `public.obsidian_chunks`
+  - `public.archiveos_rpa_tasks`
 - embedding column:
   - `embedding vector(1536)`
 - index:
@@ -106,8 +156,6 @@ Node backend proxy:
 Supabase PostgreSQL + pgvector는 운영 또는 원격 검증용 선택지로 유지한다.
 
 ## Docker E2E 검증
-
-Docker Desktop이 설치되어 있고 `docker info`가 성공하면 아래 명령으로 전체 RAG 흐름을 검증한다.
 
 ```powershell
 docker compose config
@@ -124,6 +172,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/runtime/verify-rag
 - embedding 저장 성공
 - vector similarity search 성공
 - `/api/rag/ask`가 answer + references 반환
+- `/api/rpa/classify`가 Spring Batch Job 결과 반환
 - Node backend proxy 성공
 
 ## Security Boundaries
@@ -131,19 +180,5 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/runtime/verify-rag
 - `OPENAI_API_KEY`는 frontend에 노출하지 않는다.
 - DB password와 전체 DB URL은 API 응답에 포함하지 않는다.
 - 로컬 Obsidian vault 절대 경로는 frontend에 노출하지 않는다.
-- RAG 실패는 fake success가 아니라 unavailable/degraded 상태로 반환한다.
-- ArchiveOS UI는 visibility-first 원칙을 유지한다.
-
-## RAG Ready 기준
-
-다음 조건을 만족하면 RAG ready로 판단한다.
-
-- OpenAI API key가 설정되어 있다.
-- ChatModel Bean을 사용할 수 있다.
-- EmbeddingModel Bean을 사용할 수 있다.
-- PostgreSQL에 연결된다.
-- pgvector extension과 vector index가 준비되어 있다.
-- Obsidian sync가 documents/chunks를 생성했다.
-- embedding이 저장된 chunk가 있다.
-- vector search가 scored references를 반환한다.
-- `/api/rag/ask`가 answer와 references를 반환한다.
+- RAG 실패 시 fake success가 아니라 unavailable/degraded 상태로 반환한다.
+- RPA classify는 실행이 아니라 판단 기록이며, 위험 작업은 PM 승인 전 실행하지 않는다.

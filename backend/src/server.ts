@@ -128,6 +128,9 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Obsidian Documents", method: "GET", path: "/api/obsidian/documents", service: "knowledge", description: "Spring AI indexed Obsidian document proxy." },
   { name: "RAG Search", method: "GET", path: "/api/rag/search", service: "knowledge", description: "Spring AI pgvector similarity search proxy." },
   { name: "RAG Ask", method: "POST", path: "/api/rag/ask", service: "knowledge", description: "Spring AI ChatModel grounded RAG answer proxy." },
+  { name: "RPA Classify", method: "POST", path: "/api/rpa/classify", service: "ax", description: "Spring Batch Intelligent RPA classification proxy." },
+  { name: "RPA Tasks", method: "GET", path: "/api/rpa/tasks/recent", service: "ax", description: "Recent Spring Batch RPA task records." },
+  { name: "RPA Task Detail", method: "GET", path: "/api/rpa/tasks/:id", service: "ax", description: "Spring Batch RPA task detail." },
   { name: "Dashboard", method: "GET", path: "/api/dashboard", service: "dailyReport", description: "Supabase dashboard data." },
   { name: "Work Logs", method: "GET", path: "/api/work-logs/recent", service: "dailyReport", description: "Recent work logs." },
   { name: "Record Work Log", method: "POST", path: "/api/work-logs", service: "dailyReport", description: "Recording-only work log write." },
@@ -300,6 +303,48 @@ app.post("/api/rag/ask", async (request, response) => {
     }));
   } catch (error) {
     sendProxyError(response, error, "RAG ask failed.");
+  }
+});
+
+app.post("/api/rpa/classify", async (request, response) => {
+  const title = typeof request.body?.title === "string" ? request.body.title.trim() : "";
+  const description = typeof request.body?.description === "string" ? request.body.description.trim() : "";
+  if (!title || !description) {
+    response.status(400).json({ error: "title and description are required." });
+    return;
+  }
+
+  try {
+    response.status(200).json(await proxyArchiveOsAi("/api/rpa/classify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        title,
+        description,
+        targetProject: typeof request.body?.targetProject === "string" ? request.body.targetProject : undefined,
+        requestedBy: typeof request.body?.requestedBy === "string" ? request.body.requestedBy : "archiveos-node-proxy",
+        metadata: typeof request.body?.metadata === "object" && request.body.metadata !== null ? request.body.metadata : {},
+      }),
+    }));
+  } catch (error) {
+    sendProxyError(response, error, "Spring Batch RPA classification failed.");
+  }
+});
+
+app.get("/api/rpa/tasks/recent", async (request, response) => {
+  try {
+    const limit = Number(request.query.limit ?? 20);
+    response.status(200).json(await proxyArchiveOsAi(`/api/rpa/tasks/recent?limit=${encodeURIComponent(String(limit))}`));
+  } catch (error) {
+    sendProxyError(response, error, "Spring Batch RPA tasks are unavailable.");
+  }
+});
+
+app.get("/api/rpa/tasks/:id", async (request, response) => {
+  try {
+    response.status(200).json(await proxyArchiveOsAi(`/api/rpa/tasks/${encodeURIComponent(request.params.id)}`));
+  } catch (error) {
+    sendProxyError(response, error, "Spring Batch RPA task is unavailable.");
   }
 });
 
