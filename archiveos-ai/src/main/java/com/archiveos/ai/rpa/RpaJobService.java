@@ -52,6 +52,24 @@ public class RpaJobService {
         return repository.get(id);
     }
 
+    public Map<String, Object> detail(UUID id) {
+        RpaTaskRecord task = get(id);
+        if (task == null) return null;
+        return Map.of(
+                "task", task,
+                "decisions", repository.decisions(id),
+                "safety", "decision_records_only_no_execution");
+    }
+
+    public Map<String, Object> decide(UUID id, RpaDecisionRequest request) {
+        RpaDecisionRecord decision = repository.recordDecision(id, request);
+        RpaTaskRecord task = repository.get(id);
+        return Map.of(
+                "task", task,
+                "decision", decision,
+                "safety", "pm_decision_recorded_no_execution");
+    }
+
     public List<RpaTaskRecord> recent(int limit) {
         return repository.recent(limit);
     }

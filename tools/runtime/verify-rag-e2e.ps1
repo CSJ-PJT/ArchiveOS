@@ -143,6 +143,19 @@ try {
     classificationSource = $rpa.data.task.classificationSource
     safety = $rpa.data.safety
   })
+  $rpaDecisionBody = @{
+    action = "approve"
+    reason = "E2E smoke approved the classification record only. No execution was performed."
+    decidedBy = "verify-rag-e2e"
+  } | ConvertTo-Json
+  $rpaDecision = Invoke-JsonRequest -Uri "http://localhost:4100/api/rpa/tasks/$($rpa.data.task.id)/decision" -Method "POST" -Body $rpaDecisionBody
+  Write-JsonSummary ([pscustomobject]@{
+    decisionAction = $rpaDecision.data.decision.action
+    previousStatus = $rpaDecision.data.decision.previousStatus
+    nextStatus = $rpaDecision.data.decision.nextStatus
+    taskStatus = $rpaDecision.data.task.status
+    safety = $rpaDecision.data.safety
+  })
 
   Write-Host "== Node proxy =="
   $proxyRuntime = Invoke-JsonRequest -Uri "http://localhost:4000/api/ai/runtime"
@@ -163,6 +176,12 @@ try {
     taskStatus = $proxyRpa.data.task.status
     riskLevel = $proxyRpa.data.task.riskLevel
     approvalRequired = $proxyRpa.data.task.approvalRequired
+  })
+  $proxyRpaDecision = Invoke-JsonRequest -Uri "http://localhost:4000/api/rpa/tasks/$($proxyRpa.data.task.id)/decision" -Method "POST" -Body $rpaDecisionBody
+  Write-JsonSummary ([pscustomobject]@{
+    decisionAction = $proxyRpaDecision.data.decision.action
+    nextStatus = $proxyRpaDecision.data.decision.nextStatus
+    taskStatus = $proxyRpaDecision.data.task.status
   })
 
   Write-Host "== Runtime after RAG calls =="

@@ -134,9 +134,10 @@ Node backend는 Intelligent RPA 판단 책임을 직접 수행하지 않고 `arc
 POST /api/rpa/classify
 GET /api/rpa/tasks/recent
 GET /api/rpa/tasks/:id
+POST /api/rpa/tasks/:id/decision
 ```
 
-이 API는 작업을 직접 실행하지 않는다. Spring Batch Job이 작업을 분류하고 위험도, 권장 조치, PM 승인 필요 여부를 DB에 기록한다.
+이 API는 작업을 직접 실행하지 않는다. Spring Batch Job이 작업을 분류하고 위험도, 권장 조치, PM 승인 필요 여부를 DB에 기록한다. PM decision API는 승인/반려/보류/재시도 상태와 사유만 기록한다.
 
 ## PM 작업 흐름
 

@@ -131,6 +131,7 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "RPA Classify", method: "POST", path: "/api/rpa/classify", service: "ax", description: "Spring Batch Intelligent RPA classification proxy." },
   { name: "RPA Tasks", method: "GET", path: "/api/rpa/tasks/recent", service: "ax", description: "Recent Spring Batch RPA task records." },
   { name: "RPA Task Detail", method: "GET", path: "/api/rpa/tasks/:id", service: "ax", description: "Spring Batch RPA task detail." },
+  { name: "RPA PM Decision", method: "POST", path: "/api/rpa/tasks/:id/decision", service: "ax", description: "Spring DB PM approval/rejection/hold record." },
   { name: "Dashboard", method: "GET", path: "/api/dashboard", service: "dailyReport", description: "Supabase dashboard data." },
   { name: "Work Logs", method: "GET", path: "/api/work-logs/recent", service: "dailyReport", description: "Recent work logs." },
   { name: "Record Work Log", method: "POST", path: "/api/work-logs", service: "dailyReport", description: "Recording-only work log write." },
@@ -345,6 +346,32 @@ app.get("/api/rpa/tasks/:id", async (request, response) => {
     response.status(200).json(await proxyArchiveOsAi(`/api/rpa/tasks/${encodeURIComponent(request.params.id)}`));
   } catch (error) {
     sendProxyError(response, error, "Spring Batch RPA task is unavailable.");
+  }
+});
+
+app.post("/api/rpa/tasks/:id/decision", async (request, response) => {
+  const action = typeof request.body?.action === "string" ? request.body.action.trim() : "";
+  if (!["approve", "reject", "hold", "request_retry"].includes(action)) {
+    response.status(400).json({ error: "action must be approve, reject, hold, or request_retry." });
+    return;
+  }
+  if (action === "reject" && (typeof request.body?.reason !== "string" || !request.body.reason.trim())) {
+    response.status(400).json({ error: "reason is required when rejecting an RPA task." });
+    return;
+  }
+
+  try {
+    response.status(200).json(await proxyArchiveOsAi(`/api/rpa/tasks/${encodeURIComponent(request.params.id)}/decision`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action,
+        reason: typeof request.body?.reason === "string" ? request.body.reason : null,
+        decidedBy: typeof request.body?.decidedBy === "string" ? request.body.decidedBy : "archiveos-node-proxy",
+      }),
+    }));
+  } catch (error) {
+    sendProxyError(response, error, "Spring Batch RPA decision failed.");
   }
 });
 
