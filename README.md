@@ -233,6 +233,7 @@ curl -X POST http://localhost:4100/api/obsidian/sync
 curl "http://localhost:4100/api/rag/search?query=ArchiveOS&limit=5"
 curl -X POST http://localhost:4100/api/rag/ask -H "Content-Type: application/json" -d "{\"question\":\"Summarize the ArchiveOS Spring AI RAG architecture.\"}"
 curl -X POST http://localhost:4100/api/rpa/classify -H "Content-Type: application/json" -d "{\"title\":\"Verify RAG deployment\",\"description\":\"Check pgvector schema and deployment risk before running any shell commands.\",\"targetProject\":\"ArchiveOS\"}"
+curl -X POST http://localhost:4100/api/rpa/tasks/{taskId}/decision -H "Content-Type: application/json" -d "{\"action\":\"approve\",\"reason\":\"PM approved the classification record only.\",\"decidedBy\":\"pm\"}"
 curl http://localhost:4000/api/ai/runtime
 curl -X POST http://localhost:4000/api/ai/runtime/check
 curl -X POST http://localhost:4000/api/rpa/classify -H "Content-Type: application/json" -d "{\"title\":\"Verify RAG deployment\",\"description\":\"Check pgvector schema and deployment risk before running any shell commands.\",\"targetProject\":\"ArchiveOS\"}"
@@ -248,6 +249,7 @@ curl -X POST http://localhost:4000/api/rpa/classify -H "Content-Type: applicatio
 - RAG search가 score가 포함된 references를 반환한다.
 - RAG ask가 answer와 references를 반환한다.
 - RPA classify가 Spring Batch Job을 통해 `pm_approval_required` 상태와 risk/recommendation을 기록한다.
+- RPA decision이 `archiveos_rpa_decisions`에 승인/반려/보류/재시도 이력을 남긴다.
 - runtime telemetry에 latency와 reference count가 기록된다.
 - 응답에 API key, DB password, webhook URL, 로컬 vault 절대 경로가 노출되지 않는다.
 

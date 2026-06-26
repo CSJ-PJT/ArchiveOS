@@ -52,10 +52,12 @@
 - Spring Batch metadata schema 자동 초기화
 - `archiveosRpaClassifyJob` 추가
 - `archiveos_rpa_tasks` 테이블 추가
+- `archiveos_rpa_decisions` 테이블 추가
 - 작업 title/description 기반 분류
 - ChatModel 기반 분류 시도
 - ChatModel 미설정 또는 실패 시 rule-based fallback
 - 위험도, 권장 조치, PM 승인 필요 여부 저장
+- PM 승인/반려/보류/재시도 이력 저장
 - 직접 실행 없음:
   - shell 실행 없음
   - MCP 실행 없음
@@ -102,6 +104,7 @@ Node/Express backend는 RAG와 Intelligent RPA 판단을 직접 구현하지 않
 - `POST /api/rpa/classify`
 - `GET /api/rpa/tasks/recent`
 - `GET /api/rpa/tasks/:id`
+- `POST /api/rpa/tasks/:id/decision`
 
 `archiveos-ai`가 꺼져 있으면 fake healthy 대신 HTTP 503을 반환한다.
 

@@ -41,6 +41,21 @@ public class RpaJdbcRepository {
                 """);
         jdbcTemplate.execute("create index if not exists archiveos_rpa_tasks_status_idx on public.archiveos_rpa_tasks(status)");
         jdbcTemplate.execute("create index if not exists archiveos_rpa_tasks_created_at_idx on public.archiveos_rpa_tasks(created_at desc)");
+        jdbcTemplate.execute("""
+                create table if not exists public.archiveos_rpa_decisions (
+                  id uuid primary key,
+                  task_id uuid not null references public.archiveos_rpa_tasks(id) on delete cascade,
+                  action text not null,
+                  reason text,
+                  decided_by text,
+                  previous_status text not null,
+                  next_status text not null,
+                  metadata jsonb not null default '{}'::jsonb,
+                  created_at timestamptz not null default now()
+                )
+                """);
+        jdbcTemplate.execute("create index if not exists archiveos_rpa_decisions_task_id_idx on public.archiveos_rpa_decisions(task_id)");
+        jdbcTemplate.execute("create index if not exists archiveos_rpa_decisions_created_at_idx on public.archiveos_rpa_decisions(created_at desc)");
     }
 
     public RpaTaskRecord create(RpaTaskRequest request) {
@@ -128,6 +143,63 @@ public class RpaJdbcRepository {
                 id);
     }
 
+    public RpaDecisionRecord recordDecision(UUID taskId, RpaDecisionRequest request) {
+        ensureSchema();
+        RpaTaskRecord task = get(taskId);
+        if (task == null) {
+            throw new IllegalArgumentException("RPA task not found: " + taskId);
+        }
+        validateDecision(task, request);
+        String nextStatus = nextStatus(request.action());
+        UUID decisionId = UUID.randomUUID();
+        RpaDecisionRecord decision = jdbcTemplate.queryForObject("""
+                insert into public.archiveos_rpa_decisions(
+                  id, task_id, action, reason, decided_by, previous_status, next_status, metadata
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+                returning *
+                """,
+                this::mapDecisionRow,
+                decisionId,
+                taskId,
+                request.action(),
+                blankToNull(request.reason()),
+                blankToNull(request.decidedBy()),
+                task.status(),
+                nextStatus,
+                Json.write(Map.of(
+                        "approval_required_before_decision", task.approvalRequired(),
+                        "risk_level", task.riskLevel() == null ? "" : task.riskLevel(),
+                        "recommendation", task.recommendation() == null ? "" : task.recommendation())));
+
+        jdbcTemplate.update("""
+                update public.archiveos_rpa_tasks
+                set status = ?,
+                    approval_required = false,
+                    metadata = metadata || ?::jsonb,
+                    updated_at = now()
+                where id = ?
+                """,
+                nextStatus,
+                Json.write(Map.of(
+                        "latest_decision_id", decisionId.toString(),
+                        "latest_decision_action", request.action(),
+                        "latest_decision_at", Instant.now().toString())),
+                taskId);
+        return decision;
+    }
+
+    public List<RpaDecisionRecord> decisions(UUID taskId) {
+        ensureSchema();
+        return jdbcTemplate.query("""
+                select * from public.archiveos_rpa_decisions
+                where task_id = ?
+                order by created_at desc
+                """,
+                this::mapDecisionRow,
+                taskId);
+    }
+
     private RpaTaskRecord mapRow(ResultSet rs, int rowNum) throws SQLException {
         return new RpaTaskRecord(
                 rs.getObject("id", UUID.class),
@@ -146,6 +218,41 @@ public class RpaJdbcRepository {
                 Json.readObject(rs.getString("metadata")),
                 readInstant(rs, "created_at"),
                 readInstant(rs, "updated_at"));
+    }
+
+    private RpaDecisionRecord mapDecisionRow(ResultSet rs, int rowNum) throws SQLException {
+        return new RpaDecisionRecord(
+                rs.getObject("id", UUID.class),
+                rs.getObject("task_id", UUID.class),
+                rs.getString("action"),
+                rs.getString("reason"),
+                rs.getString("decided_by"),
+                rs.getString("previous_status"),
+                rs.getString("next_status"),
+                Json.readObject(rs.getString("metadata")),
+                readInstant(rs, "created_at"));
+    }
+
+    private void validateDecision(RpaTaskRecord task, RpaDecisionRequest request) {
+        if (!List.of("pm_approval_required", "hold", "failed").contains(task.status())) {
+            throw new IllegalStateException("RPA task is not waiting for a PM decision.");
+        }
+        if ("reject".equals(request.action()) && blankToNull(request.reason()) == null) {
+            throw new IllegalArgumentException("Reject reason is required.");
+        }
+        if ("request_retry".equals(request.action()) && "failed".equals(task.status())) {
+            throw new IllegalStateException("Failed RPA tasks require a new classification request instead of automatic retry.");
+        }
+    }
+
+    private String nextStatus(String action) {
+        return switch (action) {
+            case "approve" -> "approved";
+            case "reject" -> "rejected";
+            case "hold" -> "hold";
+            case "request_retry" -> "queued";
+            default -> throw new IllegalArgumentException("Unsupported RPA decision action: " + action);
+        };
     }
 
     private Instant readInstant(ResultSet rs, String column) throws SQLException {

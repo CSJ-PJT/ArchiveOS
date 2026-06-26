@@ -61,10 +61,12 @@ Markdown
 - `POST /api/rpa/classify`
 - `GET /api/rpa/tasks/recent`
 - `GET /api/rpa/tasks/{id}`
+- `POST /api/rpa/tasks/{id}/decision`
 
 ### 저장 테이블
 
 - `archiveos_rpa_tasks`
+- `archiveos_rpa_decisions`
 
 주요 필드:
 
@@ -83,6 +85,7 @@ queued
   -> Spring Batch archiveosRpaClassifyJob
   -> running
   -> pm_approval_required
+  -> approved | rejected | hold | queued(request_retry)
 ```
 
 Spring AI ChatModel이 설정되어 있으면 AI 분류를 사용한다. ChatModel이 없거나 호출이 실패하면 rule-based fallback을 사용하되 `classification_source`에 이를 기록한다.
@@ -103,6 +106,7 @@ Spring AI ChatModel이 설정되어 있으면 AI 분류를 사용한다. ChatMod
 - `POST /api/rpa/classify`
 - `GET /api/rpa/tasks/recent`
 - `GET /api/rpa/tasks/{id}`
+- `POST /api/rpa/tasks/{id}/decision`
 
 Node backend proxy:
 
@@ -115,6 +119,7 @@ Node backend proxy:
 - `POST /api/rpa/classify`
 - `GET /api/rpa/tasks/recent`
 - `GET /api/rpa/tasks/:id`
+- `POST /api/rpa/tasks/:id/decision`
 
 ## Runtime Observability
 
@@ -173,6 +178,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/runtime/verify-rag
 - vector similarity search 성공
 - `/api/rag/ask`가 answer + references 반환
 - `/api/rpa/classify`가 Spring Batch Job 결과 반환
+- `/api/rpa/tasks/{id}/decision`이 PM decision record를 저장
 - Node backend proxy 성공
 
 ## Security Boundaries
@@ -182,3 +188,4 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/runtime/verify-rag
 - 로컬 Obsidian vault 절대 경로는 frontend에 노출하지 않는다.
 - RAG 실패 시 fake success가 아니라 unavailable/degraded 상태로 반환한다.
 - RPA classify는 실행이 아니라 판단 기록이며, 위험 작업은 PM 승인 전 실행하지 않는다.
+- RPA decision API도 실행이 아니라 승인/반려/보류/재시도 상태와 사유를 기록한다.
