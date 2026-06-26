@@ -232,10 +232,14 @@ curl -X POST http://localhost:4100/api/ai/runtime/check
 curl -X POST http://localhost:4100/api/obsidian/sync
 curl "http://localhost:4100/api/rag/search?query=ArchiveOS&limit=5"
 curl -X POST http://localhost:4100/api/rag/ask -H "Content-Type: application/json" -d "{\"question\":\"Summarize the ArchiveOS Spring AI RAG architecture.\"}"
+curl http://localhost:4100/api/batch/jobs
+curl -X POST http://localhost:4100/api/batch/jobs/ragHealthCheckJob/run
+curl "http://localhost:4100/api/batch/executions?limit=5"
 curl -X POST http://localhost:4100/api/rpa/classify -H "Content-Type: application/json" -d "{\"title\":\"Verify RAG deployment\",\"description\":\"Check pgvector schema and deployment risk before running any shell commands.\",\"targetProject\":\"ArchiveOS\"}"
 curl -X POST http://localhost:4100/api/rpa/tasks/{taskId}/decision -H "Content-Type: application/json" -d "{\"action\":\"approve\",\"reason\":\"PM approved the classification record only.\",\"decidedBy\":\"pm\"}"
 curl http://localhost:4000/api/ai/runtime
 curl -X POST http://localhost:4000/api/ai/runtime/check
+curl http://localhost:4000/api/batch/jobs
 curl -X POST http://localhost:4000/api/rpa/classify -H "Content-Type: application/json" -d "{\"title\":\"Verify RAG deployment\",\"description\":\"Check pgvector schema and deployment risk before running any shell commands.\",\"targetProject\":\"ArchiveOS\"}"
 ```
 
@@ -248,6 +252,8 @@ curl -X POST http://localhost:4000/api/rpa/classify -H "Content-Type: applicatio
 - Obsidian sync 후 documents/chunks/embeddedChunks가 증가한다.
 - RAG search가 score가 포함된 references를 반환한다.
 - RAG ask가 answer와 references를 반환한다.
+- Batch job catalog에 `obsidianSyncJob`, `ragHealthCheckJob`, `archiveosRpaClassifyJob`이 표시된다.
+- `ragHealthCheckJob` 수동 실행이 Spring Batch execution history에 기록된다.
 - RPA classify가 Spring Batch Job을 통해 `pm_approval_required` 상태와 risk/recommendation을 기록한다.
 - RPA decision이 `archiveos_rpa_decisions`에 승인/반려/보류/재시도 이력을 남긴다.
 - runtime telemetry에 latency와 reference count가 기록된다.
@@ -306,6 +312,9 @@ cd archiveos-ai
 ## 문서
 
 - [Spring AI Engine Architecture](docs/architecture/spring-ai-engine.md)
+- [Spring Batch 운영 구조](docs/architecture/spring-batch.md)
+- [Backend Migration Plan](docs/architecture/backend-migration-plan.md)
+- [RPA Workflows UI](docs/ui/rpa-workflows.md)
 - [Spring AI Dashboard UI](docs/ui/spring-ai-dashboard.md)
 - [Developer Guide](docs/operations/developer-guide.md)
 - [AX 구현 상태](docs/AX_IMPLEMENTATION_STATUS.md)

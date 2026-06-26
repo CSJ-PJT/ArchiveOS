@@ -35,6 +35,25 @@ function Write-JsonSummary {
   $Value | ConvertTo-Json -Depth 10 | Out-Host
 }
 
+function Wait-JsonEndpoint {
+  param(
+    [Parameter(Mandatory = $true)][string]$Uri,
+    [int]$TimeoutSeconds = 120
+  )
+
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  $lastError = $null
+  while ((Get-Date) -lt $deadline) {
+    try {
+      return Invoke-JsonRequest -Uri $Uri
+    } catch {
+      $lastError = $_.Exception.Message
+      Start-Sleep -Seconds 3
+    }
+  }
+  throw "Endpoint did not become ready within $TimeoutSeconds seconds: $Uri. Last error: $lastError"
+}
+
 Push-Location (Resolve-Path "$PSScriptRoot\..\..")
 try {
   Assert-Command docker
@@ -65,7 +84,7 @@ try {
   docker compose exec -T postgres psql -U archiveos -d archiveos -c "select to_regclass('public.obsidian_documents') as obsidian_documents, to_regclass('public.obsidian_chunks') as obsidian_chunks;"
 
   Write-Host "== archiveos-ai runtime =="
-  $health = Invoke-JsonRequest -Uri "http://localhost:4100/api/health"
+  $health = Wait-JsonEndpoint -Uri "http://localhost:4100/api/health" -TimeoutSeconds 150
   Write-JsonSummary ([pscustomobject]@{
     status = $health.status
     module = $health.module
@@ -127,6 +146,25 @@ try {
   })
 
   Write-Host "== Spring Batch RPA classify =="
+  $batchJobs = Invoke-JsonRequest -Uri "http://localhost:4100/api/batch/jobs"
+  Write-JsonSummary ([pscustomobject]@{
+    jobs = ($batchJobs.data | ForEach-Object { $_.name }) -join ", "
+    launchable = ($batchJobs.data | Where-Object { $_.manualRunAllowed -eq $true }).Count
+  })
+  $batchRun = Invoke-JsonRequest -Uri "http://localhost:4100/api/batch/jobs/ragHealthCheckJob/run" -Method "POST"
+  Write-JsonSummary ([pscustomobject]@{
+    jobName = $batchRun.data.jobName
+    status = $batchRun.data.status
+    exitCode = $batchRun.data.exitCode
+    executionId = $batchRun.data.id
+  })
+  $batchExecutions = Invoke-JsonRequest -Uri "http://localhost:4100/api/batch/executions?limit=5"
+  Write-JsonSummary ([pscustomobject]@{
+    recentExecutionCount = $batchExecutions.data.Count
+    latestJob = ($batchExecutions.data | Select-Object -First 1).jobName
+    latestStatus = ($batchExecutions.data | Select-Object -First 1).status
+  })
+
   $rpaBody = @{
     title = "Verify RAG deployment"
     description = "Check pgvector schema and deployment risk before running any shell commands."
@@ -169,6 +207,11 @@ try {
     embeddingSuccess = $proxyCheck.data.embedding.success
     chatSuccess = $proxyCheck.data.chat.success
     runtimeStatus = $proxyCheck.data.runtime.status
+  })
+  $proxyBatchJobs = Invoke-JsonRequest -Uri "http://localhost:4000/api/batch/jobs"
+  Write-JsonSummary ([pscustomobject]@{
+    proxyBatchJobCount = $proxyBatchJobs.data.Count
+    includesRagHealthCheck = [bool]($proxyBatchJobs.data | Where-Object { $_.name -eq "ragHealthCheckJob" })
   })
   $proxyRpa = Invoke-JsonRequest -Uri "http://localhost:4000/api/rpa/classify" -Method "POST" -Body $rpaBody
   Write-JsonSummary ([pscustomobject]@{
