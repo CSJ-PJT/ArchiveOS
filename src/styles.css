@@ -592,6 +592,80 @@ button {
   gap: 0.45rem;
 }
 
+.batch-job-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.batch-job-card,
+.decision-history-row {
+  border: 1px solid var(--color-border);
+  border-radius: 0.8rem;
+  background: var(--color-surface-muted);
+  padding: 0.85rem;
+}
+
+.batch-job-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+
+.batch-job-header p,
+.decision-history-row p {
+  margin: 0.35rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+}
+
+.mini-execution-list,
+.execution-list,
+.step-list,
+.decision-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+}
+
+.mini-execution-list button,
+.execution-row,
+.step-row,
+.decision-history-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.mini-execution-list button,
+.execution-row {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 0.65rem;
+  background: var(--color-surface-elevated);
+  color: var(--color-text);
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+}
+
+.execution-row.selected {
+  border-color: var(--color-border-strong);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 35%, transparent);
+}
+
+.step-row {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.45rem 0;
+}
+
+.decision-history-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .workflow-row {
   display: grid;
   grid-template-columns: minmax(12rem, 1fr) auto 7rem 7rem;
@@ -979,6 +1053,7 @@ code {
 
   .overview-grid,
   .summary-strip,
+  .batch-job-grid,
   .priority-grid,
   .overview-layout,
   .workflows-layout,
@@ -1010,6 +1085,10 @@ code {
   }
 
   .workflow-row,
+  .mini-execution-list button,
+  .execution-row,
+  .step-row,
+  .decision-history-row,
   .event-row,
   .history-row summary {
     grid-template-columns: 1fr;
