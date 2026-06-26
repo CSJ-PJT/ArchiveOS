@@ -128,6 +128,10 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Obsidian Documents", method: "GET", path: "/api/obsidian/documents", service: "knowledge", description: "Spring AI indexed Obsidian document proxy." },
   { name: "RAG Search", method: "GET", path: "/api/rag/search", service: "knowledge", description: "Spring AI pgvector similarity search proxy." },
   { name: "RAG Ask", method: "POST", path: "/api/rag/ask", service: "knowledge", description: "Spring AI ChatModel grounded RAG answer proxy." },
+  { name: "Spring Batch Jobs", method: "GET", path: "/api/batch/jobs", service: "ax", description: "Spring Batch job catalog proxy." },
+  { name: "Spring Batch Run", method: "POST", path: "/api/batch/jobs/:jobName/run", service: "ax", description: "Manual Spring Batch job launch proxy." },
+  { name: "Spring Batch Executions", method: "GET", path: "/api/batch/executions", service: "ax", description: "Spring Batch execution history proxy." },
+  { name: "Spring Batch Execution Detail", method: "GET", path: "/api/batch/executions/:id", service: "ax", description: "Spring Batch execution detail proxy." },
   { name: "RPA Classify", method: "POST", path: "/api/rpa/classify", service: "ax", description: "Spring Batch Intelligent RPA classification proxy." },
   { name: "RPA Tasks", method: "GET", path: "/api/rpa/tasks/recent", service: "ax", description: "Recent Spring Batch RPA task records." },
   { name: "RPA Task Detail", method: "GET", path: "/api/rpa/tasks/:id", service: "ax", description: "Spring Batch RPA task detail." },
@@ -304,6 +308,41 @@ app.post("/api/rag/ask", async (request, response) => {
     }));
   } catch (error) {
     sendProxyError(response, error, "RAG ask failed.");
+  }
+});
+
+app.get("/api/batch/jobs", async (_request, response) => {
+  try {
+    response.status(200).json(await proxyArchiveOsAi("/api/batch/jobs"));
+  } catch (error) {
+    sendProxyError(response, error, "Spring Batch jobs are unavailable.");
+  }
+});
+
+app.post("/api/batch/jobs/:jobName/run", async (request, response) => {
+  try {
+    response.status(200).json(await proxyArchiveOsAi(`/api/batch/jobs/${encodeURIComponent(request.params.jobName)}/run`, {
+      method: "POST",
+    }));
+  } catch (error) {
+    sendProxyError(response, error, "Spring Batch job launch failed.");
+  }
+});
+
+app.get("/api/batch/executions", async (request, response) => {
+  try {
+    const limit = Number(request.query.limit ?? 20);
+    response.status(200).json(await proxyArchiveOsAi(`/api/batch/executions?limit=${encodeURIComponent(String(limit))}`));
+  } catch (error) {
+    sendProxyError(response, error, "Spring Batch executions are unavailable.");
+  }
+});
+
+app.get("/api/batch/executions/:id", async (request, response) => {
+  try {
+    response.status(200).json(await proxyArchiveOsAi(`/api/batch/executions/${encodeURIComponent(request.params.id)}`));
+  } catch (error) {
+    sendProxyError(response, error, "Spring Batch execution detail is unavailable.");
   }
 });
 
