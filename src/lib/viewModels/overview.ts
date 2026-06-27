@@ -111,7 +111,7 @@ export function buildOverviewViewModel(input: {
 
   let systemStatus: OverviewViewModel["systemStatus"] = "Healthy";
   let statusTone: SemanticStatus = "healthy";
-  if (!runtime && endpointProblems > 0) {
+  if (!runtime) {
     systemStatus = "Offline";
     statusTone = "offline";
   } else if (criticalAlertCount > 0) {

@@ -6,9 +6,30 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseServiceRoleKey);
 
-function throwSupabaseUnavailable(): never {
-  throw new Error("Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY for Supabase-backed operations.");
-}
+const unavailableResult = {
+  data: null,
+  error: {
+    code: "SUPABASE_NOT_CONFIGURED",
+    message: "Supabase is not configured for this runtime.",
+  },
+};
+
+let unavailableQuery: ReturnType<typeof createClient>;
+
+const unavailableProxy = new Proxy(() => unavailableProxy, {
+  apply() {
+    return unavailableProxy;
+  },
+  get(_target, property) {
+    if (property === "then") {
+      return (resolve: (value: typeof unavailableResult) => unknown, reject?: (reason: unknown) => unknown) =>
+        Promise.resolve(unavailableResult).then(resolve, reject);
+    }
+    return unavailableProxy;
+  },
+}) as unknown as ReturnType<typeof createClient>;
+
+unavailableQuery = unavailableProxy;
 
 export const supabaseAdmin = isSupabaseConfigured
   ? createClient(supabaseUrl!, supabaseServiceRoleKey!, {
@@ -21,11 +42,4 @@ export const supabaseAdmin = isSupabaseConfigured
         transport: WebSocket as unknown as any,
       },
     })
-  : new Proxy(
-      {},
-      {
-        get() {
-          return throwSupabaseUnavailable;
-        },
-      },
-    ) as ReturnType<typeof createClient>;
+  : unavailableQuery;

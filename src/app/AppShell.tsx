@@ -46,7 +46,11 @@ import { WorkflowsPage } from "../pages/WorkflowsPage";
 import { KnowledgePage } from "../pages/KnowledgePage";
 import { HistoryPage } from "../pages/HistoryPage";
 import { SettingsPage } from "../pages/SettingsPage";
-import { StatusBadge } from "../components/shared/StatusBadge";
+import { AgentsPage } from "../pages/AgentsPage";
+import { BatchPage } from "../pages/BatchPage";
+import { RpaPage } from "../pages/RpaPage";
+import { Icon } from "../components/shared/Icon";
+import { Sidebar } from "../components/shared/Sidebar";
 import { ThemeProvider } from "../theme/ThemeProvider";
 
 export type AppData = {
@@ -111,6 +115,7 @@ async function settle<T>(key: string, fn: () => Promise<T>) {
 
 function AppShellInner() {
   const [route, setRoute] = useState<AppRoute>("overview");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [data, setData] = useState<AppData>(emptyData);
 
   const refresh = useCallback(async () => {
@@ -163,51 +168,28 @@ function AppShellInner() {
 
   const page = {
     overview: <OverviewPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
+    agents: <AgentsPage data={data} />,
     workflows: <WorkflowsPage data={data} onRefresh={refresh} />,
     knowledge: <KnowledgePage data={data} />,
     history: <HistoryPage data={data} />,
+    batch: <BatchPage />,
+    rpa: <RpaPage />,
     settings: <SettingsPage data={data} onRefresh={refresh} backendOrigin={configuredBackendUrl} />,
   }[route];
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div>
-          <span className="eyebrow">AI Agent Operations Platform</span>
-          <h1>ArchiveOS</h1>
-        </div>
-        <div className="topbar-status">
-          <StatusBadge status={healthTone}>{data.loading ? "syncing" : healthTone}</StatusBadge>
-          <button className="button button-secondary" type="button" onClick={refresh}>
-            Refresh
-          </button>
-        </div>
-      </header>
+      <Sidebar route={route} open={sidebarOpen} onNavigate={(nextRoute) => { setRoute(nextRoute); setSidebarOpen(false); }} health={healthTone} loading={data.loading} branch={data.runtimeVersion?.branch} commitSha={data.runtimeVersion?.commitSha} />
+      {sidebarOpen ? <button className="sidebar-scrim" type="button" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} /> : null}
 
-      <nav className="main-nav" aria-label="ArchiveOS sections">
-        {navigationItems.map((item) => (
-          <button
-            className={`nav-item ${route === item.id ? "active" : ""}`}
-            key={item.id}
-            type="button"
-            onClick={() => setRoute(item.id)}
-            title={item.description}
-          >
-            <span>{item.label}</span>
-            <small>{item.description}</small>
-          </button>
-        ))}
-      </nav>
-
-      <main className="page-host">{page}</main>
-
-      <nav className="bottom-nav" aria-label="Mobile ArchiveOS sections">
-        {navigationItems.map((item) => (
-          <button className={route === item.id ? "active" : ""} key={item.id} type="button" onClick={() => setRoute(item.id)}>
-            {item.shortLabel}
-          </button>
-        ))}
-      </nav>
+      <div className="content-shell">
+        <header className="topbar">
+          <button className="mobile-menu-button" type="button" aria-label="Open navigation" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>☰</button>
+          <div><span className="eyebrow">AI Agent Operations Platform</span><h1>{navigationItems.find((item) => item.id === route)?.label}</h1></div>
+          <div className="topbar-status"><span className="last-sync">Updated {data.refreshedAt ? new Date(data.refreshedAt).toLocaleTimeString() : "waiting"}</span><button className="icon-button" type="button" onClick={refresh} aria-label="Refresh all operational data" title="Refresh"><Icon name="refresh" /></button></div>
+        </header>
+        <main className="page-host" id="main-content">{page}</main>
+      </div>
     </div>
   );
 }
