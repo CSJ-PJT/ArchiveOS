@@ -105,9 +105,11 @@ export function buildOverviewViewModel(input: {
         : architect?.status === "warning" || architect?.status === "blocked"
           ? "Architect"
           : "None";
-  const endpointProblems = endpointHealth ? endpointHealth.summary.failed + endpointHealth.summary.missing + endpointHealth.summary.error : 0;
+  const failingEndpoints = endpointHealth?.endpoints.filter((endpoint) => endpoint.status !== "ok") ?? [];
+  const endpointProblems = failingEndpoints.length;
+  const affectedEndpointServices = new Set(failingEndpoints.map((endpoint) => endpoint.service)).size;
   const warningCount = kpi?.runtime.warningCount ?? 0;
-  const criticalAlertCount = failed + endpointProblems + (architect?.status === "blocked" ? 1 : 0);
+  const criticalAlertCount = failed + affectedEndpointServices + (architect?.status === "blocked" ? 1 : 0);
 
   let systemStatus: OverviewViewModel["systemStatus"] = "Healthy";
   let statusTone: SemanticStatus = "healthy";
@@ -136,7 +138,7 @@ export function buildOverviewViewModel(input: {
     endpointProblems > 0
       ? {
           title: "Endpoint health needs review",
-          body: `${endpointProblems} endpoint(s) are missing or failing.`,
+          body: `${endpointProblems} endpoint(s) across ${affectedEndpointServices} service(s) need review.`,
           status: "warning" as SemanticStatus,
         }
       : null,
