@@ -231,3 +231,87 @@ Archive-Nexus
 ## License
 
 라이선스 정책은 프로젝트 운영 방침에 따라 추후 정의합니다.
+
+---
+
+## 현재 Operator Console
+
+ArchiveOS UI는 운영자가 현재 상태와 다음 행동을 빠르게 찾는 Sidebar 기반 Console로 구성한다.
+
+| 메뉴 | 운영 질문 |
+| --- | --- |
+| Overview | 지금 정상인가, 무엇을 확인해야 하는가? |
+| Agents | 누가 동작 중이고 어떤 근거가 있는가? |
+| Workflows | 작업이 어느 단계에 있고 PM 판단이 필요한가? |
+| Knowledge | 운영 기억과 RAG가 준비되었는가? |
+| History | 어떤 이벤트와 결정이 기록되었는가? |
+| Batch | 어떤 Job이 실행됐고 step 결과는 무엇인가? |
+| RPA | 어떤 작업이 분류됐고 PM이 무엇을 결정했는가? |
+| Settings | 연결, 보안, 버전, 환경이 정상인가? |
+
+Overview는 `System Health -> Critical Alerts -> Active Agents -> Pipeline -> Approval -> Knowledge -> Recent Activity` 순서로 정보를 배치한다. 정상 정보의 반복보다 예외와 다음 행동을 먼저 노출한다.
+
+## 현재 실행 구조
+
+```text
+React Operations Console
+  -> Node/Express Operations Backend
+       -> archiveos-ai (Spring Boot + Spring AI + Spring Batch)
+            -> PostgreSQL + pgvector
+            -> Obsidian Markdown Vault
+            -> OpenAI ChatModel / EmbeddingModel
+```
+
+- `frontend`: Operator Console, 작업 흐름, Agent, Batch/RPA, Knowledge 화면
+- `backend`: PM 운영 데이터, runtime visibility, Discord, Supabase, Spring API proxy
+- `archiveos-ai`: Obsidian sync, chunking, embedding, vector search, RAG, Spring Batch/RPA
+- `postgres`: 로컬 PostgreSQL + pgvector 개발 Vector DB
+
+Docker frontend의 Nginx는 `/api/*`와 `/health`를 Node backend로 전달한다. 브라우저는 `http://localhost:5173` 단일 origin으로 UI와 API를 함께 사용한다.
+
+## 로컬 실행
+
+```powershell
+docker compose up --build -d
+docker compose ps
+```
+
+- Frontend: `http://localhost:5173`
+- Node backend: `http://localhost:4000`
+- Spring AI: `http://localhost:4100`
+- PostgreSQL/pgvector: `localhost:5432`
+
+## 안전 원칙
+
+- UI는 관측과 PM decision recording 중심이다.
+- secret, webhook, API key, DB password, vault 절대 경로를 frontend에 노출하지 않는다.
+- RAG 실패 시 가짜 성공 대신 `degraded` 또는 `unavailable` 상태를 표시한다.
+- shell, MCP, Codex, process control은 명시적으로 허용된 경계 밖에서 UI가 실행하지 않는다.
+- PM Approval Gate 이전에 위험 작업을 완료 상태로 처리하지 않는다.
+
+## 검증
+
+```powershell
+npm run test
+npm run build
+
+cd backend
+npm run test
+npm run typecheck
+npm run build
+
+cd ../archiveos-ai
+.\gradlew.bat test --no-daemon
+.\gradlew.bat bootJar --no-daemon
+```
+
+## 운영 문서
+
+- [Operator Experience UI Architecture](docs/ui/operator-experience.md)
+- [Spring AI Engine Architecture](docs/architecture/spring-ai-engine.md)
+- [Spring Batch 운영 구조](docs/architecture/spring-batch.md)
+- [RPA 승인 흐름](docs/architecture/rpa-approval-flow.md)
+- [RAG 점검 흐름](docs/architecture/rag-health-check-flow.md)
+- [Developer Guide](docs/operations/developer-guide.md)
+- [AX 구현 상태](docs/AX_IMPLEMENTATION_STATUS.md)
+- [전체 아키텍처](docs/ARCHITECTURE_FULL.md)

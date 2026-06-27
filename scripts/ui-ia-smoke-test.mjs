@@ -6,8 +6,9 @@ const styles = readFileSync("src/styles.css", "utf-8");
 const overview = readFileSync("src/pages/OverviewPage.tsx", "utf-8");
 const knowledge = readFileSync("src/pages/KnowledgePage.tsx", "utf-8");
 const backendApi = readFileSync("src/lib/backendApi.ts", "utf-8");
+const sidebar = readFileSync("src/components/shared/Sidebar.tsx", "utf-8");
 
-for (const label of ["Overview", "Workflows", "Knowledge", "History", "Settings"]) {
+for (const label of ["Overview", "Agents", "Workflows", "Knowledge", "History", "Batch", "RPA", "Settings"]) {
   if (!navigation.includes(label)) {
     throw new Error(`Missing final navigation label: ${label}`);
   }
@@ -43,8 +44,14 @@ for (const token of [
   }
 }
 
-if (!appShell.includes("<OverviewPage") || !appShell.includes("<WorkflowsPage") || !appShell.includes("<KnowledgePage")) {
+if (!appShell.includes("<OverviewPage") || !appShell.includes("<AgentsPage") || !appShell.includes("<WorkflowsPage") || !appShell.includes("<KnowledgePage") || !appShell.includes("<BatchPage") || !appShell.includes("<RpaPage")) {
   throw new Error("AppShell is not composing the new page structure.");
+}
+
+for (const contract of ["sidebar-nav", "aria-current", "System Health", "Active Agents", "Critical Alerts", "Runtime Flow", "Attention Required"]) {
+  if (!appShell.includes(contract) && !overview.includes(contract) && !sidebar.includes(contract)) {
+    throw new Error(`Operator console contract missing: ${contract}`);
+  }
 }
 
 if (!backendApi.includes("getAiRuntime") || !appShell.includes("getAiRuntime")) {
