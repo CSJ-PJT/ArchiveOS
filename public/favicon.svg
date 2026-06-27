@@ -1,9 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ArchiveOS">
   <rect width="64" height="64" rx="14" fill="#071014"/>
-  <g fill="none" stroke-linecap="square" stroke-linejoin="miter">
-    <path d="M12 51 L32 11 L52 51" stroke="#F5F7FA" stroke-width="6"/>
-    <path d="M20 39 H44" stroke="#F5F7FA" stroke-width="5.5"/>
-    <path d="M28 38 H36" stroke="#16D6E3" stroke-width="3"/>
+  <g fill="#F5F7FA">
+    <path d="M11 52 27 12h8L19 52Z"/>
+    <path d="M30 12h8l16 40h-8Z"/>
+    <path d="M27 40h18l3 7H30Z"/>
   </g>
-  <circle cx="27.5" cy="38" r="4" fill="#16D6E3"/>
+  <path d="M30 36h11" stroke="#F5F7FA" stroke-width="2.5" stroke-linecap="square"/>
+  <circle cx="28" cy="36" r="4" fill="#16D6E3"/>
 </svg>
