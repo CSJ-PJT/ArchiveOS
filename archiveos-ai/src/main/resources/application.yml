@@ -40,3 +40,12 @@ archiveos:
   rag-max-references: ${RAG_MAX_REFERENCES:5}
   deploy-compose-file: ${ARCHIVEOS_DEPLOY_COMPOSE_FILE:}
   health-check-url: ${ARCHIVEOS_HEALTH_CHECK_URL:}
+  node-base-url: ${ARCHIVEOS_NODE_BASE_URL:http://localhost:4000}
+  public-url: ${ARCHIVEOS_PUBLIC_URL:}
+  notifications:
+    discord-webhook-url: ${DISCORD_WEBHOOK_URL:}
+    slack-webhook-url: ${SLACK_WEBHOOK_URL:}
+  scheduler:
+    enabled: ${ARCHIVEOS_SCHEDULER_ENABLED:false}
+    nightly-cron: ${ARCHIVEOS_NIGHTLY_CRON:0 50 23 * * *}
+    daily-cron: ${ARCHIVEOS_DAILY_CRON:0 0 9 * * *}

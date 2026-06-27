@@ -51,6 +51,10 @@ services:
       DB_USER: ${DB_USER:-archiveos}
       DB_PASSWORD: ${DB_PASSWORD:-archiveos}
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      ARCHIVEOS_NODE_BASE_URL: http://backend:4000
+      ARCHIVEOS_PUBLIC_URL: ${ARCHIVEOS_PUBLIC_URL:-}
+      ARCHIVEOS_SCHEDULER_ENABLED: ${ARCHIVEOS_SCHEDULER_ENABLED:-false}
     ports:
       - "4100:4100"
     volumes:
