@@ -1,12 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
   <title id="title">ArchiveOS mark</title>
-  <desc id="desc">Angular ArchiveOS A mark with a cyan decision node and a detached lower-right bar.</desc>
+  <desc id="desc">Angular ArchiveOS A mark with a cyan decision node and a single detached lower-right bar.</desc>
   <rect width="256" height="256" rx="40" fill="#071014"/>
   <g fill="#F5F7FA">
     <path d="M45 202 111 42h29L74 202Z"/>
     <path d="M120 42h29l66 160h-29Z"/>
-    <path d="M108 158h71l12 28h-71Z"/>
+    <path d="M110 159h70l11 27h-69Z"/>
   </g>
-  <path d="M120 142h43" stroke="#F5F7FA" stroke-width="8" stroke-linecap="square"/>
-  <circle cx="111" cy="142" r="14" fill="#16D6E3"/>
+  <circle cx="112" cy="143" r="14" fill="#16D6E3"/>
 </svg>
