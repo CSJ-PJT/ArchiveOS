@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">ArchiveOS logo lockup</title>
+  <desc id="desc">ArchiveOS wordmark with angular A mark, cyan decision node, and detached lower-right bar.</desc>
+  <rect width="1200" height="420" rx="24" fill="#071014"/>
+  <g transform="translate(82 52)">
+    <g fill="#F5F7FA">
+      <path d="M45 202 111 42h29L74 202Z"/>
+      <path d="M120 42h29l66 160h-29Z"/>
+      <path d="M108 158h71l12 28h-71Z"/>
+    </g>
+    <path d="M120 142h43" stroke="#F5F7FA" stroke-width="8" stroke-linecap="square"/>
+    <circle cx="111" cy="142" r="14" fill="#16D6E3"/>
+  </g>
+  <text x="336" y="178" fill="#F5F7FA" font-family="Inter, Arial, Helvetica, sans-serif" font-size="72" font-weight="600" letter-spacing="18">ARCHIVEOS</text>
+  <text x="340" y="240" fill="#16D6E3" font-family="Inter, Arial, Helvetica, sans-serif" font-size="22" font-weight="700" letter-spacing="6">OPERATE KNOWLEDGE. DRIVE DECISIONS.</text>
+</svg>
