@@ -7,6 +7,7 @@ const overview = readFileSync("src/pages/OverviewPage.tsx", "utf-8");
 const knowledge = readFileSync("src/pages/KnowledgePage.tsx", "utf-8");
 const backendApi = readFileSync("src/lib/backendApi.ts", "utf-8");
 const sidebar = readFileSync("src/components/shared/Sidebar.tsx", "utf-8");
+const overviewViewModel = readFileSync("src/lib/viewModels/overview.ts", "utf-8");
 
 for (const label of ["Overview", "Agents", "Workflows", "Knowledge", "History", "Batch", "RPA", "Settings"]) {
   if (!navigation.includes(label)) {
@@ -68,6 +69,14 @@ for (const forbidden of [
   if (overview.includes(forbidden) || knowledge.includes(forbidden)) {
     throw new Error(`Forbidden inferred Spring AI metric mapping found: ${forbidden}`);
   }
+}
+
+if (overviewViewModel.includes("summary.failed + endpointHealth.summary.missing + endpointHealth.summary.error")) {
+  throw new Error("Endpoint failures are double-counted in the Overview critical alert KPI.");
+}
+
+if (!overviewViewModel.includes("affectedEndpointServices")) {
+  throw new Error("Overview must summarize endpoint failures by affected service.");
 }
 
 console.log("archiveos ui information-architecture smoke-test passed");
