@@ -1,6 +1,7 @@
 package com.archiveos.ai.batch;
 
 import com.archiveos.ai.rpa.RpaBatchConfiguration;
+import com.archiveos.ai.operations.OperationsBatchConfiguration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -158,6 +159,12 @@ public class BatchJobService {
     }
 
     private String description(String jobName) {
+        if (OperationsBatchConfiguration.NIGHTLY_REVIEW_JOB.equals(jobName)) {
+            return "런타임 상태를 수집해 Nightly Review와 runtime snapshot을 PostgreSQL에 저장한다.";
+        }
+        if (OperationsBatchConfiguration.DAILY_REPORT_JOB.equals(jobName)) {
+            return "한국 영업일 규칙을 적용해 Daily Report를 저장하고 설정된 알림 채널로 전송한다.";
+        }
         return switch (jobName) {
             case ArchiveBatchConfiguration.OBSIDIAN_SYNC_JOB -> "Obsidian Markdown 문서를 chunking, embedding, pgvector 저장까지 동기화한다.";
             case ArchiveBatchConfiguration.RAG_HEALTH_CHECK_JOB -> "유료 모델 호출 없이 Spring AI, pgvector, RAG 준비 상태를 관측한다.";
