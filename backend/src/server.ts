@@ -10,16 +10,7 @@ import {
   runArchitectReview,
 } from "./architect/index.js";
 import { getAxReadiness, getAxRoadmap } from "./ax/axReadiness.js";
-import { runDailyReportBatch } from "./batches/dailyReport.js";
-import { runNightlyReviewBatch } from "./batches/nightlyReview.js";
-import {
-  getLatestBatchRuns,
-  getLatestDailyReport,
-  getLatestHistorianExport,
-  getRecentBatchRuns,
-  getRecentDailyReports,
-  getRecentRuntimeSnapshots,
-} from "./batches/store.js";
+import { getLatestDailyReport, getLatestHistorianExport, getRecentBatchRuns } from "./batches/store.js";
 import { findProject, projects } from "./config/projects.js";
 import {
   getKnowledgeNode,
@@ -786,60 +777,62 @@ app.get("/api/runtime/events/recent", async (_request, response) => {
 
 // Local/admin/testing endpoint only. This records a read-only batch summary and does not trigger agent execution.
 app.post("/api/batches/nightly-review/run", async (_request, response) => {
-  const result = await runNightlyReviewBatch();
-  response.json({ data: result });
+  try {
+    response.status(200).json(await proxyArchiveOsAi("/api/batches/nightly-review/run", { method: "POST" }));
+  } catch (error) {
+    sendProxyError(response, error, "Nightly Review batch is unavailable.");
+  }
 });
 
 // Local/admin/testing endpoint only. This may send Discord only when the Korea business-day rule passes.
 app.post("/api/batches/daily-report/run", async (_request, response) => {
-  const result = await runDailyReportBatch();
-  response.json({ data: result });
+  try {
+    response.status(200).json(await proxyArchiveOsAi("/api/batches/daily-report/run", { method: "POST" }));
+  } catch (error) {
+    sendProxyError(response, error, "Daily Report batch is unavailable.");
+  }
 });
 
-app.get("/api/batches/recent", async (_request, response) => {
+app.get("/api/batches/recent", async (request, response) => {
   try {
-    response.json({ data: await getRecentBatchRuns() });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch recent batch runs." });
+    const limit = Number(request.query.limit ?? 20);
+    response.status(200).json(await proxyArchiveOsAi(`/api/batches/recent?limit=${encodeURIComponent(String(limit))}`));
+  } catch (error) {
+    sendProxyError(response, error, "Recent batch runs are unavailable.");
   }
 });
 
 app.get("/api/batches/latest", async (_request, response) => {
   try {
-    response.json({
-      data: {
-        ...(await getLatestBatchRuns()),
-        discord_webhook_configured: Boolean(process.env.DISCORD_WEBHOOK_URL?.trim()),
-        archiveos_public_url_configured: Boolean(process.env.ARCHIVEOS_PUBLIC_URL?.trim()),
-        holiday_years: [2026],
-      },
-    });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch latest batch status." });
+    response.status(200).json(await proxyArchiveOsAi("/api/batches/latest"));
+  } catch (error) {
+    sendProxyError(response, error, "Latest batch status is unavailable.");
   }
 });
 
 app.get("/api/reports/daily/latest", async (_request, response) => {
   try {
-    response.json({ data: await getLatestDailyReport() });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch latest daily report." });
+    response.status(200).json(await proxyArchiveOsAi("/api/reports/daily/latest"));
+  } catch (error) {
+    sendProxyError(response, error, "Latest daily report is unavailable.");
   }
 });
 
-app.get("/api/reports/daily/recent", async (_request, response) => {
+app.get("/api/reports/daily/recent", async (request, response) => {
   try {
-    response.json({ data: await getRecentDailyReports() });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch recent daily reports." });
+    const limit = Number(request.query.limit ?? 20);
+    response.status(200).json(await proxyArchiveOsAi(`/api/reports/daily/recent?limit=${encodeURIComponent(String(limit))}`));
+  } catch (error) {
+    sendProxyError(response, error, "Recent daily reports are unavailable.");
   }
 });
 
-app.get("/api/runtime/snapshots/recent", async (_request, response) => {
+app.get("/api/runtime/snapshots/recent", async (request, response) => {
   try {
-    response.json({ data: await getRecentRuntimeSnapshots() });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch recent runtime snapshots." });
+    const limit = Number(request.query.limit ?? 20);
+    response.status(200).json(await proxyArchiveOsAi(`/api/runtime/snapshots/recent?limit=${encodeURIComponent(String(limit))}`));
+  } catch (error) {
+    sendProxyError(response, error, "Runtime snapshots are unavailable.");
   }
 });
 
