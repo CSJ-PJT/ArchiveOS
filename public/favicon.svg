@@ -1,10 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ArchiveOS">
-  <rect width="64" height="64" rx="14" fill="#071014"/>
-  <g fill="#F5F7FA">
-    <path d="M11 52 27 12h8L19 52Z"/>
-    <path d="M30 12h8l16 40h-8Z"/>
-    <path d="M27 40h18l3 7H30Z"/>
-  </g>
-  <path d="M30 36h11" stroke="#F5F7FA" stroke-width="2.5" stroke-linecap="square"/>
-  <circle cx="28" cy="36" r="4" fill="#16D6E3"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="ArchiveOS">
+  <defs>
+    <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.55" stop-color="#FAFAFA"/>
+      <stop offset="1" stop-color="#ECECEC"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#12F2F5"/>
+      <stop offset="1" stop-color="#00DDE8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="#000000"/>
+  <path d="M475.3 144.5 L91.5 855 L213.1 853.3 L512 297.2 L677.8 605.9 L538.9 608.4 L538.9 632.9 L691.6 632.9 L754.5 750.4 L503.8 752.9 L551.2 854.1 L932.5 855 L550.4 145.4 Z" fill="url(#metal)"/>
+  <circle cx="498" cy="620.6" r="42" fill="url(#cyan)"/>
 </svg>
