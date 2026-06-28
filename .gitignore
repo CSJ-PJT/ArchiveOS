@@ -1,13 +1,58 @@
-node_modules
-dist
+# Node / frontend / backend dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs and test artifacts
+dist/
+**/dist/
+build/
+**/build/
+coverage/
+**/coverage/
+test-results/
+playwright-report/
+.vite/
+.cache/
+*.tsbuildinfo
+
+# Gradle
+.gradle/
+**/.gradle/
+archiveos-ai/build/
+
+# Local environment and secrets
 .env
 .env.local
-.DS_Store
-archiveos-ai/.gradle/
-archiveos-ai/build/
-*.tsbuildinfo
+.env.*.local
+!.env.example
+!.env.*.example
+
+# Logs, process files, and temporary data
 *.log
+*.pid
+*.pid.lock
+logs/
+tmp/
+temp/
+
+# ArchiveOS local runtime state
 tools/runtime/runtime.config.json
 tools/runtime/logs/
 tools/runtime/pids/
 backend/data/approved-devices.json
+
+# Local Docker overrides
+docker-compose.override.yml
+compose.override.yml
+
+# IDE and OS metadata
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Java crash diagnostics
+hs_err_pid*
+replay_pid*
