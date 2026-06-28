@@ -9,6 +9,7 @@ public record ArchiveOsAiProperties(
         int obsidianChunkSize,
         int obsidianChunkOverlap,
         int ragMaxReferences) {
+    private static final String DISABLED_OPENAI_KEY = "archiveos-disabled-key";
     public ArchiveOsAiProperties {
         if (openaiApiKey == null) openaiApiKey = "";
         if (obsidianVaultPath == null) obsidianVaultPath = "";
@@ -18,7 +19,7 @@ public record ArchiveOsAiProperties(
     }
 
     public boolean openAiConfigured() {
-        return !openaiApiKey.isBlank();
+        return !openaiApiKey.isBlank() && !DISABLED_OPENAI_KEY.equals(openaiApiKey);
     }
 
     public boolean obsidianConfigured() {
