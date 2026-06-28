@@ -33,14 +33,14 @@ services:
       postgres:
         condition: service_healthy
       archiveos-ai:
-        condition: service_started
+        condition: service_healthy
 
   archiveos-ai:
     build:
       context: ./archiveos-ai
     environment:
       ARCHIVEOS_AI_PORT: 4100
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-archiveos-disabled-key}
       OBSIDIAN_VAULT_PATH: /vault
       OBSIDIAN_CHUNK_SIZE: ${OBSIDIAN_CHUNK_SIZE:-1200}
       OBSIDIAN_CHUNK_OVERLAP: ${OBSIDIAN_CHUNK_OVERLAP:-160}
@@ -57,6 +57,12 @@ services:
       ARCHIVEOS_SCHEDULER_ENABLED: ${ARCHIVEOS_SCHEDULER_ENABLED:-false}
     ports:
       - "4100:4100"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:4100/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
     volumes:
       - ${HOST_OBSIDIAN_VAULT_PATH:-./docs}:/vault:ro
     depends_on:
