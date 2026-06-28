@@ -7,9 +7,6 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringBootVersion;
 import org.springframework.http.ResponseEntity;
@@ -18,8 +15,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class AiRuntimeService {
     private final ArchiveOsAiProperties properties;
-    private final ObjectProvider<ChatModel> chatModel;
-    private final ObjectProvider<EmbeddingModel> embeddingModel;
+    private final AiModelGateway models;
     private final ObsidianJdbcRepository repository;
     private final ObsidianVaultResolver vaultResolver;
     private final AiRuntimeState state;
@@ -28,16 +24,14 @@ public class AiRuntimeService {
 
     public AiRuntimeService(
             ArchiveOsAiProperties properties,
-            ObjectProvider<ChatModel> chatModel,
-            ObjectProvider<EmbeddingModel> embeddingModel,
+            AiModelGateway models,
             ObsidianJdbcRepository repository,
             ObsidianVaultResolver vaultResolver,
             AiRuntimeState state,
             @Value("${spring.ai.openai.chat.options.model:gpt-4o-mini}") String chatModelName,
             @Value("${spring.ai.openai.embedding.options.model:text-embedding-3-small}") String embeddingModelName) {
         this.properties = properties;
-        this.chatModel = chatModel;
-        this.embeddingModel = embeddingModel;
+        this.models = models;
         this.repository = repository;
         this.vaultResolver = vaultResolver;
         this.state = state;
@@ -60,8 +54,8 @@ public class AiRuntimeService {
         AiRuntimeState.RagExecutionState sync = state.sync();
 
         boolean chatConfigured = properties.openAiConfigured();
-        boolean chatBean = chatModel.getIfAvailable() != null;
-        boolean embeddingBean = embeddingModel.getIfAvailable() != null;
+        boolean chatBean = models.chatAvailable();
+        boolean embeddingBean = models.embeddingAvailable();
         boolean dbConnected = vector.databaseConnected();
         boolean vectorReady = dbConnected && vector.extensionInstalled() && vector.indexReady();
         boolean ragReady = chatConfigured && chatBean && embeddingBean && vectorReady && stats.embeddedChunks() > 0;
@@ -129,29 +123,23 @@ public class AiRuntimeService {
 
     public ResponseEntity<Map<String, Object>> check() {
         Map<String, Object> result = new LinkedHashMap<>();
-        long embeddingStart = System.currentTimeMillis();
         try {
             if (!properties.openAiConfigured()) {
                 throw new IllegalStateException("OPENAI_API_KEY is not configured. Runtime check skipped.");
             }
-            float[] vector = embeddingModel.getObject().embed("ArchiveOS runtime smoke check");
-            state.recordEmbeddingSuccess(System.currentTimeMillis() - embeddingStart);
+            float[] vector = models.embed("ArchiveOS runtime smoke check");
             result.put("embedding", map("success", true, "dimensions", vector.length));
         } catch (Exception error) {
-            state.recordEmbeddingFailure(error, System.currentTimeMillis() - embeddingStart);
             result.put("embedding", map("success", false, "error", sanitize(error)));
         }
 
-        long chatStart = System.currentTimeMillis();
         try {
             if (!properties.openAiConfigured()) {
                 throw new IllegalStateException("OPENAI_API_KEY is not configured. Runtime check skipped.");
             }
-            String text = chatModel.getObject().call(new Prompt("Reply with OK only.")).getResult().getOutput().getText();
-            state.recordChatSuccess(System.currentTimeMillis() - chatStart);
-            result.put("chat", map("success", true, "response", text == null ? "" : text.trim()));
+            String text = models.chat("Reply with OK only.");
+            result.put("chat", map("success", true, "response", text.trim()));
         } catch (Exception error) {
-            state.recordChatFailure(error, System.currentTimeMillis() - chatStart);
             result.put("chat", map("success", false, "error", sanitize(error)));
         }
 
