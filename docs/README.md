@@ -1,14 +1,23 @@
-# ArchiveOS 설계 문서
+# ArchiveOS 문서
 
-이 폴더는 ArchiveOS를 PM Visibility Dashboard에서 AI Organization Operating System 방향으로 확장하기 위한 설계 문서를 담고 있습니다.
+ArchiveOS의 현재 구현과 설계 문서를 정리합니다.
 
-문서 목록:
+## 주요 문서
 
-- [Phase 2 Architecture Proposal](phase-2-architecture-proposal.md)
-- [Agent Mesh Data Model](agent-mesh-data-model.md)
-- [Obsidian Integration Strategy](obsidian-integration-strategy.md)
-- [Knowledge Graph MVP](knowledge-graph-mvp.md)
-- [UI Wireframe Proposal](ui-wireframe-proposal.md)
-- [Reality Validation Report](reality-validation-report.md)
+- [프로젝트 소개](../README.md)
+- [Java 백엔드 전환 상태](migration/java-migration-status.md)
+- [개발자 가이드](operations/developer-guide.md)
+- [브랜드 가이드](brand/README.md)
+- [전체 아키텍처](ARCHITECTURE_FULL.md)
+- [AX 구현 상태](AX_IMPLEMENTATION_STATUS.md)
+- [런타임 보안](runtime-security.md)
 
-이 문서들은 설계 제안입니다. OpenAI API 호출, MCP 명령 실행, GitHub Webhook 자동화, 임의 셸 실행, Codex 직접 제어를 추가하지 않습니다.
+## 문서 분류
+
+- `architecture/`: Spring AI, Batch, RPA, RAG 구조
+- `operations/`: 개발과 운영 절차
+- `migration/`: Java 백엔드 전환 상태
+- `brand/`: 로고와 브랜드 사용 규칙
+- `ui/`: Operator Console 정보 구조와 운영 경험
+
+현재 구현과 향후 제안은 구분해서 기록합니다.
