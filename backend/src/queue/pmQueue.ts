@@ -1,4 +1,4 @@
-import { sendDiscordMessage } from "../batches/discord.js";
+import { sendOperationalNotification } from "../notifications/springNotificationClient.js";
 import { runArchitectReview } from "../architect/index.js";
 import {
   createKnowledgeEdge,
@@ -309,12 +309,12 @@ export async function runNightlyQueueSummary() {
     `Failed today: ${summary.failed_today}`,
     `Recommended PM action: ${summary.recommended_pm_action}`,
   ].join("\n");
-  const discord = await sendDiscordMessage(message);
-  await recordTaskEvent("00000000-0000-0000-0000-000000000000", "nightly_queue_summary", "Nightly queue summary", message, "discord", {
-    discord,
+  const notification = await sendOperationalNotification(message);
+  await recordTaskEvent("00000000-0000-0000-0000-000000000000", "nightly_queue_summary", "Nightly queue summary", message, "pm", {
+    notification,
     summary,
   }).catch(() => undefined);
-  return { summary, discord };
+  return { summary, notification };
 }
 
 async function selectNextRunnableTask() {
@@ -468,16 +468,16 @@ async function notifyTask(trigger: string, task: PmTaskRow, reason?: string) {
     .filter(Boolean)
     .join("\n");
 
-  const discord = await sendDiscordMessage(message);
-  if (!discord.ok) {
-    console.warn(`[pm-queue] Discord notification skipped/failed: ${discord.reason}`);
+  const notification = await sendOperationalNotification(message);
+  if (!notification.ok) {
+    console.warn(`[pm-queue] Slack notification skipped/failed: ${notification.reason}`);
   }
-  return discord;
+  return notification;
 }
 
 async function recordQueueCompletedIfEmpty(summary: QueueSummary) {
   if (summary.queued || summary.in_progress || summary.pm_decision_required) return;
-  await sendDiscordMessage(
+  await sendOperationalNotification(
     [
       "[ArchiveOS Queue Completed]",
       "All PM queue tasks are currently complete or waiting outside the runnable queue.",
