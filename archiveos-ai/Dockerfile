@@ -1,12 +1,17 @@
+# syntax=docker/dockerfile:1.7
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /workspace
 COPY settings.gradle build.gradle gradlew gradlew.bat ./
 COPY gradle ./gradle
-RUN sed -i 's/\r$//' gradlew \
+RUN --mount=type=cache,target=/root/.gradle/caches \
+    --mount=type=cache,target=/root/.gradle/wrapper \
+    sed -i 's/\r$//' gradlew \
     && chmod +x gradlew \
     && ./gradlew dependencies --no-daemon
 COPY src ./src
-RUN ./gradlew clean bootJar --no-daemon
+RUN --mount=type=cache,target=/root/.gradle/caches \
+    --mount=type=cache,target=/root/.gradle/wrapper \
+    ./gradlew clean bootJar --no-daemon
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
