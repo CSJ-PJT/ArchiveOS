@@ -1,6 +1,7 @@
 package com.archiveos.ai.notification;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -33,6 +34,32 @@ final class WebhookNotificationSupport {
         }
     }
 
+    static NotificationResult sendSlackApi(String botToken, String slackChannel, String message) {
+        if (botToken == null || botToken.isBlank() || slackChannel == null || slackChannel.isBlank()) {
+            return NotificationResult.notConfigured("slack");
+        }
+        try {
+            String payload = MAPPER.writeValueAsString(Map.of(
+                    "channel", slackChannel.trim(),
+                    "text", truncate(message, 39000)));
+            HttpRequest request = HttpRequest.newBuilder(URI.create("https://slack.com/api/chat.postMessage"))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Authorization", "Bearer " + botToken.trim())
+                    .header("Content-Type", "application/json; charset=utf-8")
+                    .POST(HttpRequest.BodyPublishers.ofString(payload))
+                    .build();
+            HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            JsonNode body = MAPPER.readTree(response.body());
+            if (response.statusCode() >= 200 && response.statusCode() < 300 && body.path("ok").asBoolean(false)) {
+                return new NotificationResult("slack", true, true, null);
+            }
+            String error = body.path("error").asText("HTTP " + response.statusCode());
+            return new NotificationResult("slack", true, false, "Slack API delivery failed: " + sanitize(error));
+        } catch (Exception error) {
+            return new NotificationResult("slack", true, false, sanitize(error.getMessage()));
+        }
+    }
+
     private static String truncate(String value, int max) {
         return value.length() <= max ? value : value.substring(0, max);
     }
@@ -40,8 +67,8 @@ final class WebhookNotificationSupport {
     private static String sanitize(String value) {
         if (value == null || value.isBlank()) return "notification delivery failed";
         return value
-                .replaceAll("https://discord(?:app)?\\.com/api/webhooks/[^\\s]+", "[redacted-discord-webhook]")
                 .replaceAll("https://hooks\\.slack\\.com/services/[^\\s]+", "[redacted-slack-webhook]")
+                .replaceAll("xox[baprs]-[A-Za-z0-9-]+", "[redacted-slack-token]")
                 .replaceAll("sk-proj-[A-Za-z0-9_-]+", "[redacted-openai-key]");
     }
 }

@@ -1,5 +1,5 @@
 import { addDaysToDateString, getSeoulDateString, isKoreanBusinessDay } from "./businessDays.js";
-import { sendDiscordMessage } from "./discord.js";
+import { sendOperationalNotification } from "../notifications/springNotificationClient.js";
 import { exportDailyReportToObsidian, linkDailyReportExport } from "../historian/index.js";
 import type { ExportResult } from "../historian/index.js";
 import { buildNightlyReviewSummary } from "./nightlyReview.js";
@@ -34,7 +34,7 @@ export async function runDailyReportBatch(options: DailyReportOptions = {}): Pro
         batch_type: "daily_report",
         status: "skipped",
         target_date: targetDate,
-        summary: `Discord 일일 보고 생략: ${businessDay.reason}.`,
+        summary: `Slack 일일 보고 생략: ${businessDay.reason}.`,
         metadata: {
           today: todayString,
           reason: businessDay.reason,
@@ -49,34 +49,8 @@ export async function runDailyReportBatch(options: DailyReportOptions = {}): Pro
     );
   }
 
-  const webhookConfigured = Boolean(process.env.DISCORD_WEBHOOK_URL?.trim());
-  if (!webhookConfigured) {
-    const reason = "DISCORD_WEBHOOK_URL not configured";
-    const reportText = buildDailyReportMessage(targetDate, nightly, publicUrl, reason);
-    return persistDailyAndBatch(
-      nightly,
-      reportText,
-      {
-        batch_type: "daily_report",
-        status: "skipped",
-        target_date: targetDate,
-        summary: "Discord 일일 보고 생략: DISCORD_WEBHOOK_URL 미설정.",
-        metadata: {
-          today: todayString,
-          reason,
-          business_day: true,
-          nightly,
-          archiveos_public_url_configured: Boolean(publicUrl),
-        },
-      },
-      false,
-      reason,
-      options.persist,
-    );
-  }
-
   const message = buildDailyReportMessage(targetDate, nightly, publicUrl);
-  const sent = await sendDiscordMessage(message);
+  const sent = await sendOperationalNotification(message);
 
   if (!sent.ok) {
     return persistDailyAndBatch(
@@ -86,7 +60,7 @@ export async function runDailyReportBatch(options: DailyReportOptions = {}): Pro
         batch_type: "daily_report",
         status: "failed",
         target_date: targetDate,
-        summary: `Discord 일일 보고 실패: ${sent.reason}.`,
+        summary: `Slack 일일 보고 실패: ${sent.reason}.`,
         metadata: {
           today: todayString,
           reason: sent.reason,
@@ -108,7 +82,7 @@ export async function runDailyReportBatch(options: DailyReportOptions = {}): Pro
       batch_type: "daily_report",
       status: "sent",
       target_date: targetDate,
-      summary: `Discord 일일 보고 전송 완료: ${targetDate}.`,
+      summary: `Slack 일일 보고 전송 완료: ${targetDate}.`,
       metadata: {
         today: todayString,
         business_day: true,
@@ -140,7 +114,7 @@ function buildDailyReportMessage(
   skippedReason?: string,
 ) {
   const statusLine = formatOperationStatus(nightly.operationStatus);
-  const reason = skippedReason ? `${nightly.statusReason} / Discord 생략: ${skippedReason}` : nightly.statusReason;
+  const reason = skippedReason ? `${nightly.statusReason} / Slack 생략: ${skippedReason}` : nightly.statusReason;
   const warnings = nightly.warnings.length
     ? nightly.warnings.map((warning) => `• ${warning}`).join("\n")
     : "• 감지된 경고 없음";
@@ -189,8 +163,8 @@ async function persistDailyAndBatch(
   nightly: NightlyReviewSummary,
   reportText: string,
   result: BatchResult,
-  discordSent: boolean,
-  discordSkippedReason: string | null,
+  slackSent: boolean,
+  slackSkippedReason: string | null,
   persist = true,
 ) {
   if (persist === false) {
@@ -208,8 +182,10 @@ async function persistDailyAndBatch(
     warnings: nightly.warnings,
     decisions_count: nightly.decisions.count,
     commands_count: nightly.commands.count,
-    discord_sent: discordSent,
-    discord_skipped_reason: discordSkippedReason,
+    discord_sent: false,
+    discord_skipped_reason: "migrated to Slack",
+    slack_sent: slackSent,
+    slack_skipped_reason: slackSkippedReason,
     report_text: reportText,
   };
 

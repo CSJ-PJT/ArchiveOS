@@ -116,7 +116,7 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "PM Task Retry", method: "POST", path: "/api/tasks/:id/retry", service: "queue", description: "PM retry recording without execution." },
   { name: "Queue Summary", method: "GET", path: "/api/queue/summary", service: "queue", description: "Semi-auto queue summary." },
   { name: "Queue Run Once", method: "POST", path: "/api/queue/run-once", service: "queue", description: "State transition and instruction generation only." },
-  { name: "Queue Nightly Summary", method: "POST", path: "/api/queue/nightly-summary", service: "queue", description: "Discord queue summary without execution." },
+  { name: "Queue Nightly Summary", method: "POST", path: "/api/queue/nightly-summary", service: "queue", description: "Slack queue summary without execution." },
   { name: "Local Projects", method: "GET", path: "/api/local-actions/projects", service: "backend", description: "Allowlisted local project registry." },
   { name: "Local Diagnostics", method: "POST", path: "/api/local-actions/run", service: "backend", description: "Allowlisted diagnostics endpoint." },
   { name: "Runtime Status", method: "GET", path: "/api/local-runtime/status", service: "runtime", description: "Local MCP runtime status." },
@@ -631,7 +631,7 @@ app.post("/api/queue/run-once", async (_request, response) => {
   }
 });
 
-// Local/admin/testing endpoint only. Sends a summary notification if DISCORD_WEBHOOK_URL is configured.
+// Local/admin/testing endpoint only. Spring owns Slack delivery and configuration.
 app.post("/api/queue/nightly-summary", async (_request, response) => {
   try {
     response.json({ data: await runNightlyQueueSummary() });
@@ -712,7 +712,7 @@ app.post("/api/batches/nightly-review/run", async (_request, response) => {
   }
 });
 
-// Local/admin/testing endpoint only. This may send Discord only when the Korea business-day rule passes.
+// Local/admin/testing endpoint only. This may send Slack only when the Korea business-day rule passes.
 app.post("/api/batches/daily-report/run", async (_request, response) => {
   try {
     response.status(200).json(await proxyArchiveOsAi("/api/batches/daily-report/run", { method: "POST" }));

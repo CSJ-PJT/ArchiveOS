@@ -17,7 +17,7 @@ ArchiveOS는 AI 에이전트, 지능형 RPA, 배치 작업, 워크플로우, 지
 | 영역 | 현재 상태 |
 | --- | --- |
 | Operator Console | Sidebar 기반 Overview, Agents, Workflows, Knowledge, History, Batch, RPA, Settings 화면 |
-| Operations Backend | Node/Express 기반 운영 데이터, 런타임 가시성, Discord·Supabase·Spring API 연동 |
+| Compatibility Backend | Node/Express 기반 기존 API 호환과 Spring API 위임 |
 | AI Runtime | Spring Boot, Spring AI, ChatModel·EmbeddingModel, Spring Batch·RPA 기반 |
 | Knowledge & RAG | Obsidian Markdown 동기화, 청크 생성, 임베딩, pgvector 검색, 출처 추적 기반 |
 | Data Platform | PostgreSQL + pgvector 로컬 개발 환경 |
@@ -70,7 +70,7 @@ ArchiveOS는 특정 산업에 종속되지 않는 공통 AI 실행 환경을 목
 - 시스템 상태와 서비스 Health Check
 - Critical Alert와 최근 활동 표시
 - Agent, Batch, Workflow, RPA 실행 현황
-- Discord 알림과 외부 운영 도구 연동 기반
+- Spring Boot 소유 Slack 알림과 외부 운영 도구 연동 기반
 
 ---
 
@@ -153,7 +153,7 @@ ArchiveOS는 공통 AI 런타임을 담당하고, Archive-Nexus는 제조 도메
 
 - Docker / Docker Compose
 - REST API / Webhook
-- Discord / GitHub
+- Slack / GitHub
 - Kubernetes, Prometheus, Grafana, OpenTelemetry 확장 계획
 
 ---
@@ -209,7 +209,7 @@ cd ../archiveos-ai
 - [x] Spring Batch와 RPA 운영 기반
 - [x] PostgreSQL·pgvector 기반 RAG
 - [x] Knowledge 동기화와 출처 추적 기반
-- [x] Discord 운영 알림 기반
+- [x] Spring Boot 기반 Slack 운영 알림
 - [ ] Archive-Nexus 실제 운영 연동 완성
 - [ ] Workflow Designer
 - [ ] MCP Tool Registry

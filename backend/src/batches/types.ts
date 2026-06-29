@@ -74,6 +74,8 @@ export type DailyReportRecord = {
   commands_count: number;
   discord_sent: boolean;
   discord_skipped_reason: string | null;
+  slack_sent?: boolean;
+  slack_skipped_reason?: string | null;
   report_text: string;
 };
 

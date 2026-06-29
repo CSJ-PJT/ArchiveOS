@@ -436,6 +436,8 @@ export type LatestBatchStatus = {
   nightly_review: BatchRun | null;
   daily_report: BatchRun | null;
   discord_webhook_configured: boolean;
+  slack_webhook_configured: boolean;
+  notification_channel?: "slack";
   archiveos_public_url_configured: boolean;
   holiday_years: number[];
 };

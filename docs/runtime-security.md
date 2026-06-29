@@ -9,7 +9,7 @@ This document describes the current security readiness layer.
 - Read-only dashboards remain available.
 - PM Decision, Task Queue creation/update/retry, and Queue Run Once are marked as protected CUD endpoints.
 - Enforcement is currently `report_only` until ngrok OAuth headers and approved device policy are confirmed.
-- Discord webhook URL, Supabase service role key, Obsidian vault path, and other secrets are never exposed in the frontend.
+- Slack bot tokens and webhook URLs, Supabase service role keys, Obsidian vault paths, and other secrets are never exposed in the frontend.
 - No Codex, MCP, shell, deployment, or process control is added.
 
 ## Environment Variables
@@ -56,9 +56,9 @@ Policy target:
 
 The current implementation reports these endpoints as protected and ready for PM/admin gating. Full enforcement should be enabled after the ngrok OAuth provider, allowed emails/domains, and device approval workflow are finalized.
 
-## Discord Security Notifications
+## Slack Security Notifications
 
-ArchiveOS can send backend-only Discord notifications for security-sensitive events:
+ArchiveOS sends backend-only Slack notifications for security-sensitive events through Spring Boot:
 
 - new device detected
 - device approved
@@ -66,4 +66,4 @@ ArchiveOS can send backend-only Discord notifications for security-sensitive eve
 - PM decision executed
 - admin configuration changed
 
-Notification delivery uses `DISCORD_WEBHOOK_URL` from backend env only. A Discord failure does not fail the PM action.
+Notification delivery uses `SLACK_BOT_TOKEN` and `SLACK_CHANNEL`, or the optional `SLACK_WEBHOOK_URL`, in the Java runtime only. A Slack failure does not fail the PM action.
