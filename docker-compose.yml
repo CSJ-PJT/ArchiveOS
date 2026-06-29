@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${DB_USER:-archiveos}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-archiveos}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${DB_HOST_PORT:-5432}:5432"
     volumes:
       - archiveos-postgres:/var/lib/postgresql/data
     healthcheck:
@@ -49,7 +49,6 @@ services:
         condition: service_healthy
 
   archiveos-ai:
-    restart: unless-stopped
     build:
       context: ./archiveos-ai
     restart: unless-stopped
@@ -86,7 +85,6 @@ services:
         condition: service_healthy
 
   frontend:
-    restart: unless-stopped
     build:
       context: .
     restart: unless-stopped
