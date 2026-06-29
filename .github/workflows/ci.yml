@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend test and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm run test
+      - name: Build
+        run: npm run build
+
+  node-backend:
+    name: Node compatibility layer
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm run test
+      - name: Type check
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+
+  java-runtime:
+    name: Java runtime test and package
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: archiveos
+          POSTGRES_USER: archiveos
+          POSTGRES_PASSWORD: archiveos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U archiveos -d archiveos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: archiveos
+      DB_USER: archiveos
+      DB_PASSWORD: archiveos
+      OPENAI_API_KEY: archiveos-disabled-key
+      ARCHIVEOS_SCHEDULER_ENABLED: false
+    defaults:
+      run:
+        working-directory: archiveos-ai
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+      - name: Test and package
+        run: ./gradlew clean test bootJar --no-daemon
+
+  compose-config:
+    name: Validate Docker Compose
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate configuration
+        run: docker compose config --quiet
