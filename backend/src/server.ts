@@ -27,17 +27,9 @@ import { getKpiOverview, normalizeRange } from "./kpi/index.js";
 import { getAgentMeshOverview } from "./mesh/index.js";
 import { getSecurityStatus, notifySecurityEvent } from "./security/securityModel.js";
 import {
-  createPmTask,
-  decidePmTask,
-  getPmTask,
-  getQueueSummary,
   getTaskEvents,
-  listPmTasks,
-  retryPmTask,
   runNightlyQueueSummary,
   runQueueOnce,
-  updatePmTask,
-  type PmTaskStatus,
 } from "./queue/index.js";
 import { supabaseAdmin } from "./lib/supabaseAdmin.js";
 
@@ -53,21 +45,6 @@ const allowedOrigins = new Set([
 
 const logTypes = new Set(["summary", "decision", "error", "review"]);
 const commandStatuses = new Set(["pending", "running", "succeeded", "failed"]);
-const pmTaskPriorities = new Set(["high", "medium", "low"]);
-const pmTaskStatuses = new Set([
-  "queued",
-  "architect_review",
-  "ready_for_build",
-  "building",
-  "review",
-  "pm_decision_required",
-  "approved",
-  "rejected",
-  "hold",
-  "failed",
-  "done",
-]);
-const pmDecisionActions = new Set(["approve", "reject", "hold", "retry"]);
 const localActionTypes = new Set([
   "git_status",
   "git_branch",
@@ -584,114 +561,65 @@ app.post("/api/commands", async (request, response) => {
 });
 
 app.get("/api/tasks", async (_request, response) => {
-  try {
-    response.json({ data: await listPmTasks() });
-  } catch {
-    response.json({
-      data: [],
-      warning: "PM task queue is not available yet. Apply queue schema or check Supabase connectivity.",
-    });
-  }
+  await relayArchiveOsAi(response, "/api/tasks");
 });
 
 app.get("/api/tasks/:id", async (request, response) => {
-  try {
-    const task = await getPmTask(request.params.id);
-    if (!task) {
-      response.status(404).json({ error: "PM task not found." });
-      return;
-    }
-    response.json({ data: task });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch PM task." });
-  }
+  await relayArchiveOsAi(response, `/api/tasks/${encodeURIComponent(request.params.id)}`);
 });
 
 app.post("/api/tasks", async (request, response) => {
-  const validation = validatePmTaskBody(request.body);
-
-  if (!validation.ok) {
-    response.status(400).json({ error: validation.error });
-    return;
-  }
-
-  try {
-    response.status(201).json({ data: await createPmTask(validation.value) });
-  } catch {
-    response.status(500).json({ error: "Failed to create PM task." });
-  }
+  await relayArchiveOsAi(response, "/api/tasks", jsonProxyRequest("POST", request.body));
 });
 
 app.patch("/api/tasks/:id", async (request, response) => {
-  const validation = validatePmTaskPatchBody(request.body);
-
-  if (!validation.ok) {
-    response.status(400).json({ error: validation.error });
-    return;
-  }
-
-  try {
-    response.json({ data: await updatePmTask(request.params.id, validation.value) });
-  } catch {
-    response.status(500).json({ error: "Failed to update PM task." });
-  }
+  await relayArchiveOsAi(response, `/api/tasks/${encodeURIComponent(request.params.id)}`, jsonProxyRequest("PATCH", request.body));
 });
 
 app.post("/api/tasks/:id/decision", async (request, response) => {
-  const validation = validatePmDecisionBody(request.body);
-
-  if (!validation.ok) {
-    response.status(400).json({ error: validation.error });
-    return;
-  }
-
-  try {
-    const result = await decidePmTask(request.params.id, validation.value);
-    void notifySecurityEvent({
-      type: "pm_decision_executed",
-      title: "PM decision recorded",
-      summary: "A PM decision changed ArchiveOS task state. This did not execute Codex, MCP, shell, or deployment.",
-      metadata: {
-        task_id: request.params.id,
-        action: validation.value.action,
-        status: result.task.status,
-      },
-    });
-    response.json({ data: result });
-  } catch (error) {
-    response.status(400).json({ error: error instanceof Error ? error.message : "Failed to record PM decision." });
-  }
+  await relayArchiveOsAi(
+    response,
+    `/api/tasks/${encodeURIComponent(request.params.id)}/decision`,
+    jsonProxyRequest("POST", request.body),
+    (payload) => {
+      const result = payload as { data?: { task?: { status?: string } } };
+      void notifySecurityEvent({
+        type: "pm_decision_executed",
+        title: "PM decision recorded",
+        summary: "A PM decision changed ArchiveOS task state. This did not execute Codex, MCP, shell, or deployment.",
+        metadata: {
+          task_id: request.params.id,
+          action: typeof request.body?.action === "string" ? request.body.action : null,
+          status: result.data?.task?.status ?? null,
+        },
+      });
+    },
+  );
 });
 
 app.post("/api/tasks/:id/retry", async (request, response) => {
-  const reason = typeof request.body?.reason === "string" ? request.body.reason : null;
-
-  try {
-    const result = await retryPmTask(request.params.id, reason);
-    void notifySecurityEvent({
-      type: "pm_decision_executed",
-      title: "PM retry requested",
-      summary: "A PM retry request was recorded. This does not directly execute Codex, MCP, shell, or process control.",
-      metadata: {
-        task_id: request.params.id,
-        status: result.task.status,
-        current_iteration: result.task.current_iteration,
-      },
-    });
-    response.json({ data: result });
-  } catch (error) {
-    response.status(400).json({ error: error instanceof Error ? error.message : "Failed to request retry." });
-  }
+  await relayArchiveOsAi(
+    response,
+    `/api/tasks/${encodeURIComponent(request.params.id)}/retry`,
+    jsonProxyRequest("POST", request.body),
+    (payload) => {
+      const result = payload as { data?: { task?: { status?: string; current_iteration?: number } } };
+      void notifySecurityEvent({
+        type: "pm_decision_executed",
+        title: "PM retry requested",
+        summary: "A PM retry request was recorded. This does not directly execute Codex, MCP, shell, or process control.",
+        metadata: {
+          task_id: request.params.id,
+          status: result.data?.task?.status ?? null,
+          current_iteration: result.data?.task?.current_iteration ?? null,
+        },
+      });
+    },
+  );
 });
 
 app.get("/api/queue/summary", async (_request, response) => {
-  try {
-    response.json({ data: await getQueueSummary() });
-  } catch {
-    response.json({
-      data: createEmptyQueueSummary("PM queue summary is not available yet. Apply queue schema or check Supabase connectivity."),
-    });
-  }
+  await relayArchiveOsAi(response, "/api/queue/summary");
 });
 
 // Local/admin/testing endpoint only. This does not execute Codex, MCP, shell, deployment, git, or process control.
@@ -1086,35 +1014,6 @@ type ArchitectReviewValidationResult =
   | { ok: true; value: ArchitectReviewBody }
   | { ok: false; error: string };
 
-type PmTaskBody = {
-  title: string;
-  description: string;
-  priority?: "high" | "medium" | "low";
-  target_project?: string;
-  scope_files?: string[] | null;
-  max_iterations?: number;
-  cost_budget?: number | null;
-};
-
-type PmTaskPatchBody = Partial<PmTaskBody & { status: PmTaskStatus }>;
-
-type PmDecisionBody = {
-  action: "approve" | "reject" | "hold" | "retry";
-  reason?: string | null;
-};
-
-type PmTaskValidationResult =
-  | { ok: true; value: PmTaskBody }
-  | { ok: false; error: string };
-
-type PmTaskPatchValidationResult =
-  | { ok: true; value: PmTaskPatchBody }
-  | { ok: false; error: string };
-
-type PmDecisionValidationResult =
-  | { ok: true; value: PmDecisionBody }
-  | { ok: false; error: string };
-
 function validateWorkLogBody(body: unknown): ValidationResult {
   if (!body || typeof body !== "object") {
     return { ok: false, error: "Request body must be a JSON object." };
@@ -1181,157 +1080,12 @@ function validateArchitectReviewBody(body: unknown): ArchitectReviewValidationRe
   };
 }
 
-function validatePmTaskBody(body: unknown): PmTaskValidationResult {
-  if (!body || typeof body !== "object") {
-    return { ok: false, error: "Request body must be a JSON object." };
-  }
-
-  const candidate = body as Record<string, unknown>;
-  const title = readRequiredString(candidate.title, "title");
-  const description = readRequiredString(candidate.description, "description");
-  if (!title.ok) return title;
-  if (!description.ok) return description;
-
-  if (candidate.priority !== undefined && (typeof candidate.priority !== "string" || !pmTaskPriorities.has(candidate.priority))) {
-    return { ok: false, error: "priority must be high, medium, or low." };
-  }
-
-  const scopeFiles = readOptionalStringArray(candidate.scope_files, "scope_files");
-  if (!scopeFiles.ok) return scopeFiles;
-
-  const maxIterations = readOptionalNumber(candidate.max_iterations, "max_iterations");
-  if (!maxIterations.ok) return maxIterations;
-
-  const costBudget = readOptionalNumber(candidate.cost_budget, "cost_budget");
-  if (!costBudget.ok) return costBudget;
-
-  return {
-    ok: true,
-    value: {
-      title: title.value,
-      description: description.value,
-      priority: candidate.priority as PmTaskBody["priority"],
-      target_project: typeof candidate.target_project === "string" ? candidate.target_project.trim() : undefined,
-      scope_files: scopeFiles.value,
-      max_iterations: typeof maxIterations.value === "number" ? maxIterations.value : undefined,
-      cost_budget: costBudget.value,
-    },
-  };
-}
-
-function validatePmTaskPatchBody(body: unknown): PmTaskPatchValidationResult {
-  if (!body || typeof body !== "object") {
-    return { ok: false, error: "Request body must be a JSON object." };
-  }
-
-  const candidate = body as Record<string, unknown>;
-  const value: PmTaskPatchBody = {};
-
-  if (candidate.title !== undefined) {
-    const title = readRequiredString(candidate.title, "title");
-    if (!title.ok) return title;
-    value.title = title.value;
-  }
-
-  if (candidate.description !== undefined) {
-    const description = readRequiredString(candidate.description, "description");
-    if (!description.ok) return description;
-    value.description = description.value;
-  }
-
-  if (candidate.priority !== undefined) {
-    if (typeof candidate.priority !== "string" || !pmTaskPriorities.has(candidate.priority)) {
-      return { ok: false, error: "priority must be high, medium, or low." };
-    }
-    value.priority = candidate.priority as PmTaskBody["priority"];
-  }
-
-  if (candidate.status !== undefined) {
-    if (typeof candidate.status !== "string" || !pmTaskStatuses.has(candidate.status)) {
-      return { ok: false, error: "status is not a valid PM task status." };
-    }
-    value.status = candidate.status as PmTaskStatus;
-  }
-
-  if (candidate.target_project !== undefined) {
-    if (typeof candidate.target_project !== "string" || !candidate.target_project.trim()) {
-      return { ok: false, error: "target_project must be a non-empty string." };
-    }
-    value.target_project = candidate.target_project.trim();
-  }
-
-  if (candidate.scope_files !== undefined) {
-    const scopeFiles = readOptionalStringArray(candidate.scope_files, "scope_files");
-    if (!scopeFiles.ok) return scopeFiles;
-    value.scope_files = scopeFiles.value;
-  }
-
-  if (candidate.max_iterations !== undefined) {
-    const maxIterations = readOptionalNumber(candidate.max_iterations, "max_iterations");
-    if (!maxIterations.ok) return maxIterations;
-    value.max_iterations = typeof maxIterations.value === "number" ? maxIterations.value : undefined;
-  }
-
-  if (candidate.cost_budget !== undefined) {
-    const costBudget = readOptionalNumber(candidate.cost_budget, "cost_budget");
-    if (!costBudget.ok) return costBudget;
-    value.cost_budget = costBudget.value;
-  }
-
-  return { ok: true, value };
-}
-
-function validatePmDecisionBody(body: unknown): PmDecisionValidationResult {
-  if (!body || typeof body !== "object") {
-    return { ok: false, error: "Request body must be a JSON object." };
-  }
-
-  const candidate = body as Record<string, unknown>;
-  if (typeof candidate.action !== "string" || !pmDecisionActions.has(candidate.action)) {
-    return { ok: false, error: "action must be approve, reject, hold, or retry." };
-  }
-
-  if (candidate.action === "reject" && (typeof candidate.reason !== "string" || !candidate.reason.trim())) {
-    return { ok: false, error: "reason is required when rejecting a task." };
-  }
-
-  if (candidate.reason !== undefined && candidate.reason !== null && typeof candidate.reason !== "string") {
-    return { ok: false, error: "reason must be a string or null." };
-  }
-
-  return {
-    ok: true,
-    value: {
-      action: candidate.action as PmDecisionBody["action"],
-      reason: typeof candidate.reason === "string" ? candidate.reason.trim() : null,
-    },
-  };
-}
-
 function readRequiredString(value: unknown, name: string): { ok: true; value: string } | { ok: false; error: string } {
   if (typeof value !== "string" || value.trim().length === 0) {
     return { ok: false, error: `${name} is required.` };
   }
 
   return { ok: true, value: value.trim() };
-}
-
-function readOptionalNumber(value: unknown, name: string): { ok: true; value?: number | null } | { ok: false; error: string } {
-  if (value === undefined) return { ok: true, value: undefined };
-  if (value === null) return { ok: true, value: null };
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return { ok: false, error: `${name} must be a finite number.` };
-  }
-  return { ok: true, value };
-}
-
-function readOptionalStringArray(value: unknown, name: string): { ok: true; value?: string[] | null } | { ok: false; error: string } {
-  if (value === undefined) return { ok: true, value: undefined };
-  if (value === null) return { ok: true, value: null };
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-    return { ok: false, error: `${name} must be an array of strings or null.` };
-  }
-  return { ok: true, value: value.map((item) => item.trim()).filter(Boolean) };
 }
 
 function readLimit(value: unknown) {
@@ -1342,19 +1096,6 @@ function readLimit(value: unknown) {
 function readGraphLimit(value: unknown) {
   const numeric = typeof value === "string" ? Number(value) : 100;
   return Number.isFinite(numeric) ? Math.min(Math.max(Math.floor(numeric), 1), 300) : 100;
-}
-
-function createEmptyQueueSummary(recommendedAction: string) {
-  return {
-    queued: 0,
-    in_progress: 0,
-    pm_decision_required: 0,
-    done_today: 0,
-    failed_today: 0,
-    current_task: null,
-    recommended_pm_action: recommendedAction,
-    updated_at: new Date().toISOString(),
-  };
 }
 
 function createEmptyKpiOverview(range: ReturnType<typeof normalizeRange>, note: string) {
@@ -1430,7 +1171,7 @@ async function getServiceHealth() {
     withTimeout(getKpiOverview("7d"), 2500, "KPI check timed out."),
     withTimeout(getLatestArchitectureReview(), 2500, "Architect check timed out."),
     withTimeout(getLatestDailyReport(), 2500, "Daily report check timed out."),
-    withTimeout(getQueueSummary(), 2500, "Queue summary check timed out."),
+    withTimeout(proxyArchiveOsAi("/api/queue/summary"), 2500, "Queue summary check timed out."),
     withTimeout(getSecurityStatus(), 2500, "Security status check timed out."),
     withTimeout(Promise.resolve(getAxReadiness()), 2500, "AX readiness check timed out."),
   ]);
@@ -1969,6 +1710,34 @@ async function proxyArchiveOsAi(path: string, init?: RequestInit) {
   }
 
   return payload;
+}
+
+function jsonProxyRequest(method: "POST" | "PATCH", body: unknown): RequestInit {
+  return {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body ?? null),
+  };
+}
+
+async function relayArchiveOsAi(
+  response: any,
+  path: string,
+  init?: RequestInit,
+  onSuccess?: (payload: unknown) => void,
+) {
+  const baseUrl = process.env.ARCHIVEOS_AI_BASE_URL?.trim() || "http://localhost:4100";
+  try {
+    const upstream = await fetch(`${baseUrl}${path}`, init);
+    const payload = await upstream.json().catch(() => ({}));
+    if (upstream.ok) onSuccess?.(payload);
+    response.status(upstream.status).json(payload);
+  } catch (error) {
+    response.status(503).json({
+      error: error instanceof Error ? error.message : "ArchiveOS AI module is unavailable.",
+      details: "ArchiveOS AI module is unavailable or not configured.",
+    });
+  }
 }
 
 function sendProxyError(response: any, error: unknown, fallback: string) {

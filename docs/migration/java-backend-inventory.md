@@ -27,7 +27,7 @@ React/Vite -> Node/Express :4000 -> Supabase Data API / local OS adapters
 | Batch catalog, execution and steps | Spring Batch | Spring Batch metadata | Migrated |
 | Nightly review and daily report | Spring plus Node duplicate | PostgreSQL/Supabase, webhooks | Cutover incomplete |
 | RPA classification and decisions | Spring Batch/JDBC | PostgreSQL | Migrated; execution intentionally disabled |
-| PM workflow queue | Node | Supabase PM tables | Not migrated |
+| PM workflow queue | Spring with temporary Express pass-through | PostgreSQL PM tables | CRUD, decision, retry and summary migrated; run-once/nightly remain Node |
 | Work logs and command records | Node | Supabase Data API | Not migrated |
 | Dashboard, KPI and readiness | Node | Supabase and derived aggregation | Not migrated |
 | Knowledge graph and historian | Node | Supabase, Obsidian | Not migrated |
@@ -54,7 +54,7 @@ are compatibility requirements until an explicitly versioned API replaces them.
 | Operations | nightly/daily run, batch/report/snapshot reads | `{data}` envelope | Spring implemented behind Node facade |
 | RPA | classify, recent/detail, decision | approve/reject/hold/request_retry | Spring implemented |
 | Records | dashboard, work-log and command reads/writes | writes are recording-only | Node only |
-| Workflow | task CRUD, decision, retry, queue endpoints | approval wait, iteration and event history | Node only |
+| Workflow | task CRUD, decision, retry, queue endpoints | approval wait, iteration and event history | CRUD/decision/retry/summary in Spring; orchestration and nightly summary remain Node |
 | Local runtime | projects/action/status | strict command allowlist | Node only |
 | Security | `GET /api/security/status` | reports readiness; does not enforce access | Node only |
 | Knowledge | historian and knowledge graph endpoints | read-heavy `{data}` contracts | Node only |
@@ -77,8 +77,20 @@ reported but are not a Spring Security boundary.
 
 RLS is enabled on the exposed public tables, but current policies allow public reads without an
 ownership predicate. Spring uses a direct database user while Node writes through Supabase service
-role. This split must be replaced by one explicit authorization model. Runtime JDBC DDL and the
-Supabase SQL file can drift; versioned Flyway migrations are required before Node removal.
+role. This split must be replaced by one explicit authorization model. Flyway now owns the PM
+workflow table bootstrap (`V1__create_pm_workflow_tables.sql`); the remaining tables still need
+versioned reconciliation with `supabase/schema.sql` before Node removal.
+
+## Migration progress
+
+- Spring owns PM task list/detail/create/update, PM decision/retry, event recording and queue summary.
+- Decision, task state and event writes share a Spring transaction boundary.
+- Express preserves the browser-facing paths and relays status/body without reimplementing workflow rules.
+- Flyway baseline-on-migrate supports both the existing non-empty schema and a fresh PostgreSQL database.
+- Verified path: frontend-compatible `:4000` request -> Spring `:4100` -> PostgreSQL, including Flyway v1/v2,
+  task creation, patch, decision, validation error and persisted event history.
+- Node still owns queue `run-once`, architect/builder/reviewer orchestration and nightly notification;
+  these must move before the queue module can be removed.
 
 ## Target Spring structure
 
@@ -102,9 +114,9 @@ records so schema changes do not accidentally alter the browser contract.
 ## Migration order
 
 1. Freeze API contracts and migrate liveness/basic runtime configuration.
-2. Introduce Flyway and reconcile Supabase schema with Spring runtime DDL.
+2. Introduce Flyway and reconcile Supabase schema with Spring runtime DDL. (PM workflow bootstrap complete)
 3. Migrate core records, dashboard aggregates and runtime events.
-4. Migrate PM workflow state/history/retry/approval transactionally.
+4. Migrate PM workflow state/history/retry/approval transactionally. (core APIs complete; orchestration remains)
 5. Migrate knowledge, historian, architect, mesh and KPI services.
 6. Add Spring Security and revise broad public-read policies.
 7. Migrate local runtime and process access behind allowlisted Java ports.
@@ -120,8 +132,8 @@ single-owner scheduling, frontend E2E evidence, production observation and a tes
 ## Priority TODO
 
 1. Add contract tests for every frontend-used endpoint and legacy error envelope.
-2. Add Flyway and version existing schema/runtime DDL.
-3. Migrate PM workflow state, history, retry and approval APIs.
+2. Expand Flyway coverage from PM workflow tables to the remaining existing schema.
+3. Migrate PM run-once orchestration, task event reads and nightly summary/notification ownership.
 4. Migrate work-log/command CRUD and dashboard projections.
 5. Introduce Spring Security before exposing Java write APIs.
 6. Add deleted-document reconciliation, embedding retry/dimension checks, score thresholds and
