@@ -1,6 +1,7 @@
 package com.archiveos.ai.obsidian;
 
 import com.archiveos.ai.config.ArchiveOsAiProperties;
+import com.archiveos.ai.runtime.AiModelGateway;
 import com.archiveos.ai.runtime.AiRuntimeState;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -8,10 +9,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -21,8 +18,7 @@ public class ObsidianRagService {
     private final MarkdownChunker chunker;
     private final ObsidianVaultResolver vaultResolver;
     private final ObsidianJdbcRepository repository;
-    private final ObjectProvider<EmbeddingModel> embeddingModel;
-    private final ObjectProvider<ChatModel> chatModel;
+    private final AiModelGateway models;
     private final AiRuntimeState runtimeState;
 
     public ObsidianRagService(
@@ -31,16 +27,14 @@ public class ObsidianRagService {
             MarkdownChunker chunker,
             ObsidianVaultResolver vaultResolver,
             ObsidianJdbcRepository repository,
-            ObjectProvider<EmbeddingModel> embeddingModel,
-            ObjectProvider<ChatModel> chatModel,
+            AiModelGateway models,
             AiRuntimeState runtimeState) {
         this.properties = properties;
         this.vaultReader = vaultReader;
         this.chunker = chunker;
         this.vaultResolver = vaultResolver;
         this.repository = repository;
-        this.embeddingModel = embeddingModel;
-        this.chatModel = chatModel;
+        this.models = models;
         this.runtimeState = runtimeState;
     }
 
@@ -50,7 +44,7 @@ public class ObsidianRagService {
         int embeddedTotal = 0;
         Throwable failure = null;
         try {
-            requireConfigured();
+            requireEmbeddingConfigured();
             Path vaultPath = vaultResolver.resolveVaultPath();
             if (!vaultPath.toFile().isDirectory()) {
                 return new ObsidianSyncResult(false, 0, 0, 0, 0, 0, 0, "OBSIDIAN_VAULT_PATH not configured");
@@ -113,7 +107,7 @@ public class ObsidianRagService {
         List<RagReference> references = List.of();
         Throwable failure = null;
         try {
-            requireConfigured();
+            requireEmbeddingConfigured();
             repository.ensureSchema();
             references = repository.search(embed(query), limit);
             success = true;
@@ -132,7 +126,8 @@ public class ObsidianRagService {
         int referenceCount = 0;
         Throwable failure = null;
         try {
-            requireConfigured();
+            requireEmbeddingConfigured();
+            requireChatConfigured();
             List<RagReference> references = search(question, properties.ragMaxReferences());
             referenceCount = references.size();
             if (references.isEmpty()) {
@@ -141,15 +136,7 @@ public class ObsidianRagService {
             }
 
             String promptText = buildPrompt(question, references);
-            long chatStarted = System.currentTimeMillis();
-            String answer;
-            try {
-                answer = chatModel.getObject().call(new Prompt(promptText)).getResult().getOutput().getText();
-                runtimeState.recordChatSuccess(System.currentTimeMillis() - chatStarted);
-            } catch (RuntimeException error) {
-                runtimeState.recordChatFailure(error, System.currentTimeMillis() - chatStarted);
-                throw error;
-            }
+            String answer = models.chat(promptText);
             success = true;
             return new RagAnswer(answer, references);
         } catch (RuntimeException error) {
@@ -160,28 +147,23 @@ public class ObsidianRagService {
         }
     }
 
-    private void requireConfigured() {
+    private void requireEmbeddingConfigured() {
         if (!properties.openAiConfigured()) {
             throw new AiUnavailableException("OPENAI_API_KEY is not configured. ArchiveOS AI RAG is disabled.");
         }
-        if (embeddingModel.getIfAvailable() == null) {
+        if (!models.embeddingAvailable()) {
             throw new AiUnavailableException("EmbeddingModel bean is unavailable. Check Spring AI OpenAI configuration.");
         }
-        if (chatModel.getIfAvailable() == null) {
+    }
+
+    private void requireChatConfigured() {
+        if (!models.chatAvailable()) {
             throw new AiUnavailableException("ChatModel bean is unavailable. Check Spring AI OpenAI configuration.");
         }
     }
 
     private float[] embed(String text) {
-        long started = System.currentTimeMillis();
-        try {
-            float[] vector = embeddingModel.getObject().embed(text);
-            runtimeState.recordEmbeddingSuccess(System.currentTimeMillis() - started);
-            return vector;
-        } catch (RuntimeException error) {
-            runtimeState.recordEmbeddingFailure(error, System.currentTimeMillis() - started);
-            throw error;
-        }
+        return models.embed(text);
     }
 
     private String buildPrompt(String question, List<RagReference> references) {

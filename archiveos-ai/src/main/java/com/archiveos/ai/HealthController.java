@@ -1,34 +1,41 @@
 package com.archiveos.ai;
 
+import com.archiveos.ai.runtime.AiRuntimeService;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class HealthController {
-    private final String openAiApiKey;
-    private final String obsidianVaultPath;
-    private final String datasourceUrl;
+    private final AiRuntimeService runtimeService;
 
-    public HealthController(
-            @Value("${archiveos.openai-api-key:}") String openAiApiKey,
-            @Value("${archiveos.obsidian-vault-path:}") String obsidianVaultPath,
-            @Value("${spring.datasource.url:}") String datasourceUrl) {
-        this.openAiApiKey = openAiApiKey;
-        this.obsidianVaultPath = obsidianVaultPath;
-        this.datasourceUrl = datasourceUrl;
+    public HealthController(AiRuntimeService runtimeService) {
+        this.runtimeService = runtimeService;
     }
 
     @GetMapping("/api/health")
     public ResponseEntity<Map<String, Object>> health() {
-        return ResponseEntity.ok(Map.of(
-                "status", "UP",
-                "module", "archiveos-ai",
-                "aiProvider", "openai",
-                "openAiConfigured", !openAiApiKey.isBlank(),
-                "obsidianVaultConfigured", !obsidianVaultPath.isBlank(),
-                "database", datasourceUrl.isBlank() ? "not_configured" : "configured"));
+        Map<String, Object> runtime = runtimeService.runtime();
+        String runtimeStatus = String.valueOf(runtime.getOrDefault("status", "unavailable"));
+        String status = switch (runtimeStatus) {
+            case "healthy" -> "UP";
+            case "degraded" -> "DEGRADED";
+            default -> "DOWN";
+        };
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", status);
+        body.put("module", "archiveos-ai");
+        body.put("aiProvider", "openai");
+        body.put("checkedAt", runtime.get("checkedAt"));
+        body.put("components", Map.of(
+                "springAi", runtime.get("springAi"),
+                "chatModel", runtime.get("chatModel"),
+                "embeddingModel", runtime.get("embeddingModel"),
+                "vectorStore", runtime.get("vectorStore"),
+                "obsidian", runtime.get("obsidian"),
+                "rag", runtime.get("rag")));
+        return ResponseEntity.ok(body);
     }
 }
