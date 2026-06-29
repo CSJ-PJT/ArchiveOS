@@ -12,7 +12,7 @@ Current topology:
 React/Vite -> Node/Express :4000 -> Supabase Data API / local OS adapters
                               \-> Spring Boot :4100 -> PostgreSQL/pgvector
                                                      -> Spring AI / Batch
-                                                     -> Discord / Slack
+                                                     -> Slack
 ```
 
 ## Existing functionality and migration state
@@ -33,7 +33,7 @@ React/Vite -> Node/Express :4000 -> Supabase Data API / local OS adapters
 | Knowledge graph and historian | Node | Supabase, Obsidian | Not migrated |
 | Architect and agent mesh | Node | Rules and Supabase | Not migrated |
 | Local runtime diagnostics | Node | Windows processes/filesystem | Not migrated |
-| Notifications | Spring and Node | Discord/Slack | Duplicate paths remain |
+| Notifications | Spring | Slack | Node delegates to Spring |
 | Authentication/authorization | No enforced API boundary | public-read RLS, service-role writes | Not implemented |
 
 ## Existing API contract
@@ -100,7 +100,7 @@ com.archiveos
   application/     use cases and transaction boundaries
   domain/          workflow, agent, batch, knowledge and audit models
   persistence/     JDBC/JPA repositories and Flyway migrations
-  integration/     AI, Slack, Discord, Supabase transition and OS adapters
+  integration/     AI, Slack, Supabase transition and OS adapters
   security/        authentication, principals and authorization
   scheduling/      triggers only; business rules remain in services
   batch/           jobs, steps and execution projections
@@ -150,5 +150,5 @@ single-owner scheduling, frontend E2E evidence, production observation and a tes
 - `vector(1536)` couples persistence to one embedding model dimension.
 - Node and Spring duplicate scheduler, notification and ingestion behavior.
 - Windows-specific process access cannot be copied blindly into a container.
-- Real hosted Supabase advisor/policy behavior, real OpenAI calls, Discord/Slack delivery, ngrok
+- Real hosted Supabase advisor/policy behavior, real OpenAI calls, Slack delivery, ngrok
   identity enforcement, concurrent retry behavior and direct React-to-Spring E2E remain unverified.

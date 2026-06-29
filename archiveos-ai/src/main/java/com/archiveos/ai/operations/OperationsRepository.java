@@ -52,6 +52,8 @@ public class OperationsRepository {
                   commands_count integer not null default 0,
                   discord_sent boolean not null default false,
                   discord_skipped_reason text,
+                  slack_sent boolean not null default false,
+                  slack_skipped_reason text,
                   notification_results jsonb not null default '[]'::jsonb,
                   report_text text not null,
                   created_at timestamptz not null default now()
@@ -107,8 +109,8 @@ public class OperationsRepository {
         return jdbc.queryForObject("""
                 insert into public.daily_reports(
                   id, target_date, status, status_reason, runtime_summary, latest_builder, latest_reviewer,
-                  operator_summary, warnings, decisions_count, commands_count, discord_sent,
-                  discord_skipped_reason, notification_results, report_text)
+                  operator_summary, warnings, decisions_count, commands_count, slack_sent,
+                  slack_skipped_reason, notification_results, report_text)
                 values (?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?::jsonb, ?)
                 returning *, runtime_summary::text as runtime_json, latest_builder::text as builder_json,
                   latest_reviewer::text as reviewer_json, operator_summary::text as operator_json,
@@ -117,7 +119,7 @@ public class OperationsRepository {
                 id, LocalDate.parse(string(report.get("target_date"))), string(report.get("status")), string(report.get("status_reason")),
                 Json.write(map(report.get("runtime_summary"))), jsonOrNull(report.get("latest_builder")), jsonOrNull(report.get("latest_reviewer")),
                 Json.write(map(report.get("operator_summary"))), writeJson(report.getOrDefault("warnings", List.of())), integer(report, "decisions_count"), integer(report, "commands_count"),
-                Boolean.TRUE.equals(report.get("discord_sent")), report.get("discord_skipped_reason"), writeJson(report.getOrDefault("notification_results", List.of())), string(report.get("report_text")));
+                Boolean.TRUE.equals(report.get("slack_sent")), report.get("slack_skipped_reason"), writeJson(report.getOrDefault("notification_results", List.of())), string(report.get("report_text")));
     }
 
     public List<Map<String, Object>> recentBatches(int limit) {
@@ -181,8 +183,8 @@ public class OperationsRepository {
         value.put("runtime_summary", readJson(rs.getString("runtime_json"))); value.put("latest_builder", readJson(rs.getString("builder_json")));
         value.put("latest_reviewer", readJson(rs.getString("reviewer_json"))); value.put("operator_summary", readJson(rs.getString("operator_json")));
         value.put("warnings", readJson(rs.getString("warnings_json"))); value.put("decisions_count", rs.getInt("decisions_count"));
-        value.put("commands_count", rs.getInt("commands_count")); value.put("discord_sent", rs.getBoolean("discord_sent"));
-        value.put("discord_skipped_reason", rs.getString("discord_skipped_reason")); value.put("notification_results", readJson(rs.getString("notifications_json")));
+        value.put("commands_count", rs.getInt("commands_count")); value.put("slack_sent", rs.getBoolean("slack_sent"));
+        value.put("slack_skipped_reason", rs.getString("slack_skipped_reason")); value.put("notification_results", readJson(rs.getString("notifications_json")));
         value.put("report_text", rs.getString("report_text")); value.put("created_at", rs.getTimestamp("created_at").toInstant().toString()); return value;
     }
 

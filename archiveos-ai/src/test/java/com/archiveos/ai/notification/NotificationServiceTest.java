@@ -6,16 +6,15 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class NotificationServiceTest {
-    @Test void reportsEachConfiguredChannelWithoutExposingWebhookValues() {
-        NotificationPort discord = port("discord", true, true);
-        NotificationPort slack = port("slack", false, false);
-        NotificationService service = new NotificationService(List.of(discord, slack));
+    @Test void reportsSlackWithoutExposingCredentials() {
+        NotificationPort slack = port("slack", true, true);
+        NotificationService service = new NotificationService(List.of(slack));
 
         var results = service.send("운영 보고");
 
-        assertThat(results).extracting(NotificationResult::channel).containsExactly("discord", "slack");
-        assertThat(service.configuration()).containsEntry("discord", true).containsEntry("slack", false);
-        assertThat(results.toString()).doesNotContain("webhooks/").doesNotContain("hooks.slack.com");
+        assertThat(results).extracting(NotificationResult::channel).containsExactly("slack");
+        assertThat(service.configuration()).containsExactlyEntriesOf(java.util.Map.of("slack", true));
+        assertThat(results.toString()).doesNotContain("webhooks/").doesNotContain("hooks.slack.com").doesNotContain("xoxb-");
     }
 
     private NotificationPort port(String channel, boolean configured, boolean sent) {

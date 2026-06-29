@@ -88,6 +88,8 @@ export interface DailyReport {
   commands_count: number;
   discord_sent: boolean;
   discord_skipped_reason: string | null;
+  slack_sent?: boolean;
+  slack_skipped_reason?: string | null;
   historian_exported: boolean;
   historian_note_path: string | null;
   historian_export_reason: string | null;
