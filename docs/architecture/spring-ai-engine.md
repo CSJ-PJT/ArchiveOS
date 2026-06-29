@@ -21,7 +21,7 @@ React frontend
 
 ### Node/Express operations backend
 
-- PM 운영 API, Agent 상태, Discord, Supabase 운영 데이터를 유지한다.
+- PM 운영 API, Agent 상태, Slack, Supabase 운영 데이터를 유지한다.
 - RAG, Spring Batch, Intelligent RPA 요청은 `archiveos-ai`로 proxy한다.
 - `archiveos-ai`가 꺼져 있으면 fake healthy 대신 unavailable/proxy error를 반환한다.
 

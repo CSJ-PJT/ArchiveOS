@@ -6,7 +6,7 @@ ArchiveOS backend는 단번에 교체하지 않고 기능별 책임을 Spring Bo
 
 - 기존 PM 운영 화면 API
 - Supabase 운영 데이터 조회
-- Discord 알림 송신
+- Slack 알림 송신을 Spring Boot 단일 소유로 전환
 - Agent/runtime visibility
 - Spring API proxy
 - 기존 frontend와의 호환 레이어

@@ -1,6 +1,6 @@
 export const koreanHolidayYears = [2026] as const;
 
-// Update this list yearly. Daily Discord reports fail safe when the target year
+// Update this list yearly. Daily Slack reports fail safe when the target year
 // is not listed here, because sending on an unknown Korean holiday is worse than skipping.
 export const koreanHolidays: Record<number, Record<string, string>> = {
   2026: {
