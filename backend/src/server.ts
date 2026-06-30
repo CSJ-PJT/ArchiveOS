@@ -13,14 +13,7 @@ import { getAxReadiness, getAxRoadmap } from "./ax/axReadiness.js";
 import { getLatestDailyReport, getLatestHistorianExport, getRecentBatchRuns } from "./batches/store.js";
 import { findProject, projects } from "./config/projects.js";
 import {
-  getKnowledgeNode,
-  getKnowledgeGraph,
-  getKnowledgeGraphInsights,
-  getKnowledgeOverview,
-  getRecentKnowledgeNodes,
-  getRelatedKnowledge,
   isHistorianConfigured,
-  searchKnowledge,
 } from "./historian/index.js";
 import { getLocalRuntimeStatus } from "./lib/localRuntime.js";
 import { getKpiOverview, normalizeRange } from "./kpi/index.js";
@@ -132,6 +125,7 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Recent Daily Reports", method: "GET", path: "/api/reports/daily/recent", service: "dailyReport", description: "Recent daily reports." },
   { name: "Runtime Snapshots", method: "GET", path: "/api/runtime/snapshots/recent", service: "runtime", description: "Recent runtime snapshots." },
   { name: "Historian", method: "GET", path: "/api/historian/status", service: "knowledge", description: "Historian export status." },
+  { name: "Knowledge Health", method: "GET", path: "/api/knowledge/health", service: "knowledge", description: "Spring Knowledge repository health proxy." },
   { name: "Knowledge Overview", method: "GET", path: "/api/knowledge/overview", service: "knowledge", description: "Knowledge Graph overview." },
   { name: "Recent Knowledge", method: "GET", path: "/api/knowledge/recent", service: "knowledge", description: "Recent knowledge nodes." },
   { name: "Knowledge Search", method: "GET", path: "/api/knowledge/search", service: "knowledge", description: "Knowledge text search." },
@@ -789,114 +783,67 @@ app.get("/api/historian/status", async (_request, response) => {
 });
 
 app.get("/api/knowledge/overview", async (_request, response) => {
-  try {
-    response.json({ data: await getKnowledgeOverview() });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch knowledge overview." });
-  }
+  await relayArchiveOsAi(response, "/api/knowledge/overview");
+});
+
+app.get("/api/knowledge/health", async (_request, response) => {
+  await relayArchiveOsAi(response, "/api/knowledge/health");
 });
 
 app.get("/api/knowledge/recent", async (request, response) => {
-  try {
-    response.json({ data: await getRecentKnowledgeNodes(readLimit(request.query.limit)) });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch recent knowledge nodes." });
-  }
+  const limit = readLimit(request.query.limit);
+  await relayArchiveOsAi(response, `/api/knowledge/recent?limit=${encodeURIComponent(String(limit))}`);
 });
 
 app.get("/api/knowledge/search", async (request, response) => {
   const query = typeof request.query.q === "string" ? request.query.q : "";
-
-  try {
-    response.json({ data: await searchKnowledge(query, readLimit(request.query.limit)) });
-  } catch {
-    response.status(500).json({ error: "Failed to search knowledge nodes." });
-  }
+  const limit = readLimit(request.query.limit);
+  await relayArchiveOsAi(response, `/api/knowledge/search?q=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}`);
 });
 
 app.get("/api/knowledge/related", async (request, response) => {
-  try {
-    response.json({
-      data: await getRelatedKnowledge({
-        external_ref: typeof request.query.external_ref === "string" ? request.query.external_ref : null,
-        node_type: typeof request.query.node_type === "string" ? request.query.node_type : null,
-      }),
-    });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch related knowledge." });
-  }
+  const params = new URLSearchParams();
+  if (typeof request.query.external_ref === "string") params.set("external_ref", request.query.external_ref);
+  if (typeof request.query.node_type === "string") params.set("node_type", request.query.node_type);
+  await relayArchiveOsAi(response, `/api/knowledge/related?${params}`);
 });
 
 app.get("/api/knowledge/graph", async (request, response) => {
-  try {
-    response.json({ data: await getKnowledgeGraph(readGraphLimit(request.query.limit ?? "100")) });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch knowledge graph." });
-  }
+  const limit = readGraphLimit(request.query.limit ?? "100");
+  await relayArchiveOsAi(response, `/api/knowledge/graph?limit=${encodeURIComponent(String(limit))}`);
 });
 
 app.get("/api/knowledge/map", async (request, response) => {
-  try {
-    response.json({ data: await getKnowledgeGraph(readGraphLimit(request.query.limit ?? "100")) });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch knowledge map." });
-  }
+  const limit = readGraphLimit(request.query.limit ?? "100");
+  await relayArchiveOsAi(response, `/api/knowledge/map?limit=${encodeURIComponent(String(limit))}`);
 });
 
 app.get("/api/knowledge/graph/insights", async (request, response) => {
-  try {
-    response.json({ data: await getKnowledgeGraphInsights(readGraphLimit(request.query.limit ?? "100")) });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch knowledge graph insights." });
-  }
+  const limit = readGraphLimit(request.query.limit ?? "100");
+  await relayArchiveOsAi(response, `/api/knowledge/graph/insights?limit=${encodeURIComponent(String(limit))}`);
 });
 
 app.get("/api/knowledge/map/insights", async (request, response) => {
-  try {
-    response.json({ data: await getKnowledgeGraphInsights(readGraphLimit(request.query.limit ?? "100")) });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch knowledge map insights." });
-  }
+  const limit = readGraphLimit(request.query.limit ?? "100");
+  await relayArchiveOsAi(response, `/api/knowledge/map/insights?limit=${encodeURIComponent(String(limit))}`);
 });
 
 app.get("/api/knowledge/node/:id", async (request, response) => {
-  try {
-    response.json({ data: await getKnowledgeNode(request.params.id) });
-  } catch {
-    response.status(404).json({ error: "Knowledge node not found." });
-  }
+  await relayArchiveOsAi(response, `/api/knowledge/node/${encodeURIComponent(request.params.id)}`);
 });
 
 // Local/admin/manual-test endpoint only. It records a deterministic architecture review and does not execute commands.
 app.post("/api/architect/review", async (request, response) => {
-  const validation = validateArchitectReviewBody(request.body);
-
-  if (!validation.ok) {
-    response.status(400).json({ error: validation.error });
-    return;
-  }
-
-  try {
-    response.status(201).json({ data: await runArchitectReview(validation.value) });
-  } catch {
-    response.status(500).json({ error: "Failed to record architecture review." });
-  }
+  await relayArchiveOsAi(response, "/api/architect/review", jsonProxyRequest("POST", request.body));
 });
 
 app.get("/api/architect/reviews/recent", async (request, response) => {
-  try {
-    response.json({ data: await getRecentArchitectureReviews(readLimit(request.query.limit)) });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch architecture reviews." });
-  }
+  const limit = readLimit(request.query.limit);
+  await relayArchiveOsAi(response, `/api/architect/reviews/recent?limit=${encodeURIComponent(String(limit))}`);
 });
 
 app.get("/api/architect/reviews/latest", async (_request, response) => {
-  try {
-    response.json({ data: await getLatestArchitectureReview() });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch latest architecture review." });
-  }
+  await relayArchiveOsAi(response, "/api/architect/reviews/latest");
 });
 
 app.get("/api/mesh/overview", async (_request, response) => {
@@ -1166,7 +1113,7 @@ async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, messag
 async function getServiceHealth() {
   const checks = await Promise.allSettled([
     withTimeout(getLocalRuntimeStatus(), 2500, "Runtime status check timed out."),
-    withTimeout(getKnowledgeOverview(), 2500, "Knowledge overview check timed out."),
+    withTimeout(getJavaKnowledgeHealth(), 2500, "Knowledge health check timed out."),
     withTimeout(getAgentMeshOverview(), 2500, "Agent Mesh check timed out."),
     withTimeout(getKpiOverview("7d"), 2500, "KPI check timed out."),
     withTimeout(getLatestArchitectureReview(), 2500, "Architect check timed out."),
@@ -1180,7 +1127,7 @@ async function getServiceHealth() {
     ax: checks[8].status === "fulfilled",
     backend: true,
     runtime: checks[0].status === "fulfilled",
-    knowledge: checks[1].status === "fulfilled",
+    knowledge: checks[1].status === "fulfilled" && checks[1].value === true,
     mesh: checks[2].status === "fulfilled",
     kpi: checks[3].status === "fulfilled",
     architect: checks[4].status === "fulfilled",
@@ -1253,7 +1200,7 @@ async function readGitValue(args: string[]) {
 async function getPlatformReadiness() {
   const [endpointHealth, knowledge, mesh, latestArchitect, latestDailyReport, kpi] = await Promise.all([
     getEndpointHealthSnapshot(),
-    getKnowledgeOverview().catch(() => null),
+    getJavaKnowledgeOverview().catch(() => null),
     getAgentMeshOverview().catch(() => null),
     getLatestArchitectureReview().catch(() => null),
     getLatestDailyReport().catch(() => null),
@@ -1710,6 +1657,28 @@ async function proxyArchiveOsAi(path: string, init?: RequestInit) {
   }
 
   return payload;
+}
+
+type JavaKnowledgeOverview = {
+  totalNodes: number;
+  totalEdges: number;
+  latestNodes: unknown[];
+};
+
+async function getJavaKnowledgeOverview(): Promise<JavaKnowledgeOverview> {
+  const payload = await proxyArchiveOsAi("/api/knowledge/overview");
+  const data = payload.data as Partial<JavaKnowledgeOverview> | undefined;
+  return {
+    totalNodes: Number(data?.totalNodes ?? 0),
+    totalEdges: Number(data?.totalEdges ?? 0),
+    latestNodes: Array.isArray(data?.latestNodes) ? data.latestNodes : [],
+  };
+}
+
+async function getJavaKnowledgeHealth() {
+  const payload = await proxyArchiveOsAi("/api/knowledge/health");
+  const data = payload.data as { available?: boolean; databaseConnected?: boolean } | undefined;
+  return data?.available === true && data.databaseConnected === true;
 }
 
 function jsonProxyRequest(method: "POST" | "PATCH", body: unknown): RequestInit {
