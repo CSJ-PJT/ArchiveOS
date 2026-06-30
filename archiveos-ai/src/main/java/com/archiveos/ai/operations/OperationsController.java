@@ -39,8 +39,9 @@ public class OperationsController {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("nightly_review", repository.latestBatch("nightly_review", null));
         data.put("daily_report", repository.latestBatch("daily_report", null));
-        data.put("discord_webhook_configured", notifications.configured("discord"));
+        data.put("discord_webhook_configured", false);
         data.put("slack_webhook_configured", notifications.configured("slack"));
+        data.put("notification_channel", "slack");
         data.put("archiveos_public_url_configured", publicUrl != null && !publicUrl.isBlank());
         data.put("holiday_years", List.of(2026));
         return ok(data);
