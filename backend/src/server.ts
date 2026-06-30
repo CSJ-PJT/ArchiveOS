@@ -834,34 +834,16 @@ app.get("/api/knowledge/node/:id", async (request, response) => {
 
 // Local/admin/manual-test endpoint only. It records a deterministic architecture review and does not execute commands.
 app.post("/api/architect/review", async (request, response) => {
-  const validation = validateArchitectReviewBody(request.body);
-
-  if (!validation.ok) {
-    response.status(400).json({ error: validation.error });
-    return;
-  }
-
-  try {
-    response.status(201).json({ data: await runArchitectReview(validation.value) });
-  } catch {
-    response.status(500).json({ error: "Failed to record architecture review." });
-  }
+  await relayArchiveOsAi(response, "/api/architect/review", jsonProxyRequest("POST", request.body));
 });
 
 app.get("/api/architect/reviews/recent", async (request, response) => {
-  try {
-    response.json({ data: await getRecentArchitectureReviews(readLimit(request.query.limit)) });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch architecture reviews." });
-  }
+  const limit = readLimit(request.query.limit);
+  await relayArchiveOsAi(response, `/api/architect/reviews/recent?limit=${encodeURIComponent(String(limit))}`);
 });
 
 app.get("/api/architect/reviews/latest", async (_request, response) => {
-  try {
-    response.json({ data: await getLatestArchitectureReview() });
-  } catch {
-    response.status(500).json({ error: "Failed to fetch latest architecture review." });
-  }
+  await relayArchiveOsAi(response, "/api/architect/reviews/latest");
 });
 
 app.get("/api/mesh/overview", async (_request, response) => {
