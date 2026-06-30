@@ -36,12 +36,12 @@ const phases: AxRoadmapPhase[] = [
     id: "phase-0",
     title: "Current ArchiveOS Operations Foundation",
     status: "implemented",
-    summary: "ArchiveOS already provides PM visibility, runtime status, decisions, timeline, historian, knowledge graph, mesh, KPI, and Discord reporting.",
+    summary: "ArchiveOS already provides PM visibility, runtime status, decisions, timeline, historian, knowledge graph, mesh, KPI, and Slack reporting.",
     capabilities: [
       { label: "PM visibility dashboard", status: "implemented", evidence: "Dashboard, Operators, Timeline, Mesh, KPI, Knowledge tabs" },
       { label: "Human-in-the-loop PM decisions", status: "implemented", evidence: "PM Task Queue and Decisions recording flow" },
       { label: "Operational memory", status: "implemented", evidence: "Historian, Obsidian Markdown export, Knowledge Graph MVP" },
-      { label: "Discord operational reports", status: "implemented", evidence: "Nightly Review and Korean Daily Report batches" },
+      { label: "Slack operational reports", status: "implemented", evidence: "Spring-owned Nightly Review and Korean Daily Report batches" },
     ],
     risks: [
       "Current backend is Node/Express, while the AX target architecture introduces a Spring AI backend.",

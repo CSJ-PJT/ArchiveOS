@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Request } from "express";
-import { sendDiscordMessage } from "../batches/discord.js";
+import { sendOperationalNotification } from "../notifications/springNotificationClient.js";
 import type {
   ApprovedDeviceRecord,
   ProtectedEndpointDescriptor,
@@ -190,9 +190,9 @@ export async function notifySecurityEvent(input: {
     }
   }
 
-  const result = await sendDiscordMessage(lines.join("\n"));
+  const result = await sendOperationalNotification(lines.join("\n"));
   if (!result.ok) {
-    console.warn(`[archiveos-security] Discord notification skipped: ${result.reason}`);
+    console.warn(`[archiveos-security] Slack notification skipped: ${result.reason}`);
   }
   return result;
 }

@@ -13,7 +13,7 @@ const sections = [
   "Obsidian",
   "Docker",
   "MCP",
-  "Discord",
+  "Slack",
   "Public Access",
   "Security",
   "Build Information",
@@ -83,8 +83,8 @@ export function SettingsPage({
             <KeyValue label="Active task" value={data.runtime?.active_task || "None"} />
           </SettingsRow>
 
-          <SettingsRow title="Discord" status={data.latestBatch?.discord_webhook_configured ? "configured" : "not_configured"} open={open === "Discord"} onToggle={() => setOpen(open === "Discord" ? "" : "Discord")}>
-            <KeyValue label="Webhook configured" value={data.latestBatch?.discord_webhook_configured ? "yes" : "no"} />
+          <SettingsRow title="Slack" status={data.latestBatch?.slack_webhook_configured ? "configured" : "not_configured"} open={open === "Slack"} onToggle={() => setOpen(open === "Slack" ? "" : "Slack")}>
+            <KeyValue label="Notification configured" value={data.latestBatch?.slack_webhook_configured ? "yes" : "no"} />
             <KeyValue label="Last daily report" value={data.dailyReport ? formatTimeAgo(data.dailyReport.created_at) : "None"} />
           </SettingsRow>
 

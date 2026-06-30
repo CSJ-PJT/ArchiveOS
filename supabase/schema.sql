@@ -98,6 +98,8 @@ create table if not exists public.daily_reports (
   commands_count integer not null default 0,
   discord_sent boolean not null default false,
   discord_skipped_reason text,
+  slack_sent boolean not null default false,
+  slack_skipped_reason text,
   historian_exported boolean not null default false,
   historian_note_path text,
   historian_export_reason text,

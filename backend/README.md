@@ -1,6 +1,6 @@
 # ArchiveOS Backend
 
-ArchiveOS Node.js/Express backend는 PM 운영, Agent 상태, Dashboard, Discord 알림, MCP visibility, 기존 Supabase 운영 데이터를 담당한다.
+ArchiveOS Node.js/Express backend는 기존 API 호환과 Spring Boot 위임을 담당하는 점진적 마이그레이션 계층이다.
 
 Obsidian 수집, embedding, vector search, RAG 답변, Spring Batch 기반 Intelligent RPA 판단은 별도 Spring Boot 모듈인 `archiveos-ai`가 담당한다.
 
@@ -11,7 +11,7 @@ Obsidian 수집, embedding, vector search, RAG 답변, Spring Batch 기반 Intel
 - Agent 및 작업 상태 조회
 - PM 작업과 의사결정 기록
 - 로컬 runtime 상태 수집
-- Discord 알림
+- Spring Boot Slack 알림 API 위임
 - MCP 및 실행 상태 표시
 - Supabase 운영 데이터 접근
 - `archiveos-ai` API proxy
@@ -45,7 +45,6 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 ARCHIVEOS_AI_BASE_URL=http://localhost:4100
-DISCORD_WEBHOOK_URL=
 ARCHIVEOS_PROJECT_PATH=
 MCP_REPO_PATH=
 MCP_QUEUE_PATH=

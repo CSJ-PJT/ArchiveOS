@@ -41,7 +41,7 @@ public class DailyReportService {
         List<NotificationResult> results = businessDay.businessDay() ? notifications.send(reportText) : List.of();
         boolean anyConfigured = results.stream().anyMatch(NotificationResult::configured);
         boolean anySent = results.stream().anyMatch(NotificationResult::sent);
-        NotificationResult discord = results.stream().filter(item -> "discord".equals(item.channel())).findFirst().orElse(NotificationResult.notConfigured("discord"));
+        NotificationResult slack = results.stream().filter(item -> "slack".equals(item.channel())).findFirst().orElse(NotificationResult.notConfigured("slack"));
         String batchStatus = !businessDay.businessDay() || !anyConfigured ? "skipped" : anySent ? "sent" : "failed";
         String skippedReason = !businessDay.businessDay() ? businessDay.reason() : !anyConfigured ? "No notification webhook configured" : anySent ? null : results.stream().map(NotificationResult::reason).filter(value -> value != null).findFirst().orElse("notification delivery failed");
 
@@ -50,7 +50,7 @@ public class DailyReportService {
         report.put("runtime_summary", nightlySummary.get("queue")); report.put("latest_builder", nightlySummary.get("latestBuilder")); report.put("latest_reviewer", nightlySummary.get("latestReviewer"));
         report.put("operator_summary", nightlySummary.get("operators")); report.put("warnings", nightlySummary.get("warnings"));
         report.put("decisions_count", count(nightlySummary, "decisions")); report.put("commands_count", count(nightlySummary, "commands"));
-        report.put("discord_sent", discord.sent()); report.put("discord_skipped_reason", discord.sent() ? null : skippedReason); report.put("notification_results", results); report.put("report_text", reportText);
+        report.put("slack_sent", slack.sent()); report.put("slack_skipped_reason", slack.sent() ? null : skippedReason); report.put("notification_results", results); report.put("report_text", reportText);
         Map<String, Object> dailyRow = repository.saveDailyReport(report);
 
         Map<String, Object> metadata = new LinkedHashMap<>();

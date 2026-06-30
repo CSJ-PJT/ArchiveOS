@@ -50,8 +50,9 @@ archiveos:
   git-commit: ${ARCHIVEOS_GIT_COMMIT:}
   git-branch: ${ARCHIVEOS_GIT_BRANCH:}
   notifications:
-    discord-webhook-url: ${DISCORD_WEBHOOK_URL:}
     slack-webhook-url: ${SLACK_WEBHOOK_URL:}
+    slack-bot-token: ${SLACK_BOT_TOKEN:}
+    slack-channel: ${SLACK_CHANNEL:}
   scheduler:
     enabled: ${ARCHIVEOS_SCHEDULER_ENABLED:false}
     nightly-cron: ${ARCHIVEOS_NIGHTLY_CRON:0 50 23 * * *}

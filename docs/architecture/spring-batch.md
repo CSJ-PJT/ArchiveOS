@@ -48,5 +48,5 @@ Node proxy:
 - DailyReportJob
 - KnowledgeMaintenanceJob
 - PipelineAuditJob
-- DiscordDailyReportJob
+- SlackDailyReportJob
 - RuntimeSnapshotJob

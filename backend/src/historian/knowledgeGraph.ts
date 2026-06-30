@@ -212,7 +212,7 @@ export async function linkDailyReportExport(report: DailyReportRow, exportResult
     metadata: {
       report_id: report.id,
       status: report.status,
-      discord_sent: report.discord_sent,
+      slack_sent: report.slack_sent ?? false,
       warnings: report.warnings,
     },
   });

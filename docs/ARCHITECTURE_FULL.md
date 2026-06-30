@@ -4,7 +4,7 @@
 
 ArchiveOS uses two backend responsibilities:
 
-- Node/Express backend: PM operations, Agent state, MCP visibility, Dashboard, Discord, and existing Supabase operational data.
+- Node/Express compatibility backend: existing API contracts and delegation to Spring Boot.
 - `archiveos-ai` Spring Boot module: Obsidian ingestion, heading-aware chunking, OpenAI embeddings, pgvector storage, vector similarity search, RAG answer generation, and future AI Agent logic.
 
 Default Vector DB:
@@ -139,7 +139,7 @@ ArchiveOS는 단순한 Agent Dashboard가 아니라, 개인/프로젝트 지식�
 - PM Turn 승인/반려 시스템
 - Human-in-the-loop Agentic CI/CD
 - Docker Compose 기반 자동 빌드/배포
-- Discord Notification
+- Slack Notification
 - 향후 Kubernetes 확장 가능 구조
 
 ## 2. Target Architecture
@@ -171,7 +171,7 @@ Docker Build / Deploy
   ↓
 Health Check
   ↓
-Discord Notification
+Slack Notification
 ```
 
 ## 3. Phase 1 - Spring AI Foundation
@@ -201,7 +201,8 @@ DB_PORT=
 DB_NAME=
 DB_USER=
 DB_PASSWORD=
-DISCORD_WEBHOOK_URL=
+SLACK_BOT_TOKEN=
+SLACK_CHANNEL=archiveos-alerts
 ARCHIVEOS_DEPLOY_COMPOSE_FILE=
 ARCHIVEOS_HEALTH_CHECK_URL=
 ```
