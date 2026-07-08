@@ -1,6 +1,6 @@
 import type { IconName } from "../components/shared/Icon";
 
-export type AppRoute = "overview" | "agents" | "workflows" | "knowledge" | "history" | "batch" | "rpa" | "atlas" | "mcp" | "settings";
+export type AppRoute = "overview" | "managed" | "agents" | "workflows" | "knowledge" | "history" | "batch" | "rpa" | "atlas" | "mcp" | "settings";
 
 export type NavigationItem = {
   id: AppRoute;
@@ -24,6 +24,13 @@ export const navigationItems: NavigationItem[] = [
     shortLabel: "Agents",
     description: "Agent availability and current responsibility",
     icon: "agents",
+  },
+  {
+    id: "managed",
+    label: "Managed Systems",
+    shortLabel: "Tower",
+    description: "Control Tower and PM Inbox",
+    icon: "activity",
   },
   {
     id: "workflows",

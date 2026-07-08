@@ -19,6 +19,8 @@ export function OverviewPage({ data, onRefresh, onNavigate }: { data: AppData; o
   const atlasDescription = data.atlas
     ? `${atlasNormalServices}/${atlasTotalServices} services normal · ${data.atlas.system.environment}/${data.atlas.system.provider}`
     : "Atlas external observability registry unavailable";
+  const tower = data.managedSystems;
+  const recommendedPmAction = tower?.summary.recommendedPmAction;
 
   return <div className="page-stack overview-page">
     <section className={`system-command-bar state-${overview.statusTone}`}>
@@ -30,6 +32,7 @@ export function OverviewPage({ data, onRefresh, onNavigate }: { data: AppData; o
 
     <section className="kpi-command-grid" aria-label="Operational KPI cards">
       <MetricCard icon="health" label="System Health" value={overview.systemStatus} description="Runtime and endpoint condition" status={overview.statusTone} updatedAt={updated} onClick={() => onNavigate("settings")} actionLabel="Inspect health" />
+      <MetricCard icon="activity" label="Control Tower" value={tower?.summary.managedSystemsCount ?? 0} description={`${tower?.summary.normalCount ?? 0} normal · ${tower?.summary.openPmInboxItems ?? 0} inbox open`} status={(tower?.summary.downCandidateCount ?? 0) > 0 ? "critical" : (tower?.summary.degradedCount ?? 0) > 0 ? "degraded" : "healthy"} updatedAt={tower?.summary.generatedAt ? formatTimeAgo(tower.summary.generatedAt) : updated} onClick={() => onNavigate("managed")} actionLabel="Open tower" />
       <MetricCard icon="activity" label="Atlas Platform" value={atlasStatus} description={atlasDescription} status={atlasStatus} updatedAt={atlasLatestCheck ? formatTimeAgo(atlasLatestCheck) : updated} onClick={() => onNavigate("atlas")} actionLabel="Open Atlas monitor" />
       <MetricCard icon="agents" label="Active Agents" value={`${activeAgents}/${data.mesh?.agents.length || 0}`} description={data.mesh?.health.summary || "Waiting for agent telemetry"} status={activeAgents > 0 ? "working" : "disconnected"} updatedAt={updated} onClick={() => onNavigate("agents")} actionLabel="Open monitor" />
       <MetricCard icon="workflow" label="Pipeline Status" value={overview.currentStage} description={`${runningTasks} task(s) currently processing`} status={runningTasks > 0 ? "working" : "idle"} updatedAt={updated} onClick={() => onNavigate("workflows")} actionLabel="View workflows" />
@@ -39,6 +42,24 @@ export function OverviewPage({ data, onRefresh, onNavigate }: { data: AppData; o
     </section>
 
     <section className="overview-layout operational-priority">
+      <SectionCard title="Control Tower Summary" eyebrow="Multi-system PM view" className="span-7">
+        {tower ? <div className="queue-bars">
+          <button type="button" onClick={() => onNavigate("managed")}><span>Systems</span><strong>{tower.summary.managedSystemsCount}</strong><StatusBadge status="healthy">managed</StatusBadge></button>
+          <button type="button" onClick={() => onNavigate("managed")}><span>Normal</span><strong>{tower.summary.normalCount}</strong><StatusBadge status="healthy">normal</StatusBadge></button>
+          <button type="button" onClick={() => onNavigate("managed")}><span>Degraded</span><strong>{tower.summary.degradedCount}</strong><StatusBadge status={tower.summary.degradedCount ? "degraded" : "healthy"}>{tower.summary.degradedCount ? "review" : "clear"}</StatusBadge></button>
+          <button type="button" onClick={() => onNavigate("managed")}><span>Pending approvals</span><strong>{tower.summary.pendingApprovals}</strong><StatusBadge status={tower.summary.pendingApprovals ? "blocked" : "healthy"}>{tower.summary.pendingApprovals ? "PM" : "clear"}</StatusBadge></button>
+          <button type="button" onClick={() => onNavigate("managed")}><span>Inbox open</span><strong>{tower.summary.openPmInboxItems}</strong><StatusBadge status={tower.summary.openPmInboxItems ? "warning" : "healthy"}>{tower.summary.openPmInboxItems ? "open" : "clear"}</StatusBadge></button>
+        </div> : <div className="empty-state">Managed Systems summary is unavailable.</div>}
+      </SectionCard>
+
+      <SectionCard title="Recommended PM Action" eyebrow="Highest priority" className="span-5">
+        <button className="chain-focus clickable" type="button" onClick={() => onNavigate("managed")}>
+          <div><StatusBadge status={recommendedPmAction?.severity || "healthy"}>{recommendedPmAction?.severity || "ready"}</StatusBadge><strong>{recommendedPmAction?.title || "No urgent action required"}</strong></div>
+          <p>{recommendedPmAction?.reason || "Managed Systems has no open high-priority action."}</p>
+          <span className="text-link">Open PM Inbox →</span>
+        </button>
+      </SectionCard>
+
       <SectionCard title="Attention Required" eyebrow="Act on exceptions first" className="span-5 priority-panel">
         <div className="attention-list">{overview.attention.map((item) => <button className="attention-item clickable" key={item.title} type="button" onClick={() => onNavigate(item.title.includes("approval") ? "workflows" : "history")}><StatusBadge status={item.status}>{item.status}</StatusBadge><div><strong>{item.title}</strong><p>{item.body}</p></div><span aria-hidden="true">→</span></button>)}{!overview.attention.length ? <div className="healthy-empty"><StatusBadge status="healthy">Healthy</StatusBadge><strong>No action required</strong><p>There are no blocked workflows or critical service alerts.</p></div> : null}</div>
       </SectionCard>

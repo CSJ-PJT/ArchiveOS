@@ -114,6 +114,15 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Run Atlas Healthchecks", method: "POST", path: "/api/atlas/healthchecks/run", service: "runtime", description: "Read-only Atlas healthcheck collector." },
   { name: "Atlas Codex Work Logs", method: "GET", path: "/api/atlas/work-logs", service: "runtime", description: "Atlas Codex work log records." },
   { name: "Record Atlas Codex Work Log", method: "POST", path: "/api/atlas/work-logs", service: "runtime", description: "Manual Atlas Codex work log recorder." },
+  { name: "Managed Systems Overview", method: "GET", path: "/api/managed-systems/overview", service: "runtime", description: "Control Tower managed systems and PM inbox summary." },
+  { name: "Managed Systems", method: "GET", path: "/api/managed-systems", service: "runtime", description: "Aggregated external managed systems list." },
+  { name: "Managed System Detail", method: "GET", path: "/api/managed-systems/:systemId", service: "runtime", description: "Managed system detail." },
+  { name: "Managed System Events", method: "GET", path: "/api/managed-systems/:systemId/events", service: "runtime", description: "Cross-system events for a managed system." },
+  { name: "Managed System Workflows", method: "GET", path: "/api/managed-systems/:systemId/workflows", service: "runtime", description: "Workflows related to a managed system." },
+  { name: "Managed System Work Logs", method: "GET", path: "/api/managed-systems/:systemId/work-logs", service: "runtime", description: "Work logs related to a managed system." },
+  { name: "PM Inbox", method: "GET", path: "/api/pm-inbox", service: "runtime", description: "Recommended PM action inbox." },
+  { name: "PM Inbox Acknowledge", method: "POST", path: "/api/pm-inbox/:id/acknowledge", service: "runtime", description: "Admin acknowledgement for a PM inbox item." },
+  { name: "PM Inbox Resolve", method: "POST", path: "/api/pm-inbox/:id/resolve", service: "runtime", description: "Admin resolution for a PM inbox item." },
   { name: "Queue Summary", method: "GET", path: "/api/queue/summary", service: "queue", description: "Semi-auto queue summary." },
   { name: "Queue Run Once", method: "POST", path: "/api/queue/run-once", service: "queue", description: "State transition and instruction generation only." },
   { name: "Queue Nightly Summary", method: "POST", path: "/api/queue/nightly-summary", service: "queue", description: "Slack queue summary without execution." },
@@ -648,6 +657,42 @@ app.get("/api/atlas/work-logs", async (request, response) => {
 
 app.post("/api/atlas/work-logs", async (request, response) => {
   await relayArchiveOsAi(response, "/api/atlas/work-logs", jsonProxyRequest("POST", request.body), undefined, request);
+});
+
+app.get("/api/managed-systems/overview", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/managed-systems/overview", undefined, undefined, request);
+});
+
+app.get("/api/managed-systems", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/managed-systems", undefined, undefined, request);
+});
+
+app.get("/api/managed-systems/:systemId", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/managed-systems/${encodeURIComponent(request.params.systemId)}`, undefined, undefined, request);
+});
+
+app.get("/api/managed-systems/:systemId/events", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/managed-systems/${encodeURIComponent(request.params.systemId)}/events`, undefined, undefined, request);
+});
+
+app.get("/api/managed-systems/:systemId/workflows", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/managed-systems/${encodeURIComponent(request.params.systemId)}/workflows`, undefined, undefined, request);
+});
+
+app.get("/api/managed-systems/:systemId/work-logs", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/managed-systems/${encodeURIComponent(request.params.systemId)}/work-logs`, undefined, undefined, request);
+});
+
+app.get("/api/pm-inbox", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/pm-inbox", undefined, undefined, request);
+});
+
+app.post("/api/pm-inbox/:id/acknowledge", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/pm-inbox/${encodeURIComponent(request.params.id)}/acknowledge`, { method: "POST" }, undefined, request);
+});
+
+app.post("/api/pm-inbox/:id/resolve", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/pm-inbox/${encodeURIComponent(request.params.id)}/resolve`, { method: "POST" }, undefined, request);
 });
 
 app.get("/api/queue/summary", async (_request, response) => {
