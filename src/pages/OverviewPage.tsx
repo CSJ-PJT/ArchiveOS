@@ -12,6 +12,13 @@ export function OverviewPage({ data, onRefresh, onNavigate }: { data: AppData; o
   const activeAgents = data.mesh?.agents.filter((agent) => ["detected", "working", "enabled", "clear"].includes(agent.status)).length || 0;
   const runningTasks = data.queue?.in_progress ?? overview.queueCounts.processing;
   const updated = formatTimeAgo(data.refreshedAt || overview.lastUpdatedAt);
+  const atlasStatus = data.atlas?.system.current_status ?? "unknown";
+  const atlasNormalServices = data.atlas?.services.filter((service) => service.current_status === "normal").length ?? 0;
+  const atlasTotalServices = data.atlas?.services.length ?? 0;
+  const atlasLatestCheck = data.atlas?.recent_healthchecks[0]?.checked_at;
+  const atlasDescription = data.atlas
+    ? `${atlasNormalServices}/${atlasTotalServices} services normal · ${data.atlas.system.environment}/${data.atlas.system.provider}`
+    : "Atlas external observability registry unavailable";
 
   return <div className="page-stack overview-page">
     <section className={`system-command-bar state-${overview.statusTone}`}>
@@ -23,6 +30,7 @@ export function OverviewPage({ data, onRefresh, onNavigate }: { data: AppData; o
 
     <section className="kpi-command-grid" aria-label="Operational KPI cards">
       <MetricCard icon="health" label="System Health" value={overview.systemStatus} description="Runtime and endpoint condition" status={overview.statusTone} updatedAt={updated} onClick={() => onNavigate("settings")} actionLabel="Inspect health" />
+      <MetricCard icon="activity" label="Atlas Platform" value={atlasStatus} description={atlasDescription} status={atlasStatus} updatedAt={atlasLatestCheck ? formatTimeAgo(atlasLatestCheck) : updated} onClick={() => onNavigate("atlas")} actionLabel="Open Atlas monitor" />
       <MetricCard icon="agents" label="Active Agents" value={`${activeAgents}/${data.mesh?.agents.length || 0}`} description={data.mesh?.health.summary || "Waiting for agent telemetry"} status={activeAgents > 0 ? "working" : "disconnected"} updatedAt={updated} onClick={() => onNavigate("agents")} actionLabel="Open monitor" />
       <MetricCard icon="workflow" label="Pipeline Status" value={overview.currentStage} description={`${runningTasks} task(s) currently processing`} status={runningTasks > 0 ? "working" : "idle"} updatedAt={updated} onClick={() => onNavigate("workflows")} actionLabel="View workflows" />
       <MetricCard icon="approval" label="Approval Queue" value={overview.approvalCount} description="Human PM decisions required" status={overview.approvalCount > 0 ? "blocked" : "healthy"} updatedAt={updated} onClick={() => onNavigate("workflows")} actionLabel="Review decisions" />
@@ -45,6 +53,18 @@ export function OverviewPage({ data, onRefresh, onNavigate }: { data: AppData; o
 
       <SectionCard title="Knowledge Status" eyebrow="Operational memory" className="span-3">
         <button className="knowledge-snapshot clickable" type="button" onClick={() => onNavigate("knowledge")}><div className="constellation-mini" aria-hidden="true"><i /><i /><i /><i /><i /></div><dl><div><dt>Nodes</dt><dd>{overview.memorySummary.nodes}</dd></div><div><dt>Relations</dt><dd>{overview.memorySummary.relations}</dd></div><div><dt>RAG</dt><dd><StatusBadge status={data.aiRuntime?.rag.ready ? "healthy" : "waiting"}>{data.aiRuntime?.rag.ready ? "Ready" : "Waiting"}</StatusBadge></dd></div></dl><span className="text-link">Explore memory →</span></button>
+      </SectionCard>
+
+      <SectionCard title="Atlas Status" eyebrow="External platform watch" className="span-3">
+        <button className="knowledge-snapshot clickable" type="button" onClick={() => onNavigate("atlas")}>
+          <div className="constellation-mini" aria-hidden="true"><i /><i /><i /><i /><i /></div>
+          <dl>
+            <div><dt>Platform</dt><dd><StatusBadge status={atlasStatus}>{atlasStatus}</StatusBadge></dd></div>
+            <div><dt>Services</dt><dd>{atlasNormalServices}/{atlasTotalServices}</dd></div>
+            <div><dt>Last check</dt><dd>{atlasLatestCheck ? formatTimeAgo(atlasLatestCheck) : "No data"}</dd></div>
+          </dl>
+          <span className="text-link">Open Atlas →</span>
+        </button>
       </SectionCard>
 
       <SectionCard title="Queue" eyebrow="Work distribution" className="span-4">

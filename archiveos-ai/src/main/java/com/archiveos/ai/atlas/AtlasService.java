@@ -1,5 +1,7 @@
 package com.archiveos.ai.atlas;
 
+import com.archiveos.ai.notification.NotificationResult;
+import com.archiveos.ai.notification.NotificationService;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -20,15 +22,21 @@ public class AtlasService {
     private static final String SYSTEM_ID = "atlas-platform";
     private final AtlasRepository repository;
     private final HttpClient httpClient;
+    private final NotificationService notifications;
 
     @Autowired
-    public AtlasService(AtlasRepository repository) {
-        this(repository, HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build());
+    public AtlasService(AtlasRepository repository, NotificationService notifications) {
+        this(repository, HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build(), notifications);
     }
 
     AtlasService(AtlasRepository repository, HttpClient httpClient) {
+        this(repository, httpClient, null);
+    }
+
+    AtlasService(AtlasRepository repository, HttpClient httpClient, NotificationService notifications) {
         this.repository = repository;
         this.httpClient = httpClient;
+        this.notifications = notifications;
     }
 
     public Map<String, Object> overview() {
@@ -47,6 +55,8 @@ public class AtlasService {
 
     @Transactional
     public Map<String, Object> runHealthchecks() {
+        Map<String, Object> previousSystem = repository.system(SYSTEM_ID);
+        String previousStatus = string(previousSystem.get("current_status"));
         List<Map<String, Object>> services = repository.services(SYSTEM_ID);
         List<Map<String, Object>> results = new ArrayList<>();
         boolean criticalFailure = false;
@@ -77,11 +87,15 @@ public class AtlasService {
             reason = "All enabled Atlas healthchecks returned expected status.";
         }
         repository.updateSystemStatus(SYSTEM_ID, systemStatus, reason);
+        List<NotificationResult> notificationResults = notifyStateChange(previousStatus, systemStatus, reason, results);
 
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("system_status", systemStatus);
+        value.put("previous_system_status", previousStatus);
+        value.put("state_changed", !systemStatus.equals(previousStatus));
         value.put("reason", reason);
         value.put("results", results);
+        value.put("notification_results", notificationResults);
         return value;
     }
 
@@ -179,5 +193,28 @@ public class AtlasService {
         if (body == null || body.isBlank()) return null;
         String text = body.replaceAll("\\s+", " ").trim();
         return text.length() > 240 ? text.substring(0, 240) : text;
+    }
+
+    private List<NotificationResult> notifyStateChange(String previousStatus, String currentStatus, String reason, List<Map<String, Object>> results) {
+        if (notifications == null || currentStatus.equals(previousStatus)) return List.of();
+        String failedServices = results.stream()
+                .filter(result -> !"ok".equals(String.valueOf(result.get("status"))))
+                .map(result -> String.valueOf(result.get("service_id")))
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("none");
+        String message = """
+                🔔 Atlas Platform 상태 변화 감지
+                • 이전 상태: %s
+                • 현재 상태: %s
+                • 사유: %s
+                • 실패 서비스: %s
+
+                ArchiveOS Atlas 관제에서 기록된 state-change 이벤트입니다.
+                """.formatted(previousStatus, currentStatus, reason, failedServices);
+        return notifications.send(message);
+    }
+
+    private String string(Object value) {
+        return value == null ? "unknown" : String.valueOf(value);
     }
 }

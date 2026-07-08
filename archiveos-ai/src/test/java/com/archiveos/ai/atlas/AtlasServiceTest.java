@@ -5,9 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.archiveos.ai.notification.NotificationResult;
+import com.archiveos.ai.notification.NotificationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
@@ -53,6 +56,7 @@ class AtlasServiceTest {
     @Test void degradedServiceFailureDoesNotCrashSystemCalculation() {
         AtlasRepository repository = Mockito.mock(AtlasRepository.class);
         AtlasService service = new AtlasService(repository, HttpClient.newHttpClient());
+        when(repository.system("atlas-platform")).thenReturn(Map.of("current_status", "normal"));
         when(repository.services("atlas-platform")).thenReturn(List.of(Map.of(
                 "service_id", "health-atlas",
                 "healthcheck_url", "http://127.0.0.1:1/unavailable",
@@ -68,6 +72,49 @@ class AtlasServiceTest {
         assertThat(result).containsEntry("system_status", "degraded");
         verify(repository).updateServiceStatus("health-atlas", "degraded");
         verify(repository).updateSystemStatus(eq("atlas-platform"), eq("degraded"), any());
+    }
+
+    @Test void sendsNotificationOnlyWhenAtlasPlatformStatusChanges() {
+        AtlasRepository repository = Mockito.mock(AtlasRepository.class);
+        NotificationService notifications = Mockito.mock(NotificationService.class);
+        AtlasService service = new AtlasService(repository, HttpClient.newHttpClient(), notifications);
+        when(repository.system("atlas-platform")).thenReturn(Map.of("current_status", "normal"));
+        when(repository.services("atlas-platform")).thenReturn(List.of(Map.of(
+                "service_id", "health-atlas",
+                "healthcheck_url", "http://127.0.0.1:1/unavailable",
+                "expected_status", 200,
+                "timeout_ms", 100,
+                "criticality", "Medium",
+                "enabled", true)));
+        when(repository.recordHealthcheck(eq("health-atlas"), eq("failed"), eq(null), anyInt(), eq(200), any(), eq(null)))
+                .thenReturn(Map.of("service_id", "health-atlas", "status", "failed"));
+        when(notifications.send(any())).thenReturn(List.of(new NotificationResult("slack", true, true, null)));
+
+        Map<String, Object> result = service.runHealthchecks();
+
+        assertThat(result).containsEntry("previous_system_status", "normal").containsEntry("state_changed", true);
+        verify(notifications).send(any());
+    }
+
+    @Test void doesNotSendNotificationWhenAtlasPlatformStatusIsUnchanged() {
+        AtlasRepository repository = Mockito.mock(AtlasRepository.class);
+        NotificationService notifications = Mockito.mock(NotificationService.class);
+        AtlasService service = new AtlasService(repository, HttpClient.newHttpClient(), notifications);
+        when(repository.system("atlas-platform")).thenReturn(Map.of("current_status", "degraded"));
+        when(repository.services("atlas-platform")).thenReturn(List.of(Map.of(
+                "service_id", "health-atlas",
+                "healthcheck_url", "http://127.0.0.1:1/unavailable",
+                "expected_status", 200,
+                "timeout_ms", 100,
+                "criticality", "Medium",
+                "enabled", true)));
+        when(repository.recordHealthcheck(eq("health-atlas"), eq("failed"), eq(null), anyInt(), eq(200), any(), eq(null)))
+                .thenReturn(Map.of("service_id", "health-atlas", "status", "failed"));
+
+        Map<String, Object> result = service.runHealthchecks();
+
+        assertThat(result).containsEntry("previous_system_status", "degraded").containsEntry("state_changed", false);
+        verify(notifications, never()).send(any());
     }
 
     @Test void createsCodexWorkLogWithoutSecretValues() throws Exception {
