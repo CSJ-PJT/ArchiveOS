@@ -1,6 +1,6 @@
 import type { IconName } from "../components/shared/Icon";
 
-export type AppRoute = "overview" | "agents" | "workflows" | "knowledge" | "history" | "batch" | "rpa" | "mcp" | "settings";
+export type AppRoute = "overview" | "agents" | "workflows" | "knowledge" | "history" | "batch" | "rpa" | "atlas" | "mcp" | "settings";
 
 export type NavigationItem = {
   id: AppRoute;
@@ -59,6 +59,13 @@ export const navigationItems: NavigationItem[] = [
     shortLabel: "RPA",
     description: "Classified tasks and PM decision history",
     icon: "rpa",
+  },
+  {
+    id: "atlas",
+    label: "Atlas",
+    shortLabel: "Atlas",
+    description: "External Atlas platform status and Codex work log",
+    icon: "activity",
   },
   {
     id: "mcp",

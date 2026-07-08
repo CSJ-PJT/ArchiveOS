@@ -3,6 +3,7 @@ import {
   configuredBackendUrl,
   getAxReadiness,
   getAuthSession,
+  getAtlasOverview,
   getAiRuntime,
   getDashboardData,
   getEndpointHealth,
@@ -26,6 +27,7 @@ import {
   getRuntimeTimeline,
   type AuthSession,
   type ArchitectureReview,
+  type AtlasOverview,
   type AxReadiness,
   type AiRuntime,
   type DashboardData,
@@ -55,6 +57,7 @@ import { SettingsPage } from "../pages/SettingsPage";
 import { AgentsPage } from "../pages/AgentsPage";
 import { BatchPage } from "../pages/BatchPage";
 import { RpaPage } from "../pages/RpaPage";
+import { AtlasPage } from "../pages/AtlasPage";
 import { McpRegistryPage } from "../pages/McpRegistryPage";
 import { Icon } from "../components/shared/Icon";
 import { Sidebar } from "../components/shared/Sidebar";
@@ -85,6 +88,7 @@ export type AppData = {
   latestBatch: LatestBatchStatus | null;
   dailyReport: DailyReport | null;
   auth: AuthSession;
+  atlas: AtlasOverview | null;
   mcpRegistry: McpRegistryEntry[];
   timeline: RuntimeTimelineEntry[];
 };
@@ -114,6 +118,7 @@ const emptyData: AppData = {
   latestBatch: null,
   dailyReport: null,
   auth: { actor: "anonymous", role: "PUBLIC", authenticated: false },
+  atlas: null,
   mcpRegistry: [],
   timeline: [],
 };
@@ -158,6 +163,7 @@ function AppShellInner() {
       settle("aiRuntime", getAiRuntime),
       settle("latestBatch", getLatestBatchStatus),
       settle("dailyReport", getLatestDailyReport),
+      settle("atlas", getAtlasOverview),
       operatorAccess ? settle("mcpRegistry", getMcpRegistry) : Promise.resolve({ key: "mcpRegistry", value: [], error: null }),
       operatorAccess ? settle("timeline", () => getRuntimeTimeline(100)) : Promise.resolve({ key: "timeline", value: [], error: null }),
     ]))];
@@ -193,6 +199,7 @@ function AppShellInner() {
     history: <HistoryPage data={data} />,
     batch: <BatchPage role={data.auth.role} />,
     rpa: <RpaPage />,
+    atlas: <AtlasPage data={data} onRefresh={refresh} />,
     mcp: <McpRegistryPage data={data} />,
     settings: <SettingsPage data={data} onRefresh={refresh} backendOrigin={configuredBackendUrl} />,
   }[route];
