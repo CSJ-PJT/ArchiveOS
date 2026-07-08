@@ -13,6 +13,7 @@ import {
   getLatestBatchStatus,
   getLatestDailyReport,
   getLocalRuntimeStatus,
+  getManagedSystemsOverview,
   getMeshOverview,
   getPmTasks,
   getPlatformReadiness,
@@ -37,6 +38,7 @@ import {
   type KpiOverview,
   type LatestBatchStatus,
   type LocalRuntimeStatus,
+  type ManagedSystemsOverview,
   type MeshOverview,
   type PlatformReadiness,
   type PublicAccessStatus,
@@ -59,6 +61,7 @@ import { BatchPage } from "../pages/BatchPage";
 import { RpaPage } from "../pages/RpaPage";
 import { AtlasPage } from "../pages/AtlasPage";
 import { McpRegistryPage } from "../pages/McpRegistryPage";
+import { ManagedSystemsPage } from "../pages/ManagedSystemsPage";
 import { Icon } from "../components/shared/Icon";
 import { Sidebar } from "../components/shared/Sidebar";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -89,6 +92,7 @@ export type AppData = {
   dailyReport: DailyReport | null;
   auth: AuthSession;
   atlas: AtlasOverview | null;
+  managedSystems: ManagedSystemsOverview | null;
   mcpRegistry: McpRegistryEntry[];
   timeline: RuntimeTimelineEntry[];
 };
@@ -119,6 +123,7 @@ const emptyData: AppData = {
   dailyReport: null,
   auth: { actor: "anonymous", role: "PUBLIC", authenticated: false },
   atlas: null,
+  managedSystems: null,
   mcpRegistry: [],
   timeline: [],
 };
@@ -164,6 +169,7 @@ function AppShellInner() {
       settle("latestBatch", getLatestBatchStatus),
       settle("dailyReport", getLatestDailyReport),
       settle("atlas", getAtlasOverview),
+      settle("managedSystems", getManagedSystemsOverview),
       operatorAccess ? settle("mcpRegistry", getMcpRegistry) : Promise.resolve({ key: "mcpRegistry", value: [], error: null }),
       operatorAccess ? settle("timeline", () => getRuntimeTimeline(100)) : Promise.resolve({ key: "timeline", value: [], error: null }),
     ]))];
@@ -193,6 +199,7 @@ function AppShellInner() {
 
   const page = {
     overview: <OverviewPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
+    managed: <ManagedSystemsPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
     agents: <AgentsPage data={data} />,
     workflows: <WorkflowsPage data={data} onRefresh={refresh} />,
     knowledge: <KnowledgePage data={data} />,

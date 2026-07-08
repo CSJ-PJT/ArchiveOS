@@ -1,6 +1,7 @@
 package com.archiveos.ai.operations;
 
 import com.archiveos.ai.atlas.AtlasService;
+import com.archiveos.ai.managed.ManagedSystemsService;
 import com.archiveos.ai.notification.NotificationResult;
 import com.archiveos.ai.notification.NotificationService;
 import java.time.LocalDate;
@@ -21,6 +22,7 @@ public class DailyReportService {
     private final NotificationService notifications;
     private final String publicUrl;
     private AtlasService atlasService;
+    private ManagedSystemsService managedSystems;
 
     public DailyReportService(
             OperationsRepository repository,
@@ -40,13 +42,19 @@ public class DailyReportService {
         this.atlasService = atlasService;
     }
 
+    @Autowired(required = false)
+    void setManagedSystems(ManagedSystemsService managedSystems) {
+        this.managedSystems = managedSystems;
+    }
+
     public Map<String, Object> run(LocalDate today) {
         LocalDate localToday = today == null ? LocalDate.now(SEOUL) : today;
         LocalDate targetDate = localToday.minusDays(1);
         KoreanBusinessDayService.BusinessDayResult businessDay = businessDays.check(localToday);
         Map<String, Object> nightlySummary = loadNightly(targetDate);
+        Map<String, Object> managedSummary = managedSystemsSummary();
         Map<String, Object> atlasSummary = atlasSummary();
-        String reportText = message(targetDate, nightlySummary, businessDay.businessDay() ? null : businessDay.reason(), atlasSummary);
+        String reportText = message(targetDate, nightlySummary, businessDay.businessDay() ? null : businessDay.reason(), managedSummary, atlasSummary);
         List<NotificationResult> results = businessDay.businessDay() ? notifications.send(reportText) : List.of();
         boolean anyConfigured = results.stream().anyMatch(NotificationResult::configured);
         boolean anySent = results.stream().anyMatch(NotificationResult::sent);
@@ -65,6 +73,7 @@ public class DailyReportService {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("today", localToday.toString()); metadata.put("business_day", businessDay.businessDay()); metadata.put("reason", skippedReason);
         metadata.put("nightly", nightlySummary); metadata.put("notification_results", results); metadata.put("daily_report_id", dailyRow.get("id"));
+        metadata.put("managed_systems", managedSummary);
         metadata.put("atlas", atlasSummary);
         metadata.put("archiveos_public_url_configured", publicUrl != null && !publicUrl.isBlank());
         String summary = switch (batchStatus) {
@@ -82,7 +91,7 @@ public class DailyReportService {
         return nightly.buildSummary(targetDate);
     }
 
-    private String message(LocalDate targetDate, Map<String, Object> summary, String skippedReason, Map<String, Object> atlasSummary) {
+    private String message(LocalDate targetDate, Map<String, Object> summary, String skippedReason, Map<String, Object> managedSummary, Map<String, Object> atlasSummary) {
         Map<String, Object> queue = map(summary.get("queue")); Map<String, Object> operators = map(summary.get("operators"));
         @SuppressWarnings("unchecked") List<String> warnings = summary.get("warnings") instanceof List<?> list ? (List<String>) list : List.of();
         String status = switch (String.valueOf(summary.get("operationStatus"))) { case "problem" -> "🔴 문제"; case "warning" -> "🟡 주의"; default -> "🟢 정상"; };
@@ -97,6 +106,7 @@ public class DailyReportService {
                 .append("\n• Reviewer Bridge: ").append(operators.getOrDefault("reviewerBridge", "미감지"));
         text.append("\n\n경고\n").append(warnings.isEmpty() ? "• 감지된 경고 없음" : warnings.stream().map(item -> "• " + item).reduce((a,b) -> a + "\n" + b).orElse(""));
         text.append("\n\nDecisions / Commands\n• Decisions: ").append(count(summary, "decisions")).append("\n• Commands: ").append(count(summary, "commands"));
+        appendManagedSystemsSummary(text, managedSummary);
         text.append("\n\nAtlas Platform")
                 .append("\n• Status: ").append(atlasSummary.getOrDefault("status", "unknown"))
                 .append("\n• Services: ").append(atlasSummary.getOrDefault("normalServices", 0)).append("/")
@@ -105,6 +115,29 @@ public class DailyReportService {
                 .append("\n• Reason: ").append(atlasSummary.getOrDefault("reason", "Atlas summary unavailable"));
         if (publicUrl != null && !publicUrl.isBlank()) text.append("\n\nDashboard:\n").append(publicUrl);
         return text.toString();
+    }
+
+    private void appendManagedSystemsSummary(StringBuilder text, Map<String, Object> managedSummary) {
+        @SuppressWarnings("unchecked") List<Map<String, Object>> systems = managedSummary.get("systems") instanceof List<?> list
+                ? (List<Map<String, Object>>) (List<?>) list
+                : List.of();
+        Map<String, Object> summary = map(managedSummary.get("summary"));
+        Map<String, Object> recommended = map(summary.get("recommendedPmAction"));
+        text.append("\n\nManaged Systems Summary");
+        if (systems.isEmpty()) {
+            text.append("\n• unavailable");
+        } else {
+            systems.forEach(system -> text.append("\n• ")
+                    .append(system.getOrDefault("name", system.get("systemId")))
+                    .append(": ")
+                    .append(system.getOrDefault("status", "unknown")));
+        }
+        text.append("\n\nPM Inbox")
+                .append("\n• Critical: ").append(summary.getOrDefault("criticalInboxCount", 0))
+                .append("\n• High: ").append(summary.getOrDefault("highInboxCount", 0))
+                .append("\n• Info: ").append(summary.getOrDefault("infoInboxCount", 0));
+        text.append("\n\nRecommended PM Action:\n")
+                .append(recommended.getOrDefault("title", "No urgent action required."));
     }
 
     private Map<String, Object> atlasSummary() {
@@ -136,7 +169,31 @@ public class DailyReportService {
         }
     }
 
+    private Map<String, Object> managedSystemsSummary() {
+        if (managedSystems == null) return Map.of("available", false, "summary", Map.of(), "systems", List.of());
+        try {
+            Map<String, Object> overview = managedSystems.overview();
+            @SuppressWarnings("unchecked") List<Map<String, Object>> inbox = overview.get("pmInbox") instanceof List<?> list
+                    ? (List<Map<String, Object>>) (List<?>) list
+                    : List.of();
+            @SuppressWarnings("unchecked") Map<String, Object> summary = overview.get("summary") instanceof Map<?, ?> map
+                    ? (Map<String, Object>) map
+                    : new LinkedHashMap<>();
+            Map<String, Object> enrichedSummary = new LinkedHashMap<>(summary);
+            enrichedSummary.put("criticalInboxCount", severityCount(inbox, "critical"));
+            enrichedSummary.put("highInboxCount", severityCount(inbox, "high"));
+            enrichedSummary.put("infoInboxCount", severityCount(inbox, "info"));
+            Map<String, Object> value = new LinkedHashMap<>(overview);
+            value.put("available", true);
+            value.put("summary", enrichedSummary);
+            return value;
+        } catch (Exception error) {
+            return Map.of("available", false, "summary", Map.of("recommendedPmAction", Map.of("title", "Managed Systems summary unavailable.")), "systems", List.of());
+        }
+    }
+
     @SuppressWarnings("unchecked") private Map<String, Object> map(Object value) { return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of(); }
     private int number(Map<String, Object> value, String key) { return value.get(key) instanceof Number number ? number.intValue() : 0; }
     private int count(Map<String, Object> summary, String key) { return number(map(summary.get(key)), "count"); }
+    private long severityCount(List<Map<String, Object>> inbox, String severity) { return inbox.stream().filter(item -> severity.equals(item.get("severity"))).count(); }
 }

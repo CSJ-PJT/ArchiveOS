@@ -136,6 +136,76 @@ export type AtlasOverview = {
   recent_work_logs: AtlasCodexWorkLog[];
 };
 
+export type ManagedSystemStatus = "normal" | "degraded" | "down_candidate" | "unavailable" | "not_connected" | string;
+
+export type ManagedSystemSummary = {
+  systemId: string;
+  name: string;
+  type: "PLATFORM" | "INDUSTRY_APP" | "SERVICE_PORTAL" | "GAME_PROJECT" | "PLACEHOLDER" | string;
+  environment: "local" | "development" | "production" | string;
+  provider: "local" | "OCI" | "unknown" | string;
+  status: ManagedSystemStatus;
+  statusReason: string | null;
+  lastCheckedAt: string | null;
+  serviceCount: number;
+  normalServiceCount: number;
+  degradedServiceCount: number;
+  downServiceCount: number;
+  pendingApprovalCount: number;
+  openIncidentCount: number;
+  latestWorkflowId: string | null;
+  latestAuditEventId: string | null;
+  latestWorkLogId: string | null;
+  publicUrl: string | null;
+  repository: string | null;
+  source: "archiveos" | "nexus" | "atlas" | "manual" | string;
+};
+
+export type PmInboxItem = {
+  id: string;
+  severity: "critical" | "high" | "medium" | "low" | "info" | string;
+  sourceSystemId: string;
+  sourceType: "workflow" | "approval" | "healthcheck" | "audit" | "work_log" | "daily_report" | "security" | "integration" | string;
+  title: string;
+  summary: string;
+  recommendedAction: string;
+  status: "open" | "acknowledged" | "resolved" | string;
+  createdAt: string;
+  updatedAt: string;
+  relatedWorkflowId: string | null;
+  relatedApprovalId: string | null;
+  relatedServiceId: string | null;
+  relatedAuditEventId: string | null;
+  relatedWorkLogId: string | null;
+};
+
+export type ManagedSystemsOverview = {
+  summary: {
+    managedSystemsCount: number;
+    normalCount: number;
+    degradedCount: number;
+    downCandidateCount: number;
+    notConnectedCount: number;
+    pendingApprovals: number;
+    openPmInboxItems: number;
+    criticalInboxCount: number;
+    highInboxCount: number;
+    mediumInboxCount: number;
+    lowInboxCount: number;
+    infoInboxCount: number;
+    latestCriticalItem: PmInboxItem | null;
+    recommendedPmAction: {
+      title: string;
+      reason: string;
+      itemId?: string;
+      severity?: string;
+    };
+    generatedAt: string;
+  };
+  systems: ManagedSystemSummary[];
+  pmInbox: PmInboxItem[];
+};
+
 export async function getAuthSession() {
   const response = await request<ApiEnvelope<AuthSession>>("/api/auth/session");
   return response.data;
@@ -167,6 +237,35 @@ export async function getRuntimeTimeline(limit = 100) {
 
 export async function getAtlasOverview() {
   const response = await request<ApiEnvelope<AtlasOverview>>("/api/atlas/overview");
+  return response.data;
+}
+
+export async function getManagedSystemsOverview() {
+  const response = await request<ApiEnvelope<ManagedSystemsOverview>>("/api/managed-systems/overview");
+  return response.data;
+}
+
+export async function getManagedSystems() {
+  const response = await request<ApiEnvelope<ManagedSystemSummary[]>>("/api/managed-systems");
+  return response.data;
+}
+
+export async function getPmInbox() {
+  const response = await request<ApiEnvelope<PmInboxItem[]>>("/api/pm-inbox");
+  return response.data;
+}
+
+export async function acknowledgePmInboxItem(id: string) {
+  const response = await request<ApiEnvelope<Record<string, unknown>>>(`/api/pm-inbox/${encodeURIComponent(id)}/acknowledge`, {
+    method: "POST",
+  });
+  return response.data;
+}
+
+export async function resolvePmInboxItem(id: string) {
+  const response = await request<ApiEnvelope<Record<string, unknown>>>(`/api/pm-inbox/${encodeURIComponent(id)}/resolve`, {
+    method: "POST",
+  });
   return response.data;
 }
 
