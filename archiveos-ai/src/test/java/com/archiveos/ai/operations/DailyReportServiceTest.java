@@ -7,12 +7,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.archiveos.ai.atlas.AtlasService;
 import com.archiveos.ai.notification.NotificationService;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class DailyReportServiceTest {
     @Test void weekendReportIsPersistedAsSkippedWithoutNotification() {
@@ -25,12 +27,21 @@ class DailyReportServiceTest {
         when(repository.saveDailyReport(any())).thenReturn(Map.of("id", "report-1"));
         when(repository.saveBatch(eq("daily_report"), eq("skipped"), eq(saturday.minusDays(1)), any(), any())).thenAnswer(invocation -> Map.of("status", "skipped", "summary", invocation.getArgument(3)));
         DailyReportService service = new DailyReportService(repository, nightly, new KoreanBusinessDayService(), notifications, "");
+        AtlasService atlas = org.mockito.Mockito.mock(AtlasService.class);
+        when(atlas.overview()).thenReturn(Map.of(
+                "system", Map.of("current_status", "normal", "reason", "All enabled Atlas healthchecks returned expected status."),
+                "services", List.of(Map.of("current_status", "normal"), Map.of("current_status", "degraded")),
+                "recent_healthchecks", List.of(Map.of("checked_at", "2026-06-26T12:00:00Z"))));
+        service.setAtlasService(atlas);
 
         Map<String, Object> result = service.run(saturday);
 
         assertThat(result).containsEntry("status", "skipped");
         verify(notifications, never()).send(any());
         verify(repository).saveDailyReport(any());
+        ArgumentCaptor<Map<String, Object>> reportCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(repository).saveDailyReport(reportCaptor.capture());
+        assertThat(String.valueOf(reportCaptor.getValue().get("report_text"))).contains("Atlas Platform", "Status: normal", "Services: 1/2 normal");
     }
 
     private Map<String, Object> summary(LocalDate date) {

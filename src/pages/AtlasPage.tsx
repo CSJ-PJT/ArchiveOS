@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { AppData } from "../app/AppShell";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
+import type { AtlasCodexWorkLog } from "../lib/backendApi";
 import { createAtlasWorkLog, runAtlasHealthchecks } from "../lib/backendApi";
 import { formatTimeAgo } from "./pageUtils";
 
@@ -30,6 +31,14 @@ export function AtlasPage({ data, onRefresh }: { data: AppData; onRefresh: () =>
   });
   const atlas = data.atlas;
   const serviceById = useMemo(() => new Map((atlas?.services || []).map((service) => [service.service_id, service.name])), [atlas?.services]);
+  const workLogsByService = useMemo(() => {
+    const rows = new Map<string, AtlasCodexWorkLog[]>();
+    for (const log of atlas?.recent_work_logs || []) {
+      const key = log.target_service_id || "atlas-platform";
+      rows.set(key, [...(rows.get(key) || []), log]);
+    }
+    return rows;
+  }, [atlas?.recent_work_logs]);
   const canRun = data.auth.role === "ADMIN" || data.auth.role === "PM";
   const canCreateWorkLog = data.auth.role === "ADMIN";
 
@@ -138,15 +147,23 @@ export function AtlasPage({ data, onRefresh }: { data: AppData; onRefresh: () =>
       </div>
       {message ? <p className="small-note">{message}</p> : null}
       <div className="history-table">
-        {atlas.recent_healthchecks.map((result) => <div className="history-row" key={result.id}>
-          <summary>
-            <strong>{serviceById.get(result.service_id) ?? result.service_id}</strong>
-            <StatusBadge status={result.status}>{result.status}</StatusBadge>
-            <span>{formatTimeAgo(result.checked_at)}</span>
-            <p>HTTP {result.http_status ?? "n/a"} · {result.latency_ms ?? "n/a"}ms · expected {result.expected_status}</p>
-          </summary>
-          {result.error_message ? <p className="small-note">{result.error_message}</p> : null}
-        </div>)}
+        {atlas.recent_healthchecks.map((result) => {
+          const relatedLogs = workLogsByService.get(result.service_id) || [];
+          const latestLog = relatedLogs[0];
+          return <div className="history-row" key={result.id}>
+            <summary>
+              <strong>{serviceById.get(result.service_id) ?? result.service_id}</strong>
+              <StatusBadge status={result.status}>{result.status}</StatusBadge>
+              <span>{formatTimeAgo(result.checked_at)}</span>
+              <p>HTTP {result.http_status ?? "n/a"} · {result.latency_ms ?? "n/a"}ms · expected {result.expected_status}</p>
+            </summary>
+            <div className="detail-grid">
+              <span>Linked work logs<strong>{relatedLogs.length}</strong></span>
+              <span>Latest work<strong>{latestLog?.work_title || "No related Codex log"}</strong></span>
+            </div>
+            {result.error_message ? <p className="small-note">{result.error_message}</p> : null}
+          </div>;
+        })}
         {!atlas.recent_healthchecks.length ? <div className="empty-state">No Atlas healthcheck results yet. Run a check from a PM/Admin session.</div> : null}
       </div>
     </SectionCard>

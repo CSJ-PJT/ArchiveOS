@@ -1,5 +1,6 @@
 package com.archiveos.ai.operations;
 
+import com.archiveos.ai.atlas.AtlasService;
 import com.archiveos.ai.notification.NotificationResult;
 import com.archiveos.ai.notification.NotificationService;
 import java.time.LocalDate;
@@ -7,6 +8,7 @@ import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +20,7 @@ public class DailyReportService {
     private final KoreanBusinessDayService businessDays;
     private final NotificationService notifications;
     private final String publicUrl;
+    private AtlasService atlasService;
 
     public DailyReportService(
             OperationsRepository repository,
@@ -32,12 +35,18 @@ public class DailyReportService {
         this.publicUrl = publicUrl;
     }
 
+    @Autowired(required = false)
+    void setAtlasService(AtlasService atlasService) {
+        this.atlasService = atlasService;
+    }
+
     public Map<String, Object> run(LocalDate today) {
         LocalDate localToday = today == null ? LocalDate.now(SEOUL) : today;
         LocalDate targetDate = localToday.minusDays(1);
         KoreanBusinessDayService.BusinessDayResult businessDay = businessDays.check(localToday);
         Map<String, Object> nightlySummary = loadNightly(targetDate);
-        String reportText = message(targetDate, nightlySummary, businessDay.businessDay() ? null : businessDay.reason());
+        Map<String, Object> atlasSummary = atlasSummary();
+        String reportText = message(targetDate, nightlySummary, businessDay.businessDay() ? null : businessDay.reason(), atlasSummary);
         List<NotificationResult> results = businessDay.businessDay() ? notifications.send(reportText) : List.of();
         boolean anyConfigured = results.stream().anyMatch(NotificationResult::configured);
         boolean anySent = results.stream().anyMatch(NotificationResult::sent);
@@ -56,6 +65,7 @@ public class DailyReportService {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("today", localToday.toString()); metadata.put("business_day", businessDay.businessDay()); metadata.put("reason", skippedReason);
         metadata.put("nightly", nightlySummary); metadata.put("notification_results", results); metadata.put("daily_report_id", dailyRow.get("id"));
+        metadata.put("atlas", atlasSummary);
         metadata.put("archiveos_public_url_configured", publicUrl != null && !publicUrl.isBlank());
         String summary = switch (batchStatus) {
             case "sent" -> "일일 운영 보고 전송 완료: " + targetDate;
@@ -72,7 +82,7 @@ public class DailyReportService {
         return nightly.buildSummary(targetDate);
     }
 
-    private String message(LocalDate targetDate, Map<String, Object> summary, String skippedReason) {
+    private String message(LocalDate targetDate, Map<String, Object> summary, String skippedReason, Map<String, Object> atlasSummary) {
         Map<String, Object> queue = map(summary.get("queue")); Map<String, Object> operators = map(summary.get("operators"));
         @SuppressWarnings("unchecked") List<String> warnings = summary.get("warnings") instanceof List<?> list ? (List<String>) list : List.of();
         String status = switch (String.valueOf(summary.get("operationStatus"))) { case "problem" -> "🔴 문제"; case "warning" -> "🟡 주의"; default -> "🟢 정상"; };
@@ -87,8 +97,43 @@ public class DailyReportService {
                 .append("\n• Reviewer Bridge: ").append(operators.getOrDefault("reviewerBridge", "미감지"));
         text.append("\n\n경고\n").append(warnings.isEmpty() ? "• 감지된 경고 없음" : warnings.stream().map(item -> "• " + item).reduce((a,b) -> a + "\n" + b).orElse(""));
         text.append("\n\nDecisions / Commands\n• Decisions: ").append(count(summary, "decisions")).append("\n• Commands: ").append(count(summary, "commands"));
+        text.append("\n\nAtlas Platform")
+                .append("\n• Status: ").append(atlasSummary.getOrDefault("status", "unknown"))
+                .append("\n• Services: ").append(atlasSummary.getOrDefault("normalServices", 0)).append("/")
+                .append(atlasSummary.getOrDefault("totalServices", 0)).append(" normal")
+                .append("\n• Last Healthcheck: ").append(atlasSummary.getOrDefault("lastHealthcheck", "no data"))
+                .append("\n• Reason: ").append(atlasSummary.getOrDefault("reason", "Atlas summary unavailable"));
         if (publicUrl != null && !publicUrl.isBlank()) text.append("\n\nDashboard:\n").append(publicUrl);
         return text.toString();
+    }
+
+    private Map<String, Object> atlasSummary() {
+        if (atlasService == null) return Map.of("available", false, "status", "unknown", "reason", "Atlas observability service is not available.");
+        try {
+            Map<String, Object> overview = atlasService.overview();
+            Map<String, Object> system = map(overview.get("system"));
+            @SuppressWarnings("unchecked") List<Map<String, Object>> services = overview.get("services") instanceof List<?> list
+                    ? (List<Map<String, Object>>) (List<?>) list
+                    : List.of();
+            @SuppressWarnings("unchecked") List<Map<String, Object>> checks = overview.get("recent_healthchecks") instanceof List<?> list
+                    ? (List<Map<String, Object>>) (List<?>) list
+                    : List.of();
+            long normal = services.stream().filter(service -> "normal".equals(String.valueOf(service.get("current_status")))).count();
+            long degraded = services.stream().filter(service -> "degraded".equals(String.valueOf(service.get("current_status")))).count();
+            long down = services.stream().filter(service -> String.valueOf(service.get("current_status")).contains("down")).count();
+            Map<String, Object> value = new LinkedHashMap<>();
+            value.put("available", true);
+            value.put("status", system.getOrDefault("current_status", "unknown"));
+            value.put("reason", system.getOrDefault("reason", "No Atlas status reason recorded."));
+            value.put("totalServices", services.size());
+            value.put("normalServices", normal);
+            value.put("degradedServices", degraded);
+            value.put("downServices", down);
+            value.put("lastHealthcheck", checks.isEmpty() ? "no data" : checks.get(0).getOrDefault("checked_at", "no data"));
+            return value;
+        } catch (Exception error) {
+            return Map.of("available", false, "status", "unknown", "reason", "Atlas summary failed: " + error.getClass().getSimpleName());
+        }
     }
 
     @SuppressWarnings("unchecked") private Map<String, Object> map(Object value) { return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of(); }
