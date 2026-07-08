@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { promisify } from "node:util";
 import cors from "cors";
@@ -36,8 +37,6 @@ const allowedOrigins = new Set([
   ...parseCsvEnv(process.env.CORS_ALLOWED_ORIGINS),
 ]);
 
-const logTypes = new Set(["summary", "decision", "error", "review"]);
-const commandStatuses = new Set(["pending", "running", "succeeded", "failed"]);
 const localActionTypes = new Set([
   "git_status",
   "git_branch",
@@ -107,6 +106,8 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Update PM Task", method: "PATCH", path: "/api/tasks/:id", service: "queue", description: "Queue task metadata update." },
   { name: "PM Task Decision", method: "POST", path: "/api/tasks/:id/decision", service: "queue", description: "PM approval/rejection/hold recording." },
   { name: "PM Task Retry", method: "POST", path: "/api/tasks/:id/retry", service: "queue", description: "PM retry recording without execution." },
+  { name: "PM Task Callback", method: "POST", path: "/api/tasks/:id/callback", service: "queue", description: "Archive-Nexus action result callback." },
+  { name: "PM Task Events", method: "GET", path: "/api/tasks/:id/events", service: "queue", description: "Workflow event history." },
   { name: "Queue Summary", method: "GET", path: "/api/queue/summary", service: "queue", description: "Semi-auto queue summary." },
   { name: "Queue Run Once", method: "POST", path: "/api/queue/run-once", service: "queue", description: "State transition and instruction generation only." },
   { name: "Queue Nightly Summary", method: "POST", path: "/api/queue/nightly-summary", service: "queue", description: "Slack queue summary without execution." },
@@ -158,6 +159,7 @@ function readOptionalUrlEnv(name: string) {
 
 app.use(
   cors({
+    credentials: true,
     origin(origin, callback) {
       if (!origin || allowedOrigins.has(origin)) {
         callback(null, true);
@@ -169,6 +171,53 @@ app.use(
   }),
 );
 app.use(express.json());
+
+app.post("/api/auth/login", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/auth/login", jsonProxyRequest("POST", request.body), undefined, request);
+});
+
+app.get("/api/auth/session", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/auth/session", undefined, undefined, request);
+});
+
+app.post("/api/auth/logout", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/auth/logout", { method: "POST" }, undefined, request);
+});
+
+app.use("/api", async (request, response, next) => {
+  const requestPath = String(request.originalUrl ?? request.path).split("?")[0];
+  const adminRead = ["/api/security/status", "/api/runtime/public-access", "/api/audit/logs"].includes(requestPath);
+  if (["HEAD", "OPTIONS"].includes(request.method) || (request.method === "GET" && !adminRead)) {
+    next();
+    return;
+  }
+  try {
+    const session = await readJavaSession(request);
+    const role = String(session.role ?? "PUBLIC").toUpperCase();
+    const pmAction = /^\/api\/(tasks|rpa\/tasks)\/[^/]+\/(decision|retry)$/.test(requestPath);
+    if (role === "PUBLIC") {
+      response.status(401).json({ error: "Authentication required." });
+      return;
+    }
+    if (adminRead && role !== "ADMIN") {
+      response.status(403).json({ error: "Admin role required." });
+      return;
+    }
+    if (!adminRead && (role === "OPERATOR" || (role === "PM" && !pmAction))) {
+      response.status(403).json({ error: "Insufficient role." });
+      return;
+    }
+    const legacyMutation = new Set(["/api/queue/run-once", "/api/queue/nightly-summary", "/api/local-actions/run"]);
+    if (legacyMutation.has(requestPath)) {
+      const correlationId = request.header("x-correlation-id") || randomUUID();
+      response.setHeader("x-correlation-id", correlationId);
+      response.on("finish", () => void recordCompatibilityAudit(request, requestPath, response.statusCode, correlationId));
+    }
+    next();
+  } catch {
+    response.status(503).json({ error: "Authorization service is unavailable." });
+  }
+});
 
 app.get("/health", (_request, response) => {
   response.json({
@@ -207,12 +256,8 @@ app.get("/api/ax/roadmap", (_request, response) => {
   response.json({ data: getAxRoadmap() });
 });
 
-app.post("/api/obsidian/sync", async (_request, response) => {
-  try {
-    response.status(200).json(await proxyArchiveOsAi("/api/obsidian/sync", { method: "POST" }));
-  } catch (error) {
-    sendProxyError(response, error, "Obsidian sync failed.");
-  }
+app.post("/api/obsidian/sync", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/obsidian/sync", { method: "POST" }, undefined, request);
 });
 
 app.get("/api/ai/runtime", async (_request, response) => {
@@ -223,12 +268,8 @@ app.get("/api/ai/runtime", async (_request, response) => {
   }
 });
 
-app.post("/api/ai/runtime/check", async (_request, response) => {
-  try {
-    response.status(200).json({ data: await proxyArchiveOsAi("/api/ai/runtime/check", { method: "POST" }) });
-  } catch (error) {
-    sendProxyError(response, error, "ArchiveOS AI runtime check failed.");
-  }
+app.post("/api/ai/runtime/check", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ai/runtime/check", { method: "POST" }, undefined, request);
 });
 
 app.get("/api/obsidian/documents", async (request, response) => {
@@ -282,13 +323,7 @@ app.get("/api/batch/jobs", async (_request, response) => {
 });
 
 app.post("/api/batch/jobs/:jobName/run", async (request, response) => {
-  try {
-    response.status(200).json(await proxyArchiveOsAi(`/api/batch/jobs/${encodeURIComponent(request.params.jobName)}/run`, {
-      method: "POST",
-    }));
-  } catch (error) {
-    sendProxyError(response, error, "Spring Batch job launch failed.");
-  }
+  await relayArchiveOsAi(response, `/api/batch/jobs/${encodeURIComponent(request.params.jobName)}/run`, { method: "POST" }, undefined, request);
 });
 
 app.get("/api/batch/executions", async (request, response) => {
@@ -361,19 +396,11 @@ app.post("/api/rpa/tasks/:id/decision", async (request, response) => {
     return;
   }
 
-  try {
-    response.status(200).json(await proxyArchiveOsAi(`/api/rpa/tasks/${encodeURIComponent(request.params.id)}/decision`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        action,
-        reason: typeof request.body?.reason === "string" ? request.body.reason : null,
-        decidedBy: typeof request.body?.decidedBy === "string" ? request.body.decidedBy : "archiveos-node-proxy",
-      }),
-    }));
-  } catch (error) {
-    sendProxyError(response, error, "Spring Batch RPA decision failed.");
-  }
+  await relayArchiveOsAi(response, `/api/rpa/tasks/${encodeURIComponent(request.params.id)}/decision`, jsonProxyRequest("POST", {
+    action,
+    reason: typeof request.body?.reason === "string" ? request.body.reason : null,
+    decidedBy: typeof request.body?.decidedBy === "string" ? request.body.decidedBy : "archiveos-node-proxy",
+  }), undefined, request);
 });
 
 app.get("/api/platform/readiness", async (_request, response) => {
@@ -416,20 +443,8 @@ app.get("/api/security/status", async (request, response) => {
   }
 });
 
-app.get("/api/work-logs/recent", async (_request, response) => {
-  const { data, error } = await supabaseAdmin
-    .from("work_logs")
-    .select("*, task:tasks(title), agent:agents(name)")
-    .not("id", "in", `(${seedWorkLogIds.join(",")})`)
-    .order("created_at", { ascending: false })
-    .limit(20);
-
-  if (error) {
-    response.status(500).json({ error: "Failed to fetch recent work logs." });
-    return;
-  }
-
-  response.json({ data });
+app.get("/api/work-logs/recent", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/work-logs/recent", undefined, undefined, request);
 });
 
 app.get("/api/dashboard", async (_request, response) => {
@@ -495,63 +510,15 @@ app.get("/api/dashboard", async (_request, response) => {
 });
 
 app.post("/api/work-logs", async (request, response) => {
-  const validation = validateWorkLogBody(request.body);
-
-  if (!validation.ok) {
-    response.status(400).json({ error: validation.error });
-    return;
-  }
-
-  const { data, error } = await supabaseAdmin
-    .from("work_logs")
-    .insert(validation.value)
-    .select()
-    .single();
-
-  if (error) {
-    response.status(500).json({ error: "Failed to create work log." });
-    return;
-  }
-
-  response.status(201).json({ data });
+  await relayArchiveOsAi(response, "/api/work-logs", jsonProxyRequest("POST", request.body), undefined, request);
 });
 
-app.get("/api/commands/recent", async (_request, response) => {
-  const { data, error } = await supabaseAdmin
-    .from("command_runs")
-    .select("*")
-    .not("id", "in", `(${seedCommandRunIds.join(",")})`)
-    .order("created_at", { ascending: false })
-    .limit(20);
-
-  if (error) {
-    response.status(500).json({ error: "Failed to fetch recent commands." });
-    return;
-  }
-
-  response.json({ data });
+app.get("/api/commands/recent", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/commands/recent", undefined, undefined, request);
 });
 
 app.post("/api/commands", async (request, response) => {
-  const validation = validateCommandBody(request.body);
-
-  if (!validation.ok) {
-    response.status(400).json({ error: validation.error });
-    return;
-  }
-
-  const { data, error } = await supabaseAdmin
-    .from("command_runs")
-    .insert(validation.value)
-    .select()
-    .single();
-
-  if (error) {
-    response.status(500).json({ error: "Failed to record command." });
-    return;
-  }
-
-  response.status(201).json({ data });
+  await relayArchiveOsAi(response, "/api/commands", jsonProxyRequest("POST", request.body), undefined, request);
 });
 
 app.get("/api/tasks", async (_request, response) => {
@@ -563,11 +530,11 @@ app.get("/api/tasks/:id", async (request, response) => {
 });
 
 app.post("/api/tasks", async (request, response) => {
-  await relayArchiveOsAi(response, "/api/tasks", jsonProxyRequest("POST", request.body));
+  await relayArchiveOsAi(response, "/api/tasks", jsonProxyRequest("POST", request.body), undefined, request);
 });
 
 app.patch("/api/tasks/:id", async (request, response) => {
-  await relayArchiveOsAi(response, `/api/tasks/${encodeURIComponent(request.params.id)}`, jsonProxyRequest("PATCH", request.body));
+  await relayArchiveOsAi(response, `/api/tasks/${encodeURIComponent(request.params.id)}`, jsonProxyRequest("PATCH", request.body), undefined, request);
 });
 
 app.post("/api/tasks/:id/decision", async (request, response) => {
@@ -588,6 +555,7 @@ app.post("/api/tasks/:id/decision", async (request, response) => {
         },
       });
     },
+    request,
   );
 });
 
@@ -609,7 +577,45 @@ app.post("/api/tasks/:id/retry", async (request, response) => {
         },
       });
     },
+    request,
   );
+});
+
+app.post("/api/tasks/:id/callback", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/tasks/${encodeURIComponent(request.params.id)}/callback`, jsonProxyRequest("POST", request.body), undefined, request);
+});
+
+app.get("/api/tasks/:id/events", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/tasks/${encodeURIComponent(request.params.id)}/events`, undefined, undefined, request);
+});
+
+app.get("/api/mcp/registry", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/mcp/registry", undefined, undefined, request);
+});
+
+app.get("/api/runtime/timeline", async (request, response) => {
+  const params = new URLSearchParams();
+  if (request.query.limit) params.set("limit", String(request.query.limit));
+  if (request.query.correlationId) params.set("correlationId", String(request.query.correlationId));
+  await relayArchiveOsAi(response, `/api/runtime/timeline?${params.toString()}`, undefined, undefined, request);
+});
+
+app.get("/api/contracts/workflow/schema", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/contracts/workflow/schema", undefined, undefined, request);
+});
+
+app.get("/api/contracts/workflow", async (request, response) => {
+  const limit = request.query.limit ? Number(request.query.limit) : 20;
+  await relayArchiveOsAi(response, `/api/contracts/workflow?limit=${encodeURIComponent(String(limit))}`, undefined, undefined, request);
+});
+
+app.get("/api/contracts/workflow/:correlationId", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/contracts/workflow/${encodeURIComponent(request.params.correlationId)}`, undefined, undefined, request);
+});
+
+app.get("/api/audit/logs", async (request, response) => {
+  const limit = Number(request.query.limit ?? 50);
+  await relayArchiveOsAi(response, `/api/audit/logs?limit=${encodeURIComponent(String(limit))}`, undefined, undefined, request);
 });
 
 app.get("/api/queue/summary", async (_request, response) => {
@@ -698,21 +704,13 @@ app.get("/api/runtime/events/recent", async (_request, response) => {
 });
 
 // Local/admin/testing endpoint only. This records a read-only batch summary and does not trigger agent execution.
-app.post("/api/batches/nightly-review/run", async (_request, response) => {
-  try {
-    response.status(200).json(await proxyArchiveOsAi("/api/batches/nightly-review/run", { method: "POST" }));
-  } catch (error) {
-    sendProxyError(response, error, "Nightly Review batch is unavailable.");
-  }
+app.post("/api/batches/nightly-review/run", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/batches/nightly-review/run", { method: "POST" }, undefined, request);
 });
 
 // Local/admin/testing endpoint only. This may send Slack only when the Korea business-day rule passes.
-app.post("/api/batches/daily-report/run", async (_request, response) => {
-  try {
-    response.status(200).json(await proxyArchiveOsAi("/api/batches/daily-report/run", { method: "POST" }));
-  } catch (error) {
-    sendProxyError(response, error, "Daily Report batch is unavailable.");
-  }
+app.post("/api/batches/daily-report/run", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/batches/daily-report/run", { method: "POST" }, undefined, request);
 });
 
 app.get("/api/batches/recent", async (request, response) => {
@@ -834,7 +832,7 @@ app.get("/api/knowledge/node/:id", async (request, response) => {
 
 // Local/admin/manual-test endpoint only. It records a deterministic architecture review and does not execute commands.
 app.post("/api/architect/review", async (request, response) => {
-  await relayArchiveOsAi(response, "/api/architect/review", jsonProxyRequest("POST", request.body));
+  await relayArchiveOsAi(response, "/api/architect/review", jsonProxyRequest("POST", request.body), undefined, request);
 });
 
 app.get("/api/architect/reviews/recent", async (request, response) => {
@@ -898,20 +896,6 @@ app.listen(port, () => {
   console.log(`archiveos-backend listening on port ${port}`);
 });
 
-type WorkLogBody = {
-  task_id: string | null;
-  agent_id: string | null;
-  log_type: "summary" | "decision" | "error" | "review";
-  content: string;
-};
-
-type CommandBody = {
-  command: string;
-  command_type: string | null;
-  status: "pending" | "running" | "succeeded" | "failed";
-  result: string | null;
-};
-
 type LocalAction = "git_status" | "git_branch" | "git_log_recent" | "frontend_build" | "backend_typecheck" | "backend_build";
 
 type LocalActionBody = {
@@ -945,14 +929,6 @@ type RuntimeEvent = {
   created_at: string;
 };
 
-type ValidationResult =
-  | { ok: true; value: WorkLogBody }
-  | { ok: false; error: string };
-
-type CommandValidationResult =
-  | { ok: true; value: CommandBody }
-  | { ok: false; error: string };
-
 type LocalActionValidationResult =
   | { ok: true; value: LocalActionBody }
   | { ok: false; error: string };
@@ -960,40 +936,6 @@ type LocalActionValidationResult =
 type ArchitectReviewValidationResult =
   | { ok: true; value: ArchitectReviewBody }
   | { ok: false; error: string };
-
-function validateWorkLogBody(body: unknown): ValidationResult {
-  if (!body || typeof body !== "object") {
-    return { ok: false, error: "Request body must be a JSON object." };
-  }
-
-  const candidate = body as Record<string, unknown>;
-
-  if (candidate.task_id !== null && candidate.task_id !== undefined && typeof candidate.task_id !== "string") {
-    return { ok: false, error: "task_id must be a string or null." };
-  }
-
-  if (candidate.agent_id !== null && candidate.agent_id !== undefined && typeof candidate.agent_id !== "string") {
-    return { ok: false, error: "agent_id must be a string or null." };
-  }
-
-  if (typeof candidate.log_type !== "string" || !logTypes.has(candidate.log_type)) {
-    return { ok: false, error: "log_type must be one of summary, decision, error, review." };
-  }
-
-  if (typeof candidate.content !== "string" || candidate.content.trim().length === 0) {
-    return { ok: false, error: "content must not be empty." };
-  }
-
-  return {
-    ok: true,
-    value: {
-      task_id: candidate.task_id ?? null,
-      agent_id: candidate.agent_id ?? null,
-      log_type: candidate.log_type as WorkLogBody["log_type"],
-      content: candidate.content.trim(),
-    },
-  };
-}
 
 function validateArchitectReviewBody(body: unknown): ArchitectReviewValidationResult {
   if (!body || typeof body !== "object") {
@@ -1474,54 +1416,6 @@ function summarizeEventDescription(value: string) {
   return clean.length > 180 ? `${clean.slice(0, 180)}...` : clean;
 }
 
-function validateCommandBody(body: unknown): CommandValidationResult {
-  if (!body || typeof body !== "object") {
-    return { ok: false, error: "Request body must be a JSON object." };
-  }
-
-  const candidate = body as Record<string, unknown>;
-
-  if (typeof candidate.command !== "string" || candidate.command.trim().length === 0) {
-    return { ok: false, error: "command must not be empty." };
-  }
-
-  if (
-    candidate.command_type !== null &&
-    candidate.command_type !== undefined &&
-    typeof candidate.command_type !== "string"
-  ) {
-    return { ok: false, error: "command_type must be a string or null." };
-  }
-
-  if (
-    candidate.status !== undefined &&
-    (typeof candidate.status !== "string" || !commandStatuses.has(candidate.status))
-  ) {
-    return { ok: false, error: "status must be one of pending, running, succeeded, failed." };
-  }
-
-  if (candidate.result !== null && candidate.result !== undefined && typeof candidate.result !== "string") {
-    return { ok: false, error: "result must be a string or null." };
-  }
-
-  const requestedStatus = typeof candidate.status === "string" ? candidate.status : "pending";
-  const status = requestedStatus === "succeeded" ? "succeeded" : "pending";
-
-  return {
-    ok: true,
-    value: {
-      command: candidate.command.trim(),
-      command_type: candidate.command_type ?? null,
-      status,
-      result:
-        candidate.result ??
-        (status === "succeeded"
-          ? "Command intent recorded as succeeded. Real execution is not enabled yet."
-          : "Command recorded as pending. Real execution is not enabled yet."),
-    },
-  };
-}
-
 function validateLocalActionBody(body: unknown): LocalActionValidationResult {
   if (!body || typeof body !== "object") {
     return { ok: false, error: "Request body must be a JSON object." };
@@ -1689,16 +1583,55 @@ function jsonProxyRequest(method: "POST" | "PATCH", body: unknown): RequestInit 
   };
 }
 
+async function readJavaSession(request: any) {
+  const baseUrl = process.env.ARCHIVEOS_AI_BASE_URL?.trim() || "http://localhost:4100";
+  const headers = new Headers();
+  const cookie = request?.header?.("cookie");
+  const integrationToken = request?.header?.("x-archiveos-integration-token");
+  if (cookie) headers.set("cookie", cookie);
+  if (integrationToken) headers.set("x-archiveos-integration-token", integrationToken);
+  const upstream = await fetch(`${baseUrl}/api/auth/session`, { headers });
+  if (!upstream.ok) throw new Error(`Session validation failed with ${upstream.status}.`);
+  const payload = await upstream.json() as { data?: Record<string, unknown> };
+  return payload.data ?? { role: "PUBLIC", authenticated: false };
+}
+
+async function recordCompatibilityAudit(request: any, path: string, status: number, correlationId: string) {
+  const baseUrl = process.env.ARCHIVEOS_AI_BASE_URL?.trim() || "http://localhost:4100";
+  const headers = new Headers({ "content-type": "application/json" });
+  const cookie = request?.header?.("cookie");
+  const integrationToken = request?.header?.("x-archiveos-integration-token");
+  if (cookie) headers.set("cookie", cookie);
+  if (integrationToken) headers.set("x-archiveos-integration-token", integrationToken);
+  await fetch(`${baseUrl}/api/audit/compatibility`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ method: request.method, path, status, correlationId, oldValue: null, newValue: request.body ?? null }),
+  }).catch(() => undefined);
+}
+
 async function relayArchiveOsAi(
   response: any,
   path: string,
   init?: RequestInit,
   onSuccess?: (payload: unknown) => void,
+  request?: any,
 ) {
   const baseUrl = process.env.ARCHIVEOS_AI_BASE_URL?.trim() || "http://localhost:4100";
   try {
-    const upstream = await fetch(`${baseUrl}${path}`, init);
+    const headers = new Headers(init?.headers);
+    const cookie = request?.header?.("cookie");
+    const correlationId = request?.header?.("x-correlation-id");
+    const integrationToken = request?.header?.("x-archiveos-integration-token");
+    if (cookie) headers.set("cookie", cookie);
+    if (correlationId) headers.set("x-correlation-id", correlationId);
+    if (integrationToken) headers.set("x-archiveos-integration-token", integrationToken);
+    const upstream = await fetch(`${baseUrl}${path}`, { ...init, headers });
     const payload = await upstream.json().catch(() => ({}));
+    const setCookie = upstream.headers.get("set-cookie");
+    if (setCookie) response.setHeader("set-cookie", setCookie);
+    const upstreamCorrelation = upstream.headers.get("x-correlation-id");
+    if (upstreamCorrelation) response.setHeader("x-correlation-id", upstreamCorrelation);
     if (upstream.ok) onSuccess?.(payload);
     response.status(upstream.status).json(payload);
   } catch (error) {

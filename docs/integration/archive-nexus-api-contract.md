@@ -20,6 +20,16 @@ http://localhost:4100
 
 Archive-Nexus should override `ARCHIVEOS_BASE_URL` when ArchiveOS runs on a different host or network.
 
+## Service-to-service authorization
+
+ArchiveOS rejects public CUD requests. Archive-Nexus must send the shared integration token for workflow creation, approval sync, and action result callbacks:
+
+```http
+X-ArchiveOS-Integration-Token: ${ARCHIVEOS_INTEGRATION_TOKEN}
+```
+
+The token is configured only through local `.env` / deployment environment variables and must not be committed.
+
 ## Health endpoint consumed by Archive-Nexus
 
 Archive-Nexus calls:
@@ -134,6 +144,36 @@ When `OPENAI_API_KEY` is missing, ArchiveOS Java runtime must remain running:
 - `chatModel.configured` and `embeddingModel.configured` are `false`.
 
 This is normal for local and review environments. It is not an outage unless the runtime becomes unreachable or the status moves to `DOWN` / `unavailable`.
+
+## Workflow and callback contract
+
+Archive-Nexus creates ArchiveOS workflow records through the compatibility API:
+
+```http
+POST {ARCHIVEOS_BASE_URL}/api/tasks
+PATCH {ARCHIVEOS_BASE_URL}/api/tasks/{workflowId}
+GET {ARCHIVEOS_BASE_URL}/api/tasks/{workflowId}
+POST {ARCHIVEOS_BASE_URL}/api/tasks/{workflowId}/callback
+GET {ARCHIVEOS_BASE_URL}/api/tasks/{workflowId}/events
+```
+
+The create request carries `metadata.source=archive-nexus`, `metadata.source_task_id`, `metadata.correlation_id`, and `metadata.requested_by`. ArchiveOS preserves that metadata in `pm_tasks.metadata` and upserts `workflow_contracts` with:
+
+- `correlationId`
+- `projectId`
+- `workflow`
+- `execution`
+- `approval`
+- `evidence`
+- `result`
+
+Contract reads are available at:
+
+```http
+GET {ARCHIVEOS_BASE_URL}/api/contracts/workflow/schema
+GET {ARCHIVEOS_BASE_URL}/api/contracts/workflow
+GET {ARCHIVEOS_BASE_URL}/api/contracts/workflow/{correlationId}
+```
 
 ## Current migration boundary
 

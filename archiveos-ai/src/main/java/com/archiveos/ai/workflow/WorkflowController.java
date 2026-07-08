@@ -73,6 +73,20 @@ public class WorkflowController {
         catch (DataAccessException error) { return ResponseEntity.badRequest().body(Map.of("error", error.getMessage())); }
     }
 
+    @PostMapping("/tasks/{id}/callback")
+    public ResponseEntity<Map<String, Object>> callback(@PathVariable UUID id, @RequestBody(required = false) JsonNode body) {
+        try { return ResponseEntity.ok(Map.of("data", service.callback(id, body))); }
+        catch (WorkflowValidationException error) { return badRequest(error); }
+        catch (DataAccessException error) { return ResponseEntity.badRequest().body(Map.of("error", error.getMessage())); }
+    }
+
+    @GetMapping("/tasks/{id}/events")
+    public ResponseEntity<Map<String, Object>> events(@PathVariable UUID id) {
+        try { return ResponseEntity.ok(Map.of("data", service.events(id))); }
+        catch (WorkflowValidationException error) { return badRequest(error); }
+        catch (DataAccessException error) { return ResponseEntity.badRequest().body(Map.of("error", error.getMessage())); }
+    }
+
     @GetMapping("/queue/summary")
     public Map<String, Object> summary() {
         try { return Map.of("data", service.summary()); }

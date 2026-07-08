@@ -168,6 +168,8 @@ public class BatchJobService {
         return switch (jobName) {
             case ArchiveBatchConfiguration.OBSIDIAN_SYNC_JOB -> "Obsidian Markdown 문서를 chunking, embedding, pgvector 저장까지 동기화한다.";
             case ArchiveBatchConfiguration.RAG_HEALTH_CHECK_JOB -> "유료 모델 호출 없이 Spring AI, pgvector, RAG 준비 상태를 관측한다.";
+            case ArchiveBatchConfiguration.PIPELINE_AUDIT_JOB -> "Audit Log와 실패 응답을 집계해 Runtime Pipeline의 운영 증거를 남긴다.";
+            case ArchiveBatchConfiguration.KNOWLEDGE_MAINTENANCE_JOB -> "Knowledge 문서, chunk, embedding, graph 저장소의 정합성과 준비 상태를 점검한다.";
             case RpaBatchConfiguration.JOB_NAME -> "PM 작업 설명을 rule-based RPA 분류와 승인 게이트로 전환한다.";
             default -> "ArchiveOS Spring Batch job.";
         };

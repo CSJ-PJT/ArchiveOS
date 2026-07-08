@@ -4,6 +4,7 @@ import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { useTheme, type ThemeMode } from "../theme/ThemeProvider";
 import { formatTimeAgo, stringifyMeta } from "./pageUtils";
+import { loginAdmin, logoutAdmin, type PlatformRole } from "../lib/backendApi";
 
 const sections = [
   "Appearance",
@@ -30,6 +31,36 @@ export function SettingsPage({
 }) {
   const [open, setOpen] = useState<string>("Appearance");
   const { theme, setTheme } = useTheme();
+  const [password, setPassword] = useState("");
+  const [requestedRole, setRequestedRole] = useState<Exclude<PlatformRole, "PUBLIC">>("ADMIN");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+
+  async function login() {
+    setAuthBusy(true); setAuthError(null);
+    try { await loginAdmin(password, requestedRole); setPassword(""); await onRefresh(); }
+    catch (error) { setAuthError(error instanceof Error ? error.message : String(error)); }
+    finally { setAuthBusy(false); }
+  }
+
+  async function logout() {
+    setAuthBusy(true);
+    try { await logoutAdmin(); await onRefresh(); }
+    finally { setAuthBusy(false); }
+  }
+
+  if (data.auth.role === "PUBLIC") {
+    return <div className="page-stack"><SectionCard title="Operator Sign In" eyebrow="Settings are not available to Public sessions">
+      <div className="decision-panel">
+        <select value={requestedRole} onChange={(event) => setRequestedRole(event.target.value as Exclude<PlatformRole, "PUBLIC">)}>
+          <option value="OPERATOR">Operator</option><option value="PM">PM</option><option value="ADMIN">Admin</option>
+        </select>
+        <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="ARCHIVEOS_ADMIN_PASSWORD" />
+        {authError ? <div className="empty-state error-state">{authError}</div> : null}
+        <button className="button button-primary" type="button" onClick={login} disabled={authBusy || !password}>{authBusy ? "Signing in..." : "Sign in"}</button>
+      </div>
+    </SectionCard></div>;
+  }
 
   return (
     <div className="page-stack">
@@ -38,6 +69,7 @@ export function SettingsPage({
         eyebrow="Runtime and integration diagnostics"
         action={<button className="button button-secondary" type="button" onClick={onRefresh}>Refresh</button>}
       >
+        <div className="box-row"><strong>{data.auth.role}</strong><span>{data.auth.actor}</span><button className="button button-secondary" type="button" onClick={logout} disabled={authBusy}>Logout</button></div>
         <div className="settings-list">
           <SettingsRow title="Appearance" status={theme} open={open === "Appearance"} onToggle={() => setOpen(open === "Appearance" ? "" : "Appearance")}>
             <div className="theme-grid">

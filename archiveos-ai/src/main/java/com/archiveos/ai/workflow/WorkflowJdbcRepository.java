@@ -37,10 +37,11 @@ public class WorkflowJdbcRepository {
     public WorkflowTaskRecord create(CreateWorkflowTaskRequest request, int maxIterations) {
         return jdbc.queryForObject("""
                 insert into public.pm_tasks(title, description, priority, target_project, scope_files, max_iterations, cost_budget, status, metadata)
-                values (?, ?, ?, ?, string_to_array(?, E'\\n'), ?, ?, 'queued', '{"source":"pm_queue"}'::jsonb)
+                values (?, ?, ?, ?, string_to_array(?, E'\\n'), ?, ?, 'queued', ?::jsonb)
                 returning *
                 """, this::mapTask, request.title(), request.description(), request.priority(), request.targetProject(),
-                request.scopeFiles() == null ? null : String.join("\n", request.scopeFiles()), maxIterations, request.costBudget());
+                request.scopeFiles() == null ? null : String.join("\n", request.scopeFiles()), maxIterations, request.costBudget(),
+                Json.write(request.metadata() == null ? Map.of("source", "pm_queue") : request.metadata()));
     }
 
     public WorkflowTaskRecord update(UUID id, Map<String, Object> changes) {
@@ -78,6 +79,71 @@ public class WorkflowJdbcRepository {
                 """, taskId, eventType, title, description, source, Json.write(metadata));
     }
 
+    public void upsertContract(WorkflowTaskRecord task, Map<String, Object> execution, Map<String, Object> approval,
+                               Object evidence, Map<String, Object> result) {
+        String correlationId = text(task.metadata(), "correlation_id", task.id().toString());
+        String projectId = text(task.metadata(), "project_id", task.targetProject());
+        Map<String, Object> workflow = new LinkedHashMap<>();
+        workflow.put("id", task.id().toString());
+        workflow.put("type", "pm_task");
+        workflow.put("name", task.title());
+        workflow.put("version", "1.0.0");
+        workflow.put("status", task.status());
+        jdbc.update("""
+                insert into public.workflow_contracts(correlation_id, project_id, workflow, execution, approval, evidence, result)
+                values (?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb)
+                on conflict (correlation_id, project_id) do update set
+                    workflow = excluded.workflow,
+                    execution = coalesce(excluded.execution, workflow_contracts.execution),
+                    approval = coalesce(excluded.approval, workflow_contracts.approval),
+                    evidence = excluded.evidence,
+                    result = coalesce(excluded.result, workflow_contracts.result),
+                    updated_at = now()
+                """, correlationId, projectId, Json.write(workflow), jsonOrNull(execution), jsonOrNull(approval),
+                Json.write(evidence == null ? List.of() : evidence), jsonOrNull(result));
+    }
+
+    public WorkflowTaskRecord applyCallback(UUID id, String status, Map<String, Object> metadata) {
+        return jdbc.queryForObject("""
+                update public.pm_tasks
+                   set status = ?,
+                       completed_at = now(),
+                       updated_at = now(),
+                       metadata = metadata || ?::jsonb
+                 where id = ?
+                 returning *
+                """, this::mapTask, status, Json.write(metadata), id);
+    }
+
+    public List<Map<String, Object>> events(UUID taskId) {
+        return jdbc.queryForList("""
+                select id, task_id, event_type, title, description, source, metadata, created_at
+                  from public.pm_task_events
+                 where task_id = ?
+                 order by created_at asc
+                """, taskId);
+    }
+
+    public List<Map<String, Object>> contracts(int limit) {
+        return jdbc.queryForList("""
+                select id, correlation_id, project_id, workflow, execution, approval, evidence, result, created_at, updated_at
+                  from public.workflow_contracts
+                 order by updated_at desc
+                 limit ?
+                """, Math.max(1, Math.min(limit, 100)));
+    }
+
+    public Map<String, Object> contract(String correlationId) {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                select id, correlation_id, project_id, workflow, execution, approval, evidence, result, created_at, updated_at
+                  from public.workflow_contracts
+                 where correlation_id = ?
+                 order by updated_at desc
+                 limit 1
+                """, correlationId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
     public Map<String, Object> summary() {
         List<WorkflowTaskRecord> tasks = list();
         String today = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
@@ -100,6 +166,11 @@ public class WorkflowJdbcRepository {
     private long count(List<WorkflowTaskRecord> tasks, String status) { return tasks.stream().filter(task -> status.equals(task.status())).count(); }
     private boolean startsOn(Instant value, String day) { return value != null && value.toString().startsWith(day); }
     private int priorityWeight(String priority) { return "high".equals(priority) ? 0 : "medium".equals(priority) ? 1 : 2; }
+    private String jsonOrNull(Map<String, Object> value) { return value == null ? null : Json.write(value); }
+    private String text(Map<String, Object> metadata, String key, String fallback) {
+        Object value = metadata == null ? null : metadata.get(key);
+        return value instanceof String text && !text.isBlank() ? text : fallback;
+    }
 
     private WorkflowTaskRecord mapTask(ResultSet rs, int row) throws SQLException {
         Array array = rs.getArray("scope_files");
