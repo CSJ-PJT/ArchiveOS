@@ -3,8 +3,9 @@ import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { getSpringBatchExecution, getSpringBatchExecutions, getSpringBatchJobs, runSpringBatchJob, type SpringBatchExecution, type SpringBatchJob } from "../lib/backendApi";
 import { formatTimeAgo, stringifyMeta } from "./pageUtils";
+import type { PlatformRole } from "../lib/backendApi";
 
-export function BatchPage() {
+export function BatchPage({ role }: { role: PlatformRole }) {
   const [jobs, setJobs] = useState<SpringBatchJob[]>([]);
   const [executions, setExecutions] = useState<SpringBatchExecution[]>([]);
   const [selected, setSelected] = useState<SpringBatchExecution | null>(null);
@@ -39,7 +40,7 @@ export function BatchPage() {
           <article className="batch-job-card" key={job.name}>
             <div className="batch-job-header"><div><strong>{job.name}</strong><p>{job.description}</p></div><StatusBadge status={job.manualRunAllowed ? "healthy" : "waiting"}>{job.manualRunAllowed ? "Ready" : "Dedicated flow"}</StatusBadge></div>
             <div className="batch-job-meta"><span>{job.recentExecutions.length} recent runs</span><span>{job.launchable ? "Launchable" : "Read only"}</span></div>
-            <button className="button button-primary" type="button" disabled={!job.manualRunAllowed || busy === job.name} onClick={() => run(job.name)}>{busy === job.name ? "Running…" : "Run job"}</button>
+            <button className="button button-primary" type="button" disabled={!job.manualRunAllowed || busy === job.name || role !== "ADMIN"} onClick={() => run(job.name)}>{busy === job.name ? "Running…" : role === "ADMIN" ? "Run job" : "Admin required"}</button>
           </article>
         ))}
         {!jobs.length && !error ? <div className="empty-state">Waiting for the Spring Batch catalog.</div> : null}

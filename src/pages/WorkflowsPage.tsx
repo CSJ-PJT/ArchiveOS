@@ -34,6 +34,7 @@ export function WorkflowsPage({ data, onRefresh }: { data: AppData; onRefresh: (
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const canDecide = data.auth.role === "PM" || data.auth.role === "ADMIN";
 
   const filteredTasks = useMemo(() => data.tasks.filter((task) => matchesFilter(task, filter)), [data.tasks, filter]);
   const selectedTask = data.tasks.find((task) => task.id === selectedId) || filteredTasks[0] || null;
@@ -113,6 +114,7 @@ export function WorkflowsPage({ data, onRefresh }: { data: AppData; onRefresh: (
               setReason={setReason}
               busyAction={busyAction}
               onDecision={applyDecision}
+              canDecide={canDecide}
             />
           ) : (
             <div className="empty-state">Select a workflow to inspect its chain and PM decision state.</div>
@@ -130,12 +132,14 @@ function WorkflowDetail({
   setReason,
   busyAction,
   onDecision,
+  canDecide,
 }: {
   task: PmTask;
   reason: string;
   setReason: (value: string) => void;
   busyAction: string | null;
   onDecision: (action: PmDecisionAction) => void;
+  canDecide: boolean;
 }) {
   const flow: Array<[string, PmTaskStatus[]]> = [
     ["Queue", ["queued"]],
@@ -192,9 +196,10 @@ function WorkflowDetail({
           deployment, or process control.
         </p>
         <textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Decision reason or retry note" />
+        {!canDecide ? <p>PM or Admin session is required for approval, rejection, hold, and retry.</p> : null}
         <div className="button-row">
           {(["approve", "reject", "hold", "retry"] as PmDecisionAction[]).map((action) => (
-            <button className={`button ${action === "approve" ? "button-primary" : "button-secondary"}`} key={action} type="button" onClick={() => onDecision(action)} disabled={Boolean(busyAction)}>
+            <button className={`button ${action === "approve" ? "button-primary" : "button-secondary"}`} key={action} type="button" onClick={() => onDecision(action)} disabled={Boolean(busyAction) || !canDecide}>
               {busyAction === action ? "Recording..." : action}
             </button>
           ))}

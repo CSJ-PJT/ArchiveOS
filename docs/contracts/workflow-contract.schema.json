@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://archiveos.local/contracts/workflow-contract-1.0.0.schema.json",
+  "title": "ArchiveOS Workflow Contract",
+  "type": "object",
+  "required": ["workflow", "execution", "approval", "evidence", "result", "correlationId", "projectId"],
+  "properties": {
+    "correlationId": { "type": "string", "minLength": 1 },
+    "projectId": { "type": "string", "minLength": 1 },
+    "workflow": { "$ref": "#/$defs/state" },
+    "execution": { "anyOf": [{ "$ref": "#/$defs/state" }, { "type": "null" }] },
+    "approval": { "anyOf": [{ "$ref": "#/$defs/state" }, { "type": "null" }] },
+    "evidence": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+    "result": { "anyOf": [{ "$ref": "#/$defs/state" }, { "type": "null" }] }
+  },
+  "$defs": {
+    "state": { "type": "object", "required": ["status"], "properties": { "status": { "type": "string", "minLength": 1 } }, "additionalProperties": true }
+  },
+  "additionalProperties": false
+}

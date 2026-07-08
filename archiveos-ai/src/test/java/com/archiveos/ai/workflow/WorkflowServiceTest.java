@@ -35,8 +35,48 @@ class WorkflowServiceTest {
         assertThat(request.getValue().description()).isEqualTo("Keep the API stable");
         assertThat(request.getValue().priority()).isEqualTo("medium");
         assertThat(request.getValue().targetProject()).isEqualTo("DeepStake3D");
+        assertThat(request.getValue().metadata()).containsEntry("source", "pm_queue");
         verify(repository).recordEvent(eq(created.id()), eq("task_created"), eq("Task queued"), any(), eq("queue"), any());
         assertThat(result).isSameAs(created);
+    }
+
+    @Test void createPreservesNexusContractMetadata() throws Exception {
+        WorkflowJdbcRepository repository = mock(WorkflowJdbcRepository.class);
+        WorkflowService service = new WorkflowService(repository);
+        when(repository.create(any(), eq(3))).thenReturn(task("queued", 0, 3));
+
+        service.create(json.readTree("""
+                {"title":"Nexus action","description":"Manufacturing decision","target_project":"Archive-Nexus","max_iterations":3,
+                 "metadata":{"source":"archive-nexus","source_task_id":"TASK-1","correlation_id":"CORR-1","requested_by":"operator"}}
+                """));
+
+        ArgumentCaptor<CreateWorkflowTaskRequest> request = ArgumentCaptor.forClass(CreateWorkflowTaskRequest.class);
+        verify(repository).create(request.capture(), eq(3));
+        assertThat(request.getValue().targetProject()).isEqualTo("Archive-Nexus");
+        assertThat(request.getValue().metadata())
+                .containsEntry("source", "archive-nexus")
+                .containsEntry("source_task_id", "TASK-1")
+                .containsEntry("correlation_id", "CORR-1");
+    }
+
+    @Test void callbackMarksTaskDoneAndRecordsEvent() throws Exception {
+        WorkflowJdbcRepository repository = mock(WorkflowJdbcRepository.class);
+        WorkflowService service = new WorkflowService(repository);
+        UUID id = UUID.randomUUID();
+        when(repository.find(id)).thenReturn(task(id, "approved", 1, 2));
+        when(repository.applyCallback(eq(id), eq("done"), any())).thenReturn(task(id, "done", 1, 2));
+
+        Map<String, Object> response = service.callback(id, json.readTree("""
+                {"status":"success","summary":"Action completed","correlationId":"CORR-1","sourceTaskId":"TASK-1","confidence":0.91}
+                """));
+
+        assertThat(response).containsEntry("previousStatus", "approved");
+        @SuppressWarnings("unchecked") ArgumentCaptor<Map<String, Object>> metadata = ArgumentCaptor.forClass(Map.class);
+        verify(repository).applyCallback(eq(id), eq("done"), metadata.capture());
+        assertThat(metadata.getValue()).containsEntry("callback_status", "success")
+                .containsEntry("correlation_id", "CORR-1")
+                .containsEntry("source_task_id", "TASK-1");
+        verify(repository).recordEvent(eq(id), eq("nexus_action_callback"), any(), eq("Action completed"), eq("queue"), any());
     }
 
     @Test void patchPreservesExplicitNullAndClampsIterations() throws Exception {

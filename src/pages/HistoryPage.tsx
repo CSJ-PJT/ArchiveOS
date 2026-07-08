@@ -4,12 +4,12 @@ import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { formatTimeAgo } from "./pageUtils";
 
-type HistoryFilter = "events" | "commands" | "agent runs" | "decisions" | "errors" | "kpi";
+type HistoryFilter = "runtime timeline" | "events" | "commands" | "agent runs" | "decisions" | "errors" | "kpi";
 
-const filters: HistoryFilter[] = ["events", "commands", "agent runs", "decisions", "errors", "kpi"];
+const filters: HistoryFilter[] = ["runtime timeline", "events", "commands", "agent runs", "decisions", "errors", "kpi"];
 
 export function HistoryPage({ data }: { data: AppData }) {
-  const [filter, setFilter] = useState<HistoryFilter>("events");
+  const [filter, setFilter] = useState<HistoryFilter>("runtime timeline");
   const decisionLogs = data.dashboard?.decisions || [];
   const errorEvents = useMemo(() => data.events.filter((event) => event.status === "error" || event.type === "warning"), [data.events]);
 
@@ -22,6 +22,19 @@ export function HistoryPage({ data }: { data: AppData }) {
           </button>
         ))}
       </div>
+
+      {filter === "runtime timeline" ? (
+        <SectionCard title="Runtime Timeline" eyebrow="Task · Workflow · Approval · Knowledge · Slack · Agent · Batch">
+          <TimelineRows rows={data.timeline.map((event) => ({
+            id: event.id,
+            time: event.occurred_at,
+            type: event.event_type,
+            status: event.status,
+            target: event.source,
+            summary: `${event.title}${event.summary ? ` - ${event.summary}` : ""}${event.correlation_id ? ` · ${event.correlation_id}` : ""}`,
+          }))} />
+        </SectionCard>
+      ) : null}
 
       {filter === "events" ? (
         <SectionCard title="Timeline" eyebrow="Operational history">

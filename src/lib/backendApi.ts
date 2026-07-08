@@ -17,6 +17,69 @@ type ApiEnvelope<T> = {
   data: T;
 };
 
+export type PlatformRole = "PUBLIC" | "OPERATOR" | "PM" | "ADMIN";
+export type AuthSession = {
+  actor: string;
+  role: PlatformRole;
+  authenticated: boolean;
+  createdAt?: string;
+  expiresAt?: string;
+};
+
+export type McpRegistryEntry = {
+  id: string;
+  tool: string;
+  provider: string;
+  capability: string;
+  permission: string;
+  approval_required: boolean;
+  health: string;
+  last_run: string | null;
+  enabled: boolean;
+};
+
+export type RuntimeTimelineEntry = {
+  id: string;
+  occurred_at: string;
+  event_type: "task" | "workflow" | "approval" | "knowledge" | "slack_notification" | "agent" | "batch";
+  status: string;
+  title: string;
+  summary: string | null;
+  correlation_id: string | null;
+  project_id: string | null;
+  source: string;
+  reference_id: string | null;
+};
+
+export async function getAuthSession() {
+  const response = await request<ApiEnvelope<AuthSession>>("/api/auth/session");
+  return response.data;
+}
+
+export async function loginAdmin(password: string, role: Exclude<PlatformRole, "PUBLIC"> = "ADMIN") {
+  const response = await request<ApiEnvelope<AuthSession>>("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password, role }),
+  });
+  return response.data;
+}
+
+export async function logoutAdmin() {
+  const response = await request<ApiEnvelope<{ loggedOut: boolean }>>("/api/auth/logout", { method: "POST" });
+  return response.data;
+}
+
+export async function getMcpRegistry() {
+  const response = await request<ApiEnvelope<McpRegistryEntry[]>>("/api/mcp/registry");
+  return response.data;
+}
+
+export async function getRuntimeTimeline(limit = 100) {
+  const response = await request<ApiEnvelope<RuntimeTimelineEntry[]>>(`/api/runtime/timeline?limit=${limit}`);
+  return response.data;
+}
+
 export type DashboardData = {
   agents: Agent[];
   tasks: Task[];
@@ -1010,7 +1073,7 @@ export async function getKpiOverview(range: KpiRange = "7d") {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${backendUrl}${path}`, init);
+    response = await fetch(`${backendUrl}${path}`, { credentials: "include", ...init });
   } catch {
     throw new Error(
       `Backend is unreachable at ${backendUrl}. Start the ArchiveOS backend and refresh the dashboard.`,

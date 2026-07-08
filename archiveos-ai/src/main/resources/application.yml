@@ -57,3 +57,10 @@ archiveos:
     enabled: ${ARCHIVEOS_SCHEDULER_ENABLED:false}
     nightly-cron: ${ARCHIVEOS_NIGHTLY_CRON:0 50 23 * * *}
     daily-cron: ${ARCHIVEOS_DAILY_CRON:0 0 9 * * *}
+  security:
+    admin-password: ${ARCHIVEOS_ADMIN_PASSWORD:}
+    integration-token: ${ARCHIVEOS_INTEGRATION_TOKEN:}
+    session-timeout-minutes: ${ARCHIVEOS_SESSION_TIMEOUT_MINUTES:30}
+    max-login-attempts: ${ARCHIVEOS_LOGIN_MAX_ATTEMPTS:5}
+    lockout-minutes: ${ARCHIVEOS_LOGIN_LOCKOUT_MINUTES:15}
+    secure-cookie: ${ARCHIVEOS_SECURE_COOKIE:false}

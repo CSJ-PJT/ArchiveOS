@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   configuredBackendUrl,
   getAxReadiness,
+  getAuthSession,
   getAiRuntime,
   getDashboardData,
   getEndpointHealth,
@@ -21,6 +22,9 @@ import {
   getRuntimeVersion,
   getSecurityStatus,
   getKpiOverview,
+  getMcpRegistry,
+  getRuntimeTimeline,
+  type AuthSession,
   type ArchitectureReview,
   type AxReadiness,
   type AiRuntime,
@@ -38,6 +42,8 @@ import {
   type RuntimeEvent,
   type RuntimeVersion,
   type SecurityStatus,
+  type McpRegistryEntry,
+  type RuntimeTimelineEntry,
 } from "../lib/backendApi";
 import type { CommandRun, DailyReport, PmTask } from "../types/database";
 import { navigationItems, type AppRoute } from "./navigation";
@@ -49,6 +55,7 @@ import { SettingsPage } from "../pages/SettingsPage";
 import { AgentsPage } from "../pages/AgentsPage";
 import { BatchPage } from "../pages/BatchPage";
 import { RpaPage } from "../pages/RpaPage";
+import { McpRegistryPage } from "../pages/McpRegistryPage";
 import { Icon } from "../components/shared/Icon";
 import { Sidebar } from "../components/shared/Sidebar";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -77,6 +84,9 @@ export type AppData = {
   aiRuntime: AiRuntime | null;
   latestBatch: LatestBatchStatus | null;
   dailyReport: DailyReport | null;
+  auth: AuthSession;
+  mcpRegistry: McpRegistryEntry[];
+  timeline: RuntimeTimelineEntry[];
 };
 
 const emptyData: AppData = {
@@ -103,6 +113,9 @@ const emptyData: AppData = {
   aiRuntime: null,
   latestBatch: null,
   dailyReport: null,
+  auth: { actor: "anonymous", role: "PUBLIC", authenticated: false },
+  mcpRegistry: [],
+  timeline: [],
 };
 
 async function settle<T>(key: string, fn: () => Promise<T>) {
@@ -120,7 +133,11 @@ function AppShellInner() {
 
   const refresh = useCallback(async () => {
     setData((current) => ({ ...current, loading: true }));
-    const results = await Promise.all([
+    const authResult = await settle("auth", getAuthSession);
+    const role = authResult.value?.role ?? "PUBLIC";
+    const operatorAccess = role !== "PUBLIC";
+    const adminAccess = role === "ADMIN";
+    const results = [authResult, ...(await Promise.all([
       settle("dashboard", getDashboardData),
       settle("runtime", getLocalRuntimeStatus),
       settle("queue", getQueueSummary),
@@ -133,15 +150,17 @@ function AppShellInner() {
       settle("kpi", () => getKpiOverview("7d")),
       settle("endpointHealth", getEndpointHealth),
       settle("platformReadiness", getPlatformReadiness),
-      settle("publicAccess", getPublicAccessStatus),
+      adminAccess ? settle("publicAccess", getPublicAccessStatus) : Promise.resolve({ key: "publicAccess", value: null, error: null }),
       settle("runtimeVersion", getRuntimeVersion),
-      settle("security", getSecurityStatus),
+      adminAccess ? settle("security", getSecurityStatus) : Promise.resolve({ key: "security", value: null, error: null }),
       settle("architect", getLatestArchitectureReview),
       settle("axReadiness", getAxReadiness),
       settle("aiRuntime", getAiRuntime),
       settle("latestBatch", getLatestBatchStatus),
       settle("dailyReport", getLatestDailyReport),
-    ]);
+      operatorAccess ? settle("mcpRegistry", getMcpRegistry) : Promise.resolve({ key: "mcpRegistry", value: [], error: null }),
+      operatorAccess ? settle("timeline", () => getRuntimeTimeline(100)) : Promise.resolve({ key: "timeline", value: [], error: null }),
+    ]))];
 
     const next: AppData = { ...emptyData, loading: false, refreshedAt: new Date().toISOString(), errors: {} };
     for (const result of results) {
@@ -172,14 +191,15 @@ function AppShellInner() {
     workflows: <WorkflowsPage data={data} onRefresh={refresh} />,
     knowledge: <KnowledgePage data={data} />,
     history: <HistoryPage data={data} />,
-    batch: <BatchPage />,
+    batch: <BatchPage role={data.auth.role} />,
     rpa: <RpaPage />,
+    mcp: <McpRegistryPage data={data} />,
     settings: <SettingsPage data={data} onRefresh={refresh} backendOrigin={configuredBackendUrl} />,
   }[route];
 
   return (
     <div className="app-shell">
-      <Sidebar route={route} open={sidebarOpen} onNavigate={(nextRoute) => { setRoute(nextRoute); setSidebarOpen(false); }} health={healthTone} loading={data.loading} branch={data.runtimeVersion?.branch} commitSha={data.runtimeVersion?.commitSha} />
+      <Sidebar route={route} open={sidebarOpen} onNavigate={(nextRoute) => { setRoute(nextRoute); setSidebarOpen(false); }} health={healthTone} loading={data.loading} branch={data.runtimeVersion?.branch} commitSha={data.runtimeVersion?.commitSha} role={data.auth.role} />
       {sidebarOpen ? <button className="sidebar-scrim" type="button" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} /> : null}
 
       <div className="content-shell">

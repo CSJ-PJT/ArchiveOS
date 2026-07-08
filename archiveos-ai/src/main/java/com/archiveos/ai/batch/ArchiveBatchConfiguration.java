@@ -1,5 +1,6 @@
 package com.archiveos.ai.batch;
 
+import com.archiveos.ai.audit.AuditLogService;
 import com.archiveos.ai.obsidian.ObsidianRagService;
 import com.archiveos.ai.obsidian.ObsidianSyncResult;
 import com.archiveos.ai.runtime.AiRuntimeService;
@@ -12,12 +13,15 @@ import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration
 public class ArchiveBatchConfiguration {
     public static final String OBSIDIAN_SYNC_JOB = "obsidianSyncJob";
     public static final String RAG_HEALTH_CHECK_JOB = "ragHealthCheckJob";
+    public static final String PIPELINE_AUDIT_JOB = "pipelineAuditJob";
+    public static final String KNOWLEDGE_MAINTENANCE_JOB = "knowledgeMaintenanceJob";
 
     @Bean
     public Job obsidianSyncJob(JobRepository jobRepository, Step obsidianSyncStep) {
@@ -82,5 +86,47 @@ public class ArchiveBatchConfiguration {
                     return RepeatStatus.FINISHED;
                 }, transactionManager)
                 .build();
+    }
+
+    @Bean
+    public Job pipelineAuditJob(JobRepository jobRepository, Step pipelineAuditStep) {
+        return new JobBuilder(PIPELINE_AUDIT_JOB, jobRepository).start(pipelineAuditStep).build();
+    }
+
+    @Bean
+    public Step pipelineAuditStep(JobRepository jobRepository, PlatformTransactionManager transactionManager,
+                                  AuditLogService auditLogService) {
+        return new StepBuilder("auditRuntimePipeline", jobRepository)
+                .tasklet((contribution, chunkContext) -> {
+                    Map<String, Object> summary = auditLogService.summary();
+                    contribution.getStepExecution().getExecutionContext().putString("summary", String.valueOf(summary));
+                    contribution.getStepExecution().getExecutionContext().putInt("auditTotal", ((Number) summary.get("total")).intValue());
+                    contribution.getStepExecution().getExecutionContext().putInt("failedRequests", ((Number) summary.get("failed")).intValue());
+                    return RepeatStatus.FINISHED;
+                }, transactionManager).build();
+    }
+
+    @Bean
+    public Job knowledgeMaintenanceJob(JobRepository jobRepository, Step knowledgeMaintenanceStep) {
+        return new JobBuilder(KNOWLEDGE_MAINTENANCE_JOB, jobRepository).start(knowledgeMaintenanceStep).build();
+    }
+
+    @Bean
+    public Step knowledgeMaintenanceStep(JobRepository jobRepository, PlatformTransactionManager transactionManager,
+                                         JdbcTemplate jdbc) {
+        return new StepBuilder("inspectKnowledgeStorage", jobRepository)
+                .tasklet((contribution, chunkContext) -> {
+                    Integer documents = jdbc.queryForObject("select count(*) from public.obsidian_documents", Integer.class);
+                    Integer chunks = jdbc.queryForObject("select count(*) from public.obsidian_chunks", Integer.class);
+                    Integer embeddings = jdbc.queryForObject("select count(*) from public.obsidian_chunks where embedding is not null", Integer.class);
+                    Integer nodes = jdbc.queryForObject("select count(*) from public.knowledge_nodes", Integer.class);
+                    var context = contribution.getStepExecution().getExecutionContext();
+                    context.putInt("documents", documents == null ? 0 : documents);
+                    context.putInt("chunks", chunks == null ? 0 : chunks);
+                    context.putInt("embeddings", embeddings == null ? 0 : embeddings);
+                    context.putInt("nodes", nodes == null ? 0 : nodes);
+                    context.putString("summary", "documents=" + documents + " chunks=" + chunks + " embeddings=" + embeddings + " nodes=" + nodes);
+                    return RepeatStatus.FINISHED;
+                }, transactionManager).build();
     }
 }
