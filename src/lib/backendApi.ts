@@ -51,6 +51,91 @@ export type RuntimeTimelineEntry = {
   reference_id: string | null;
 };
 
+export type AtlasManagedSystem = {
+  system_id: string;
+  name: string;
+  environment: string;
+  provider: string;
+  public_base_url: string;
+  role: string;
+  current_status: string;
+  reason: string | null;
+  updated_at?: string | null;
+};
+
+export type AtlasManagedService = {
+  service_id: string;
+  system_id: string;
+  name: string;
+  url_path: string;
+  healthcheck_url: string;
+  service_type: string;
+  criticality: "Critical" | "High" | "Medium" | string;
+  current_status: string;
+  repository: string;
+  note: string | null;
+  expected_status: number;
+  timeout_ms: number;
+  retry_count: number;
+  enabled: boolean;
+  updated_at?: string | null;
+};
+
+export type AtlasEnvironmentRequirement = {
+  id: string;
+  system_id: string;
+  service_id: string | null;
+  env_name: string;
+  required: boolean;
+  secret: boolean;
+  description: string | null;
+};
+
+export type AtlasHealthcheckResult = {
+  id: string;
+  service_id: string;
+  checked_at: string;
+  status: string;
+  http_status: number | null;
+  latency_ms: number | null;
+  expected_status: number;
+  error_message: string | null;
+  response_excerpt: string | null;
+};
+
+export type AtlasCodexWorkLog = {
+  id: string;
+  work_title: string;
+  target_system_id: string;
+  target_service_id: string | null;
+  repository: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  actor: string | null;
+  agent: string | null;
+  model: string | null;
+  reasoning_level: string | null;
+  task_summary: string | null;
+  changed_files: unknown[];
+  test_results: unknown[];
+  failure_reason: string | null;
+  next_actions: unknown[];
+  committed: boolean;
+  pushed: boolean;
+  deployed: boolean;
+  rollback_plan: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AtlasOverview = {
+  system: AtlasManagedSystem;
+  services: AtlasManagedService[];
+  environment_requirements: AtlasEnvironmentRequirement[];
+  recent_healthchecks: AtlasHealthcheckResult[];
+  recent_work_logs: AtlasCodexWorkLog[];
+};
+
 export async function getAuthSession() {
   const response = await request<ApiEnvelope<AuthSession>>("/api/auth/session");
   return response.data;
@@ -77,6 +162,34 @@ export async function getMcpRegistry() {
 
 export async function getRuntimeTimeline(limit = 100) {
   const response = await request<ApiEnvelope<RuntimeTimelineEntry[]>>(`/api/runtime/timeline?limit=${limit}`);
+  return response.data;
+}
+
+export async function getAtlasOverview() {
+  const response = await request<ApiEnvelope<AtlasOverview>>("/api/atlas/overview");
+  return response.data;
+}
+
+export async function getAtlasServices() {
+  const response = await request<ApiEnvelope<AtlasManagedService[]>>("/api/atlas/services");
+  return response.data;
+}
+
+export async function getAtlasHealthchecks(limit = 20) {
+  const response = await request<ApiEnvelope<AtlasHealthcheckResult[]>>(`/api/atlas/healthchecks/recent?limit=${limit}`);
+  return response.data;
+}
+
+export async function runAtlasHealthchecks() {
+  const response = await request<ApiEnvelope<{ system_status: string; reason: string; results: AtlasHealthcheckResult[] }>>(
+    "/api/atlas/healthchecks/run",
+    { method: "POST" },
+  );
+  return response.data;
+}
+
+export async function getAtlasWorkLogs(limit = 20) {
+  const response = await request<ApiEnvelope<AtlasCodexWorkLog[]>>(`/api/atlas/work-logs?limit=${limit}`);
   return response.data;
 }
 

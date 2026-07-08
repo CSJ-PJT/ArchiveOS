@@ -108,6 +108,12 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "PM Task Retry", method: "POST", path: "/api/tasks/:id/retry", service: "queue", description: "PM retry recording without execution." },
   { name: "PM Task Callback", method: "POST", path: "/api/tasks/:id/callback", service: "queue", description: "Archive-Nexus action result callback." },
   { name: "PM Task Events", method: "GET", path: "/api/tasks/:id/events", service: "queue", description: "Workflow event history." },
+  { name: "Atlas Overview", method: "GET", path: "/api/atlas/overview", service: "runtime", description: "Atlas managed-system dashboard data." },
+  { name: "Atlas Services", method: "GET", path: "/api/atlas/services", service: "runtime", description: "Atlas service registry." },
+  { name: "Atlas Healthcheck Results", method: "GET", path: "/api/atlas/healthchecks/recent", service: "runtime", description: "Recent Atlas healthcheck monitor results." },
+  { name: "Run Atlas Healthchecks", method: "POST", path: "/api/atlas/healthchecks/run", service: "runtime", description: "Read-only Atlas healthcheck collector." },
+  { name: "Atlas Codex Work Logs", method: "GET", path: "/api/atlas/work-logs", service: "runtime", description: "Atlas Codex work log records." },
+  { name: "Record Atlas Codex Work Log", method: "POST", path: "/api/atlas/work-logs", service: "runtime", description: "Manual Atlas Codex work log recorder." },
   { name: "Queue Summary", method: "GET", path: "/api/queue/summary", service: "queue", description: "Semi-auto queue summary." },
   { name: "Queue Run Once", method: "POST", path: "/api/queue/run-once", service: "queue", description: "State transition and instruction generation only." },
   { name: "Queue Nightly Summary", method: "POST", path: "/api/queue/nightly-summary", service: "queue", description: "Slack queue summary without execution." },
@@ -616,6 +622,32 @@ app.get("/api/contracts/workflow/:correlationId", async (request, response) => {
 app.get("/api/audit/logs", async (request, response) => {
   const limit = Number(request.query.limit ?? 50);
   await relayArchiveOsAi(response, `/api/audit/logs?limit=${encodeURIComponent(String(limit))}`, undefined, undefined, request);
+});
+
+app.get("/api/atlas/overview", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/atlas/overview", undefined, undefined, request);
+});
+
+app.get("/api/atlas/services", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/atlas/services", undefined, undefined, request);
+});
+
+app.get("/api/atlas/healthchecks/recent", async (request, response) => {
+  const limit = Number(request.query.limit ?? 20);
+  await relayArchiveOsAi(response, `/api/atlas/healthchecks/recent?limit=${encodeURIComponent(String(limit))}`, undefined, undefined, request);
+});
+
+app.post("/api/atlas/healthchecks/run", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/atlas/healthchecks/run", { method: "POST" }, undefined, request);
+});
+
+app.get("/api/atlas/work-logs", async (request, response) => {
+  const limit = Number(request.query.limit ?? 20);
+  await relayArchiveOsAi(response, `/api/atlas/work-logs?limit=${encodeURIComponent(String(limit))}`, undefined, undefined, request);
+});
+
+app.post("/api/atlas/work-logs", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/atlas/work-logs", jsonProxyRequest("POST", request.body), undefined, request);
 });
 
 app.get("/api/queue/summary", async (_request, response) => {
