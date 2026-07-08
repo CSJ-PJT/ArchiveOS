@@ -141,11 +141,11 @@ export async function getAuthSession() {
   return response.data;
 }
 
-export async function loginAdmin(password: string, role: Exclude<PlatformRole, "PUBLIC"> = "ADMIN") {
+export async function loginAdmin(password: string, role: Exclude<PlatformRole, "PUBLIC"> = "ADMIN", username = "admin") {
   const response = await request<ApiEnvelope<AuthSession>>("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password, role }),
+    body: JSON.stringify({ username, password, role }),
   });
   return response.data;
 }
@@ -190,6 +190,34 @@ export async function runAtlasHealthchecks() {
 
 export async function getAtlasWorkLogs(limit = 20) {
   const response = await request<ApiEnvelope<AtlasCodexWorkLog[]>>(`/api/atlas/work-logs?limit=${limit}`);
+  return response.data;
+}
+
+export type CreateAtlasWorkLogInput = {
+  workTitle: string;
+  targetServiceId?: string | null;
+  repository?: string | null;
+  actor?: string | null;
+  agent?: string | null;
+  model?: string | null;
+  reasoningLevel?: string | null;
+  taskSummary?: string | null;
+  changedFiles?: string[];
+  testResults?: string[];
+  failureReason?: string | null;
+  nextActions?: string[];
+  committed?: boolean;
+  pushed?: boolean;
+  deployed?: boolean;
+  rollbackPlan?: string | null;
+};
+
+export async function createAtlasWorkLog(input: CreateAtlasWorkLogInput) {
+  const response = await request<ApiEnvelope<AtlasCodexWorkLog>>("/api/atlas/work-logs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
   return response.data;
 }
 

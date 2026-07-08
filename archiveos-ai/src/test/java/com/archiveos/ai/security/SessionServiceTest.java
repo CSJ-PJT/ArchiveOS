@@ -38,6 +38,18 @@ class SessionServiceTest {
     }
 
     @Test
+    void acceptsOnlyAdminUsername() {
+        SessionService service = new SessionService(new SecurityProperties("test-password", "", 30, 5, 15, false));
+
+        PlatformSession session = service.login("127.0.0.1", "admin", "test-password", PlatformRole.ADMIN);
+
+        assertThat(session.actor()).isEqualTo("admin");
+        assertThatThrownBy(() -> service.login("127.0.0.1", "operator", "test-password", PlatformRole.ADMIN))
+                .isInstanceOf(SessionService.LoginRejectedException.class)
+                .hasMessage("Invalid credentials.");
+    }
+
+    @Test
     void rateLimitsRepeatedInvalidPasswords() {
         SessionService service = new SessionService(new SecurityProperties("test-password", "", 30, 2, 15, false));
         assertThatThrownBy(() -> service.login("127.0.0.1", "wrong-1", PlatformRole.ADMIN))

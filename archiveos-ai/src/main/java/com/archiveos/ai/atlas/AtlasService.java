@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +21,7 @@ public class AtlasService {
     private final AtlasRepository repository;
     private final HttpClient httpClient;
 
+    @Autowired
     public AtlasService(AtlasRepository repository) {
         this(repository, HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build());
     }
