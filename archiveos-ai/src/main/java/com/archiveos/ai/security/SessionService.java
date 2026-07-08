@@ -23,23 +23,28 @@ public class SessionService {
         this.passwordHash = properties.configured() ? normalizePasswordHash(properties.adminPassword()) : "";
     }
 
-    public PlatformSession login(String remoteAddress, String password, PlatformRole requestedRole) {
+    public PlatformSession login(String remoteAddress, String username, String password, PlatformRole requestedRole) {
         String key = remoteAddress == null || remoteAddress.isBlank() ? "unknown" : remoteAddress;
         Instant now = Instant.now();
         AttemptWindow current = attempts.get(key);
         if (current != null && current.lockedUntil() != null && current.lockedUntil().isAfter(now)) {
             throw new LoginRejectedException("Too many login attempts. Try again later.", true);
         }
-        if (!properties.configured() || password == null || !encoder.matches(password, passwordHash)) {
+        String actor = normalizeUsername(username);
+        if (!"admin".equals(actor) || !properties.configured() || password == null || !encoder.matches(password, passwordHash)) {
             recordFailure(key, now, current);
             throw new LoginRejectedException(properties.configured() ? "Invalid credentials." : "Admin login is not configured.", false);
         }
         attempts.remove(key);
         PlatformRole role = requestedRole == null || requestedRole == PlatformRole.PUBLIC ? PlatformRole.ADMIN : requestedRole;
         Instant expiresAt = now.plus(Duration.ofMinutes(properties.sessionTimeoutMinutes()));
-        PlatformSession session = new PlatformSession(UUID.randomUUID().toString(), "archiveos-admin", role, now, expiresAt);
+        PlatformSession session = new PlatformSession(UUID.randomUUID().toString(), actor, role, now, expiresAt);
         sessions.put(session.id(), session);
         return session;
+    }
+
+    public PlatformSession login(String remoteAddress, String password, PlatformRole requestedRole) {
+        return login(remoteAddress, "admin", password, requestedRole);
     }
 
     public Optional<PlatformSession> find(String id) {
@@ -76,6 +81,11 @@ public class SessionService {
             return password;
         }
         return encoder.encode(password);
+    }
+
+    private String normalizeUsername(String username) {
+        String value = username == null || username.isBlank() ? "admin" : username.trim();
+        return value.toLowerCase();
     }
 
     private record AttemptWindow(int count, Instant windowStarted, Instant lockedUntil) {}

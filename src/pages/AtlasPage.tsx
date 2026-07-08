@@ -2,15 +2,36 @@ import { useMemo, useState } from "react";
 import type { AppData } from "../app/AppShell";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import { runAtlasHealthchecks } from "../lib/backendApi";
+import { createAtlasWorkLog, runAtlasHealthchecks } from "../lib/backendApi";
 import { formatTimeAgo } from "./pageUtils";
 
 export function AtlasPage({ data, onRefresh }: { data: AppData; onRefresh: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);
+  const [logBusy, setLogBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [logMessage, setLogMessage] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    workTitle: "",
+    targetServiceId: "",
+    repository: "",
+    actor: "Codex",
+    agent: "",
+    model: "",
+    reasoningLevel: "",
+    taskSummary: "",
+    changedFiles: "",
+    testResults: "",
+    failureReason: "",
+    nextActions: "",
+    committed: false,
+    pushed: false,
+    deployed: false,
+    rollbackPlan: "",
+  });
   const atlas = data.atlas;
   const serviceById = useMemo(() => new Map((atlas?.services || []).map((service) => [service.service_id, service.name])), [atlas?.services]);
   const canRun = data.auth.role === "ADMIN" || data.auth.role === "PM";
+  const canCreateWorkLog = data.auth.role === "ADMIN";
 
   async function runChecks() {
     setBusy(true);
@@ -24,6 +45,51 @@ export function AtlasPage({ data, onRefresh }: { data: AppData; onRefresh: () =>
     } finally {
       setBusy(false);
     }
+  }
+
+  async function submitWorkLog() {
+    setLogBusy(true);
+    setLogMessage(null);
+    try {
+      await createAtlasWorkLog({
+        workTitle: form.workTitle,
+        targetServiceId: form.targetServiceId || null,
+        repository: form.repository || null,
+        actor: form.actor || null,
+        agent: form.agent || null,
+        model: form.model || null,
+        reasoningLevel: form.reasoningLevel || null,
+        taskSummary: form.taskSummary || null,
+        changedFiles: lines(form.changedFiles),
+        testResults: lines(form.testResults),
+        failureReason: form.failureReason || null,
+        nextActions: lines(form.nextActions),
+        committed: form.committed,
+        pushed: form.pushed,
+        deployed: form.deployed,
+        rollbackPlan: form.rollbackPlan || null,
+      });
+      setLogMessage("Codex work log recorded.");
+      setForm((current) => ({
+        ...current,
+        workTitle: "",
+        taskSummary: "",
+        changedFiles: "",
+        testResults: "",
+        failureReason: "",
+        nextActions: "",
+        rollbackPlan: "",
+      }));
+      await onRefresh();
+    } catch (error) {
+      setLogMessage(error instanceof Error ? error.message : "Failed to record Codex work log.");
+    } finally {
+      setLogBusy(false);
+    }
+  }
+
+  function updateField<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
   }
 
   if (!atlas) {
@@ -86,6 +152,35 @@ export function AtlasPage({ data, onRefresh }: { data: AppData; onRefresh: () =>
     </SectionCard>
 
     <SectionCard title="Codex Work Log" eyebrow="Manual operation evidence">
+      {canCreateWorkLog ? <div className="settings-grid">
+        <label>Work title<input value={form.workTitle} onChange={(event) => updateField("workTitle", event.target.value)} placeholder="Health Atlas build strategy review" /></label>
+        <label>Target service<select value={form.targetServiceId} onChange={(event) => updateField("targetServiceId", event.target.value)}>
+          <option value="">Atlas Platform</option>
+          {atlas.services.map((service) => <option key={service.service_id} value={service.service_id}>{service.name}</option>)}
+        </select></label>
+        <label>Repository<input value={form.repository} onChange={(event) => updateField("repository", event.target.value)} placeholder="CSJ-PJT/Health-Atlas" /></label>
+        <label>Actor<input value={form.actor} onChange={(event) => updateField("actor", event.target.value)} placeholder="Codex" /></label>
+        <label>Agent<input value={form.agent} onChange={(event) => updateField("agent", event.target.value)} placeholder="ArchiveOS" /></label>
+        <label>Model<input value={form.model} onChange={(event) => updateField("model", event.target.value)} placeholder="gpt-5-codex" /></label>
+        <label>Reasoning level<input value={form.reasoningLevel} onChange={(event) => updateField("reasoningLevel", event.target.value)} placeholder="high" /></label>
+        <label>Task summary<textarea rows={3} value={form.taskSummary} onChange={(event) => updateField("taskSummary", event.target.value)} /></label>
+        <label>Changed files<textarea rows={3} value={form.changedFiles} onChange={(event) => updateField("changedFiles", event.target.value)} placeholder="One file per line" /></label>
+        <label>Test results<textarea rows={3} value={form.testResults} onChange={(event) => updateField("testResults", event.target.value)} placeholder="npm run build: passed" /></label>
+        <label>Failure reason<textarea rows={2} value={form.failureReason} onChange={(event) => updateField("failureReason", event.target.value)} /></label>
+        <label>Next actions<textarea rows={3} value={form.nextActions} onChange={(event) => updateField("nextActions", event.target.value)} placeholder="One action per line" /></label>
+        <label>Rollback plan<textarea rows={2} value={form.rollbackPlan} onChange={(event) => updateField("rollbackPlan", event.target.value)} /></label>
+        <div className="inline-actions">
+          <label><input type="checkbox" checked={form.committed} onChange={(event) => updateField("committed", event.target.checked)} /> committed</label>
+          <label><input type="checkbox" checked={form.pushed} onChange={(event) => updateField("pushed", event.target.checked)} /> pushed</label>
+          <label><input type="checkbox" checked={form.deployed} onChange={(event) => updateField("deployed", event.target.checked)} /> deployed</label>
+        </div>
+        <div className="inline-actions">
+          <button className="button button-primary" type="button" disabled={logBusy || !form.workTitle.trim()} onClick={() => void submitWorkLog()}>
+            {logBusy ? "Recording..." : "Record Codex work log"}
+          </button>
+          {logMessage ? <span className="small-note">{logMessage}</span> : null}
+        </div>
+      </div> : <p className="small-note">Admin session is required to create Codex work logs. Public mode remains read-only.</p>}
       <div className="history-table">
         {atlas.recent_work_logs.map((log) => <div className="history-row" key={log.id}>
           <summary>
@@ -124,4 +219,8 @@ export function AtlasPage({ data, onRefresh }: { data: AppData; onRefresh: () =>
       </div>
     </SectionCard>
   </div>;
+}
+
+function lines(value: string) {
+  return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }

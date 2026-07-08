@@ -31,6 +31,7 @@ export function SettingsPage({
 }) {
   const [open, setOpen] = useState<string>("Appearance");
   const { theme, setTheme } = useTheme();
+  const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [requestedRole, setRequestedRole] = useState<Exclude<PlatformRole, "PUBLIC">>("ADMIN");
   const [authError, setAuthError] = useState<string | null>(null);
@@ -38,7 +39,7 @@ export function SettingsPage({
 
   async function login() {
     setAuthBusy(true); setAuthError(null);
-    try { await loginAdmin(password, requestedRole); setPassword(""); await onRefresh(); }
+    try { await loginAdmin(password, requestedRole, username); setPassword(""); await onRefresh(); }
     catch (error) { setAuthError(error instanceof Error ? error.message : String(error)); }
     finally { setAuthBusy(false); }
   }
@@ -55,6 +56,7 @@ export function SettingsPage({
         <select value={requestedRole} onChange={(event) => setRequestedRole(event.target.value as Exclude<PlatformRole, "PUBLIC">)}>
           <option value="OPERATOR">Operator</option><option value="PM">PM</option><option value="ADMIN">Admin</option>
         </select>
+        <input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="admin" />
         <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="ARCHIVEOS_ADMIN_PASSWORD" />
         {authError ? <div className="empty-state error-state">{authError}</div> : null}
         <button className="button button-primary" type="button" onClick={login} disabled={authBusy || !password}>{authBusy ? "Signing in..." : "Sign in"}</button>
