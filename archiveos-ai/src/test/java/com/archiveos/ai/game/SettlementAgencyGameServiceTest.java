@@ -1,6 +1,8 @@
 package com.archiveos.ai.game;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.archiveos.ai.ecosystem.EcosystemProperties;
@@ -17,8 +19,9 @@ class SettlementAgencyGameServiceTest {
     @Test
     void fallbackSimulationKeepsArchiveOsAliveWhenLedgerGameIsUnavailable() {
         LedgerClient ledger = Mockito.mock(LedgerClient.class);
+        GameFinanceRepository finance = Mockito.mock(GameFinanceRepository.class);
         when(ledger.settlementGameSimulate(Mockito.anyMap())).thenReturn(unavailable());
-        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, properties());
+        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, properties(), finance);
 
         Map<String, Object> result = service.simulate(Map.of(), true);
 
@@ -27,13 +30,15 @@ class SettlementAgencyGameServiceTest {
                 .containsEntry("agentMode", "PROPOSAL_ONLY");
         assertThat(result.get("status")).isIn("RUNNING", "ATTENTION", "BANKRUPTCY_RISK");
         assertThat(result).containsKeys("ecosystemCashBalance", "bankruptcyRisk", "services", "events", "proposals");
+        verify(finance, atLeastOnce()).upsertSnapshot(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyInt(), Mockito.anyString(), Mockito.anyString(), Mockito.anyMap());
+        verify(finance, atLeastOnce()).insertTrade(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyInt(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.any(), Mockito.anyString(), Mockito.anyMap());
     }
 
     @Test
     void gameEventsCarrySimulationMetadataAndRespectMaxHop() {
         LedgerClient ledger = Mockito.mock(LedgerClient.class);
         when(ledger.settlementGameSimulate(Mockito.anyMap())).thenReturn(unavailable());
-        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, properties());
+        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, properties(), Mockito.mock(GameFinanceRepository.class));
 
         Map<String, Object> result = service.simulate(Map.of("maxHop", 2), true);
 
@@ -51,7 +56,7 @@ class SettlementAgencyGameServiceTest {
     void stressScenarioCanSurfaceBankruptcyRiskWithAgentProposals() {
         LedgerClient ledger = Mockito.mock(LedgerClient.class);
         when(ledger.settlementGameSimulate(Mockito.anyMap())).thenReturn(unavailable());
-        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, properties());
+        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, properties(), Mockito.mock(GameFinanceRepository.class));
 
         Map<String, Object> stress = new LinkedHashMap<>();
         stress.put("nexusInitialCash", 1_200_000);
@@ -88,7 +93,7 @@ class SettlementAgencyGameServiceTest {
         body.put("proposals", List.of());
         when(ledger.settlementGameSimulate(Mockito.anyMap()))
                 .thenReturn(new IntegrationResult(EcosystemServiceStatus.HEALTHY, 200, body, null, 10));
-        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, properties());
+        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, properties(), Mockito.mock(GameFinanceRepository.class));
 
         Map<String, Object> result = service.simulate(Map.of(), true);
 

@@ -5,7 +5,7 @@ import { MetricCard } from "../components/shared/MetricCard";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { acknowledgePmInboxItem, resolvePmInboxItem } from "../lib/backendApi";
-import type { PmInboxItem } from "../lib/backendApi";
+import type { GameFinanceSnapshot, PmInboxItem } from "../lib/backendApi";
 import { formatTimeAgo } from "./pageUtils";
 
 export function ManagedSystemsPage({
@@ -122,6 +122,7 @@ export function ManagedSystemsPage({
                 <span>Required env<strong>{(system.environmentRequirements || []).map((env) => `${env.name}${env.secret ? " (hidden)" : ""}`).join(", ") || "n/a"}</strong></span>
               </> : null}
             </div>
+            <SystemFinancePanel finance={data.gameFinance?.systems?.[system.systemId]} />
           </article>)}
         </div>
       </SectionCard>
@@ -184,4 +185,43 @@ function navigateSystem(systemId: string, onNavigate: (route: AppRoute) => void)
   else if (systemId === "archive-nexus" || systemId === "archive-logitics") onNavigate("ecosystem");
   else if (systemId === "archive-ledger") onNavigate("approvals");
   else onNavigate("overview");
+}
+
+function SystemFinancePanel({ finance }: { finance: GameFinanceSnapshot | undefined }) {
+  if (!finance) {
+    return <div className="small-note">No persisted finance snapshot yet. Run Ecosystem Survival Mode dry-run to seed DB-backed cash/import/export rows.</div>;
+  }
+
+  return (
+    <div className="system-finance-panel">
+      <div className="detail-grid">
+        <span>Cash balance<strong>{money(finance.cash_balance)}</strong></span>
+        <span>Revenue<strong>{money(finance.revenue_amount)}</strong></span>
+        <span>Cost<strong>{money(finance.cost_amount)}</strong></span>
+        <span>Profit<strong>{money(finance.profit_amount)}</strong></span>
+      </div>
+      <div className="finance-ledger-columns">
+        <MiniTrades title="Exports" trades={finance.exports || []} />
+        <MiniTrades title="Imports" trades={finance.imports || []} />
+      </div>
+    </div>
+  );
+}
+
+function MiniTrades({ title, trades }: { title: string; trades: Array<{ trade_id: string; trade_type: string; amount: number | string; currency: string }> }) {
+  return (
+    <div className="mini-trade-list">
+      <strong>{title}</strong>
+      {trades.slice(0, 4).map((trade) => (
+        <span key={trade.trade_id}>{trade.trade_type}: {money(trade.amount)} {trade.currency}</span>
+      ))}
+      {!trades.length ? <span>No records</span> : null}
+    </div>
+  );
+}
+
+function money(value: number | string | null | undefined) {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return String(value ?? "0");
+  return new Intl.NumberFormat("ko-KR", { style: "currency", currency: "KRW", maximumFractionDigits: 0 }).format(numeric);
 }
