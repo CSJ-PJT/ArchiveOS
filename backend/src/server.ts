@@ -140,6 +140,8 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Survival Mode Summary", method: "GET", path: "/api/game/survival/summary", service: "runtime", description: "Ecosystem survival mode summary (alias to settlement simulation engine)." },
   { name: "Survival Mode Preset", method: "GET", path: "/api/game/survival/preset", service: "runtime", description: "Ecosystem survival mode preset (alias to settlement simulation engine)." },
   { name: "Survival Mode Simulate", method: "POST", path: "/api/game/survival/simulate", service: "runtime", description: "Read-only dry-run survival simulation (alias to settlement simulation engine)." },
+  { name: "Survival Finance", method: "GET", path: "/api/game/survival/finance", service: "runtime", description: "Persisted system cash, exports, and imports for survival mode." },
+  { name: "Survival System Finance", method: "GET", path: "/api/game/survival/finance/:systemId", service: "runtime", description: "Persisted cash, exports, and imports for one managed system." },
   { name: "Nexus Outbox", method: "GET", path: "/api/integrations/nexus/outbox", service: "runtime", description: "Archive-Nexus outbox summary proxy." },
   { name: "Nexus Generate", method: "POST", path: "/api/integrations/nexus/outbox/generate", service: "runtime", description: "Safe-mode guarded Nexus event generation." },
   { name: "Nexus Publish", method: "POST", path: "/api/integrations/nexus/outbox/publish", service: "runtime", description: "Safe-mode guarded Nexus outbox publish." },
@@ -799,6 +801,14 @@ app.post("/api/game/survival/simulate", async (request, response) => {
     undefined,
     request,
   );
+});
+
+app.get("/api/game/survival/finance", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/game/settlement-agency/finance", undefined, undefined, request);
+});
+
+app.get("/api/game/survival/finance/:systemId", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/game/settlement-agency/finance/${encodeURIComponent(request.params.systemId)}`, undefined, undefined, request);
 });
 
 app.get("/api/integrations/nexus/outbox", async (request, response) => {

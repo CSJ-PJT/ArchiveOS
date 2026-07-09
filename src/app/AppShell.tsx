@@ -29,6 +29,7 @@ import {
   getSecurityStatus,
   getSettlementAgencyGameSummary,
   getKpiOverview,
+  getGameFinanceSummary,
   getMcpRegistry,
   getRuntimeTimeline,
   type AuthSession,
@@ -56,6 +57,7 @@ import {
   type RuntimeVersion,
   type SecurityStatus,
   type SettlementAgencyGameSummary,
+  type GameFinanceSummary,
   type McpRegistryEntry,
   type RuntimeTimelineEntry,
 } from "../lib/backendApi";
@@ -110,6 +112,7 @@ export type AppData = {
   ecosystemTopology: EcosystemTopology | null;
   ecosystemTimeline: EcosystemTimeline | null;
   settlementGame: SettlementAgencyGameSummary | null;
+  gameFinance: GameFinanceSummary | null;
   externalApprovals: ExternalApprovalRequest[];
   mcpRegistry: McpRegistryEntry[];
   timeline: RuntimeTimelineEntry[];
@@ -146,6 +149,7 @@ const emptyData: AppData = {
   ecosystemTopology: null,
   ecosystemTimeline: null,
   settlementGame: null,
+  gameFinance: null,
   externalApprovals: [],
   mcpRegistry: [],
   timeline: [],
@@ -197,6 +201,7 @@ function AppShellInner() {
       settle("ecosystemTopology", getEcosystemTopology),
       settle("ecosystemTimeline", () => getEcosystemTimeline(50)),
       settle("settlementGame", getSettlementAgencyGameSummary),
+      settle("gameFinance", getGameFinanceSummary),
       settle("externalApprovals", () => getExternalApprovals(50)),
       operatorAccess ? settle("mcpRegistry", getMcpRegistry) : Promise.resolve({ key: "mcpRegistry", value: [], error: null }),
       operatorAccess ? settle("timeline", () => getRuntimeTimeline(100)) : Promise.resolve({ key: "timeline", value: [], error: null }),

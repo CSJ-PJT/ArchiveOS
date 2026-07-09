@@ -288,6 +288,48 @@ export type SettlementGameProposal = {
   evidence: string[];
 };
 
+export type GameFinanceTrade = {
+  trade_id: string;
+  simulation_run_id: string;
+  settlement_cycle_id: string;
+  tick_id: string;
+  day: number;
+  correlation_id: string | null;
+  source_system_id: string;
+  target_system_id: string;
+  trade_type: string;
+  amount: number | string;
+  currency: string;
+  description: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type GameFinanceSnapshot = {
+  simulation_run_id: string;
+  settlement_cycle_id: string;
+  tick_id: string;
+  day: number;
+  correlation_id: string | null;
+  system_id: string;
+  service_name: string;
+  cash_balance: number | string;
+  revenue_amount: number | string;
+  cost_amount: number | string;
+  profit_amount: number | string;
+  burn_rate: number | string;
+  bankruptcy_risk: string;
+  created_at: string;
+  exports?: GameFinanceTrade[];
+  imports?: GameFinanceTrade[];
+};
+
+export type GameFinanceSummary = {
+  systems: Record<string, GameFinanceSnapshot>;
+  recentTrades: GameFinanceTrade[];
+  error?: string;
+};
+
 export type SettlementAgencyGameSummary = {
   simulationRunId: string;
   settlementCycleId: string;
@@ -521,6 +563,23 @@ export async function simulateSettlementAgencyGame(input: Record<string, unknown
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+  return response.data;
+}
+
+export async function getGameFinanceSummary() {
+  const response = await request<ApiEnvelope<GameFinanceSummary>>("/api/game/survival/finance");
+  return response.data;
+}
+
+export async function getGameSystemFinance(systemId: string) {
+  const response = await request<ApiEnvelope<{
+    systemId: string;
+    latest: GameFinanceSnapshot | null;
+    snapshots: GameFinanceSnapshot[];
+    exports: GameFinanceTrade[];
+    imports: GameFinanceTrade[];
+    error?: string;
+  }>>(`/api/game/survival/finance/${encodeURIComponent(systemId)}`);
   return response.data;
 }
 

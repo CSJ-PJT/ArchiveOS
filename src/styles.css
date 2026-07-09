@@ -1456,6 +1456,18 @@ dt { color: var(--color-text-subtle); font-size: 0.7rem; } dd { margin: 0; font-
 .agent-card p { min-height: 2.8em; margin: 0.7rem 0; color: var(--color-text-muted); line-height: 1.45; }
 .agent-evidence { display: flex; justify-content: space-between; gap: 0.5rem; }
 .batch-job-meta { display: flex; justify-content: space-between; gap: 0.5rem; margin: 0.8rem 0; color: var(--color-text-subtle); font-size: 0.72rem; }
+.system-finance-panel { display: grid; gap: 0.75rem; margin-top: 0.8rem; border-top: 1px solid var(--color-border); padding-top: 0.8rem; }
+.finance-ledger-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
+.mini-trade-list,
+.compact-ledger-list { display: grid; gap: 0.35rem; min-width: 0; }
+.mini-trade-list { border: 1px solid var(--color-border); border-radius: 0.45rem; background: var(--color-surface-muted); padding: 0.65rem; }
+.mini-trade-list > strong,
+.compact-ledger-list strong { color: var(--color-text); font-size: 0.78rem; }
+.mini-trade-list span,
+.compact-ledger-list span,
+.compact-ledger-list p { margin: 0; color: var(--color-text-muted); font-size: 0.72rem; line-height: 1.4; }
+.compact-ledger-list > div { display: grid; gap: 0.15rem; border-bottom: 1px solid var(--color-border); padding: 0.4rem 0; }
+.compact-ledger-list > div:last-child { border-bottom: 0; }
 
 @media (max-width: 1180px) {
   .kpi-command-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -1485,6 +1497,7 @@ dt { color: var(--color-text-subtle); font-size: 0.7rem; } dd { margin: 0; font-
   .agent-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .runtime-control-panel { grid-template-columns: 1fr; }
   .runtime-control-panel .inline-actions { justify-content: flex-start; }
+  .finance-ledger-columns { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 520px) {

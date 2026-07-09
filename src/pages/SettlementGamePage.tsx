@@ -24,6 +24,7 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
   const [game, setGame] = useState<SettlementAgencyGameSummary | null>(data.settlementGame);
   const [message, setMessage] = useState<string | null>(null);
   const snapshot = game ?? data.settlementGame;
+  const persistedFinance = data.gameFinance;
 
   async function runDrySimulation(stress = false) {
     setMessage(null);
@@ -133,6 +134,29 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
           </div>
         </SectionCard>
 
+        <SectionCard title="Persisted System Finance" eyebrow="DB-backed cash / exports / imports" className="span-5">
+          <div className="history-table">
+            {Object.entries(persistedFinance?.systems || {}).map(([systemId, finance]) => (
+              <article className="history-row" key={systemId}>
+                <summary>
+                  <strong>{finance.service_name}</strong>
+                  <StatusBadge status={riskStatus(finance.bankruptcy_risk)}>{finance.bankruptcy_risk}</StatusBadge>
+                  <span>Cash {money(finance.cash_balance)}</span>
+                </summary>
+                <div className="detail-grid">
+                  <span>Revenue<strong>{money(finance.revenue_amount)}</strong></span>
+                  <span>Cost<strong>{money(finance.cost_amount)}</strong></span>
+                  <span>Profit<strong>{money(finance.profit_amount)}</strong></span>
+                  <span>Tick<strong>{finance.tick_id}</strong></span>
+                </div>
+                <TradeList title="Exports" trades={finance.exports || []} />
+                <TradeList title="Imports" trades={finance.imports || []} />
+              </article>
+            ))}
+            {!Object.keys(persistedFinance?.systems || {}).length ? <div className="empty-state">Run a dry simulation to persist system finance snapshots and trade ledger rows.</div> : null}
+          </div>
+        </SectionCard>
+
         <SectionCard title="Game Guard Rails" eyebrow="No infinite loop / no direct write" className="span-5">
           <div className="event-list compact">
             <article className="event-row">
@@ -205,5 +229,23 @@ function FlowStage({ index, title, status, summary, terminal = false }: { index:
       <div><strong>{title}</strong><StatusBadge status={status}>{status}</StatusBadge><small>{summary}</small></div>
       {!terminal ? <i aria-hidden="true" /> : null}
     </div>
+  );
+}
+
+function TradeList({ title, trades }: { title: string; trades: Array<{ trade_id: string; trade_type: string; amount: number | string; currency: string; description: string }> }) {
+  return (
+    <details className="details-box">
+      <summary>{title} ({trades.length})</summary>
+      <div className="compact-ledger-list">
+        {trades.slice(0, 5).map((trade) => (
+          <div key={trade.trade_id}>
+            <strong>{trade.trade_type}</strong>
+            <span>{money(trade.amount)} {trade.currency}</span>
+            <p>{trade.description}</p>
+          </div>
+        ))}
+        {!trades.length ? <p>No {title.toLowerCase()} recorded yet.</p> : null}
+      </div>
+    </details>
   );
 }

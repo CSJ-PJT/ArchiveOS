@@ -19,10 +19,12 @@ public class SettlementAgencyGameService {
     private static final BigDecimal ZERO = BigDecimal.ZERO;
     private final LedgerClient ledger;
     private final EcosystemProperties properties;
+    private final GameFinanceRepository finance;
 
-    public SettlementAgencyGameService(LedgerClient ledger, EcosystemProperties properties) {
+    public SettlementAgencyGameService(LedgerClient ledger, EcosystemProperties properties, GameFinanceRepository finance) {
         this.ledger = ledger;
         this.properties = properties;
+        this.finance = finance;
     }
 
     public Map<String, Object> summary() {
@@ -70,7 +72,16 @@ public class SettlementAgencyGameService {
                 "infiniteLoopGuard", "Events with hop > maxHop are ignored and processed idempotency keys must not be replayed."
         ));
         if (ledgerError != null) response.put("ledgerSimulationError", ledgerError);
+        persistFinance(response);
         return response;
+    }
+
+    public Map<String, Object> financeSummary() {
+        return finance.financeSummary();
+    }
+
+    public Map<String, Object> systemFinance(String systemId) {
+        return finance.systemFinance(systemId);
     }
 
     private Map<String, Object> decoratePreset(Map<String, Object> preset, String source) {
@@ -148,6 +159,64 @@ public class SettlementAgencyGameService {
         response.put("proposals", proposals(services, ecosystemRisk, r));
         response.put("createdAt", Instant.now().toString());
         return response;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void persistFinance(Map<String, Object> response) {
+        String run = stringValue(response.get("simulationRunId"), "SIM-RUN-UNKNOWN");
+        String cycle = stringValue(response.get("settlementCycleId"), "CYCLE-UNKNOWN");
+        String tick = stringValue(response.get("tickId"), "TICK-UNKNOWN");
+        int day = intValue(response.get("day"), 1);
+        String correlation = stringValue(response.get("correlationId"), run + ":" + tick);
+        Object servicesValue = response.get("services");
+        if (!(servicesValue instanceof Map<?, ?> services)) {
+            return;
+        }
+        for (Map.Entry<?, ?> entry : services.entrySet()) {
+            if (entry.getValue() instanceof Map<?, ?> service) {
+                finance.upsertSnapshot(run, cycle, tick, day, correlation, systemId(String.valueOf(entry.getKey())), (Map<String, Object>) service);
+            }
+        }
+        persistTrades(run, cycle, tick, day, correlation, response);
+    }
+
+    private void persistTrades(String run, String cycle, String tick, int day, String correlation, Map<String, Object> response) {
+        String prefix = run + ":" + tick + ":";
+        finance.insertTrade(prefix + "nexus-manufacturing-export", run, cycle, tick, day, correlation,
+                "archive-nexus", "synthetic-market", "MANUFACTURING_OUTPUT_EXPORT",
+                money(nested(response, "services", "nexus", "revenue")), "Nexus exports synthetic manufacturing output revenue.",
+                Map.of("flow", "Nexus manufactures", "syntheticData", true));
+        finance.insertTrade(prefix + "logistics-service-export", run, cycle, tick, day, correlation,
+                "archive-logitics", "archive-nexus", "LOGISTICS_SERVICE_EXPORT",
+                money(nested(response, "services", "logistics", "revenue")), "Logistics exports route, delivery, and daily settlement service to Nexus.",
+                Map.of("flow", "Logistics fulfills and charges Nexus", "syntheticData", true));
+        finance.insertTrade(prefix + "ledger-settlement-export", run, cycle, tick, day, correlation,
+                "archive-ledger", "archive-logitics", "LEDGER_DAILY_SETTLEMENT_EXPORT",
+                money(nested(response, "services", "ledger", "revenue")), "Ledger exports transaction processing, daily settlement, reconciliation, and approval review services.",
+                Map.of("flow", "Ledger settles daily for Logistics", "syntheticData", true));
+        finance.insertTrade(prefix + "logistics-cost-back", run, cycle, tick, day, correlation,
+                "archive-logitics", "archive-nexus", "MANUFACTURING_COST_SETTLEMENT_EXPORT",
+                money(nested(response, "services", "nexus", "cost")), "Logistics charges Nexus for manufacturing-linked logistics and settlement costs.",
+                Map.of("flow", "Logistics returns manufacturing cost settlement to Nexus", "syntheticData", true));
+    }
+
+    private String systemId(String key) {
+        return switch (key) {
+            case "nexus" -> "archive-nexus";
+            case "logistics", "logitics" -> "archive-logitics";
+            case "ledger" -> "archive-ledger";
+            case "archiveos", "archive-os" -> "archiveos";
+            default -> key;
+        };
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object nested(Map<String, Object> root, String first, String second, String third) {
+        Object firstValue = root.get(first);
+        if (!(firstValue instanceof Map<?, ?> firstMap)) return ZERO;
+        Object secondValue = ((Map<String, Object>) firstMap).get(second);
+        if (!(secondValue instanceof Map<?, ?> secondMap)) return ZERO;
+        return ((Map<String, Object>) secondMap).get(third);
     }
 
     private Map<String, Object> economics(String service, BigDecimal cash, BigDecimal revenue, BigDecimal cost, String explanation) {

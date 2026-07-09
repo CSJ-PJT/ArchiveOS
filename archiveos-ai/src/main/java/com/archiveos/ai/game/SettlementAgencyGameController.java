@@ -3,6 +3,7 @@ package com.archiveos.ai.game;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -31,6 +32,16 @@ public class SettlementAgencyGameController {
             @RequestBody(required = false) Map<String, Object> request,
             @RequestParam(defaultValue = "true") boolean dryRun) {
         return envelope(service.simulate(request == null ? Map.of() : request, dryRun));
+    }
+
+    @GetMapping("/api/game/settlement-agency/finance")
+    public Map<String, Object> finance() {
+        return envelope(service.financeSummary());
+    }
+
+    @GetMapping("/api/game/settlement-agency/finance/{systemId}")
+    public Map<String, Object> systemFinance(@PathVariable String systemId) {
+        return envelope(service.systemFinance(systemId));
     }
 
     private Map<String, Object> envelope(Object data) {
