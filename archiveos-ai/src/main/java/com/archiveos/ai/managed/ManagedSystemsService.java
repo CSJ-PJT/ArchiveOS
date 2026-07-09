@@ -164,9 +164,9 @@ public class ManagedSystemsService {
     }
 
     private Map<String, Object> archiveLogiticsSystem() {
-        Map<String, Object> system = system("archive-logitics", "Archive-Logitics", "LOGISTICS_OPERATIONS_BACKEND", "development", "local", "not_connected",
-                "Archive-Logitics is managed through the Ecosystem Control Tower and may be unavailable during local development.",
-                null, 1, 0, 0, 0, 0, 0, null, null, null, null, "CSJ-PJT/Archive-Logitics", "archiveos");
+        Map<String, Object> system = system("archive-logitics", "Archive-Logistics", "LOGISTICS_OPERATIONS_BACKEND", "development", "local", "not_connected",
+                "Archive-Logistics is managed through the Ecosystem Control Tower and may be unavailable during local development.",
+                null, 1, 0, 0, 0, 0, 0, null, null, null, null, "CSJ-PJT/Archive-Logistics", "archiveos");
         system.put("role", "Synthetic Logistics Operations Backend");
         return system;
     }

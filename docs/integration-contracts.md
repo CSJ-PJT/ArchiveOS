@@ -12,7 +12,7 @@ All contracts use synthetic portfolio data only. Do not send real card numbers, 
   - `POST /api/outbox/events/publish`
 - ArchiveOS returns `DRY_RUN` or `SAFE_MODE_BLOCKED` unless `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=true`.
 
-## Logitics
+## Logistics
 
 - Read:
   - `GET /actuator/health`
@@ -21,6 +21,9 @@ All contracts use synthetic portfolio data only. Do not send real card numbers, 
   - `GET /api/routes/summary`
 - Guarded write:
   - `POST /api/outbox/publish`
+
+Note: integration keys in ArchiveOS configuration remain `logitics` internally for backward compatibility:
+`ARCHIVE_ECOSYSTEM_SERVICES_LOGITICS_*`.
 
 ## Ledger
 

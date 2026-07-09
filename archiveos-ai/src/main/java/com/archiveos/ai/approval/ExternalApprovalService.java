@@ -315,7 +315,7 @@ public class ExternalApprovalService {
     private void validateSynthetic(Map<String, Object> values) {
         String source = string(values.get("source")).toLowerCase(Locale.ROOT);
         if (!source.contains("ledger") && !source.contains("logitics") && !source.contains("logistics") && !source.contains("nexus")) {
-            throw new ExternalApprovalValidationException("source must identify Archive-Ledger, Archive-Logitics, or Archive-Nexus.");
+            throw new ExternalApprovalValidationException("source must identify Archive-Ledger, Archive-Logistics, or Archive-Nexus.");
         }
         Map<String, Object> metadata = map(values.get("metadata"));
         List<String> forbidden = List.of("cardNumber", "accountNumber", "residentRegistrationNumber", "phoneNumber", "ssn", "rrn");

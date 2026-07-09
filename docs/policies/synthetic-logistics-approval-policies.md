@@ -16,4 +16,4 @@ This is a synthetic policy document for ArchiveOS portfolio demonstration. It do
 ## ArchiveOS responsibility
 
 ArchiveOS stores policy evidence, approval decision, callback status, and audit trail only.
-Archive-Logitics owns route, ETA, delay, and logistics cost calculation.
+Archive-Logistics owns route, ETA, delay, and logistics cost calculation.

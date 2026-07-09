@@ -41,7 +41,7 @@ class EcosystemServiceTest {
         assertThat(String.valueOf(((Map<?, ?>) services.get("ledger")).get("status"))).isEqualTo("UNAVAILABLE");
     }
 
-    @Test void topologyReturnsNexusLogiticsLedgerArchiveOsFlow() {
+    @Test void topologyReturnsNexusLogisticsLedgerArchiveOsFlow() {
         EcosystemService service = new EcosystemService(properties(), Mockito.mock(EcosystemRepository.class),
                 Mockito.mock(NexusClient.class), Mockito.mock(LogiticsClient.class), Mockito.mock(LedgerClient.class));
 
@@ -64,7 +64,7 @@ class EcosystemServiceTest {
         EcosystemProperties properties = new EcosystemProperties();
         Map<String, EcosystemProperties.ServiceConfig> services = new LinkedHashMap<>();
         services.put("nexus", config("Archive-Nexus", "http://localhost:8080", "/api/outbox/summary"));
-        services.put("logitics", config("Archive-Logitics", "http://localhost:8092", "/api/operations/summary"));
+        services.put("logitics", config("Archive-Logistics", "http://localhost:8092", "/api/operations/summary"));
         services.put("ledger", config("Archive-Ledger", "http://localhost:18080", "/api/operations/summary"));
         services.get("ledger").setApprovalCallbackPath("/api/approvals/callback");
         properties.getEcosystem().setServices(services);

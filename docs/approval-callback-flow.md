@@ -2,7 +2,7 @@
 
 ## Flow
 
-1. Archive-Ledger, Archive-Logitics, or Archive-Nexus sends `POST /api/approvals/external`.
+1. Archive-Ledger, Archive-Logistics, or Archive-Nexus sends `POST /api/approvals/external`.
 2. ArchiveOS applies idempotency by `correlationId` or `transactionId`.
 3. ArchiveOS creates RAG evidence when available.
 4. If RAG/OpenAI is unavailable, ArchiveOS stores fallback policy evidence.

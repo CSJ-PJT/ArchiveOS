@@ -67,7 +67,7 @@ for (const approvalContract of ["getExternalApprovals", "decideExternalApproval"
   }
 }
 
-for (const ecosystemContract of ["getEcosystemSummary", "getEcosystemTopology", "runEcosystemDryRun", "Ecosystem Overview", "Nexus → Logitics → Ledger → ArchiveOS", "Callback Outbox"]) {
+for (const ecosystemContract of ["getEcosystemSummary", "getEcosystemTopology", "runEcosystemDryRun", "Ecosystem Overview", "Nexus → Logistics → Ledger → ArchiveOS", "Callback Outbox"]) {
   if (!backendApi.includes(ecosystemContract) && !appShell.includes(ecosystemContract) && !ecosystemPage.includes(ecosystemContract) && !ledgerApprovals.includes(ecosystemContract)) {
     throw new Error(`Ecosystem Control Tower contract missing: ${ecosystemContract}`);
   }

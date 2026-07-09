@@ -82,7 +82,7 @@ archive:
         summary-path: /api/outbox/summary
       logitics:
         enabled: ${ARCHIVE_ECOSYSTEM_SERVICES_LOGITICS_ENABLED:true}
-        name: Archive-Logitics
+        name: Archive-Logistics
         base-url: ${ARCHIVE_ECOSYSTEM_SERVICES_LOGITICS_BASE_URL:http://localhost:8092}
         health-path: /actuator/health
         summary-path: /api/operations/summary

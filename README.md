@@ -17,11 +17,11 @@ ArchiveOS는 AI 에이전트, 지능형 RPA, 배치 작업, 워크플로우, 지
 ArchiveOS can run as the control tower for the Archive Platform ecosystem:
 
 - **Archive-Nexus**: synthetic manufacturing, shipment, maintenance, and quality event outbox.
-- **Archive-Logitics**: synthetic logistics route, ETA, delay, and cost event backend.
+- **Archive-Logistics**: synthetic logistics route, ETA, delay, and cost event backend.
 - **Archive-Ledger**: synthetic transaction, ledger, settlement, reconciliation, and approval callback backend.
 - **ArchiveOS**: health aggregation, human approval gate, RAG/fallback policy evidence, audit log, Slack notification, callback outbox, and retry.
 
-ArchiveOS is intentionally loosely coupled. If Nexus, Logitics, or Ledger is not running, ArchiveOS still starts and reports the external service as `UNAVAILABLE`, `UNKNOWN`, or `DEGRADED` through `/api/ecosystem/summary`.
+ArchiveOS is intentionally loosely coupled. If Nexus, Logistics, or Ledger is not running, ArchiveOS still starts and reports the external service as `UNAVAILABLE`, `UNKNOWN`, or `DEGRADED` through `/api/ecosystem/summary`.
 
 ### Ecosystem environment variables
 
@@ -56,7 +56,7 @@ curl.exe -X POST http://localhost:4000/api/ecosystem/refresh
 curl.exe -X POST http://localhost:4000/api/ecosystem/demo/dry-run
 ```
 
-External write actions such as Nexus generation/publish, Logitics publish, and Ledger callback dispatch are blocked unless `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=true`. The default portfolio-safe mode is read-only/dry-run.
+External write actions such as Nexus generation/publish, Logistics publish, and Ledger callback dispatch are blocked unless `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=true`. The default portfolio-safe mode is read-only/dry-run.
 
 ### Ledger approval callback
 
