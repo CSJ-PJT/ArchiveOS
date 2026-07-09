@@ -42,7 +42,8 @@ Notes:
 - ArchiveOS reads `Logistics` data from `http://localhost:8092` APIs:
   - `/api/operations/summary`
   - `/api/outbox/summary`
-  - `/api/routes/summary` (internal service issue observed: this endpoint currently returns 500 in the current snapshot; treat as operational debt until fixed in Logistics)
+  - `/api/routes/summary`
+- `/api/routes/summary` 500 was resolved in the current Archive-Logistics submission material. The root cause was JPQL nullable parameter and PostgreSQL JDBC type inference. Archive-Logistics now handles default, `factoryId`, `date`, and `factoryId + date` paths through explicit Repository/Service branches.
 - Archive-Ledger supports native logistics bulk endpoint:
   - `POST /api/events/logistics/bulk`
 
