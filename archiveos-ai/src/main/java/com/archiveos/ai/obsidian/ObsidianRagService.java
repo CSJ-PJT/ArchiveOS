@@ -44,13 +44,13 @@ public class ObsidianRagService {
         int embeddedTotal = 0;
         Throwable failure = null;
         try {
-            requireEmbeddingConfigured();
             Path vaultPath = vaultResolver.resolveVaultPath();
             if (!vaultPath.toFile().isDirectory()) {
                 return new ObsidianSyncResult(false, 0, 0, 0, 0, 0, 0, "OBSIDIAN_VAULT_PATH not configured");
             }
 
             repository.ensureSchema();
+            boolean embeddingEnabled = embeddingConfigured();
             List<MarkdownDocument> documents = vaultReader.readVault(vaultPath);
             int created = 0;
             int updated = 0;
@@ -74,20 +74,23 @@ public class ObsidianRagService {
 
                 for (int index = 0; index < chunks.size(); index += 1) {
                     MarkdownChunk chunk = chunks.get(index);
-                    float[] embedding = embed(chunk.text());
+                    float[] embedding = embeddingEnabled ? embed(chunk.text()) : null;
                     repository.insertChunk(documentId, index, chunk, embedding, Map.of(
                             "file_path", document.relativePath(),
                             "title", document.title(),
                             "chunk_size", chunk.text().length(),
-                            "embedding_status", "embedded",
+                            "embedding_status", embeddingEnabled ? "embedded" : "pending",
                             "embedded_at", Instant.now().toString()));
-                    embeddedChunks += 1;
-                    embeddedTotal += 1;
+                    if (embeddingEnabled) {
+                        embeddedChunks += 1;
+                        embeddedTotal += 1;
+                    }
                 }
             }
 
             success = true;
-            return new ObsidianSyncResult(true, documents.size(), created, updated, skipped, deletedChunks, embeddedChunks, null);
+            String reason = embeddingEnabled ? null : "OPENAI_API_KEY is not configured. Documents were synced without embeddings.";
+            return new ObsidianSyncResult(true, documents.size(), created, updated, skipped, deletedChunks, embeddedChunks, reason);
         } catch (IOException | RuntimeException error) {
             failure = error;
             throw error;
@@ -107,9 +110,8 @@ public class ObsidianRagService {
         List<RagReference> references = List.of();
         Throwable failure = null;
         try {
-            requireEmbeddingConfigured();
             repository.ensureSchema();
-            references = repository.search(embed(query), limit);
+            references = embeddingConfigured() ? repository.search(embed(query), limit) : repository.fallbackSearch(query, limit);
             success = true;
             return references;
         } catch (RuntimeException error) {
@@ -126,13 +128,20 @@ public class ObsidianRagService {
         int referenceCount = 0;
         Throwable failure = null;
         try {
-            requireEmbeddingConfigured();
-            requireChatConfigured();
-            List<RagReference> references = search(question, properties.ragMaxReferences());
+            repository.ensureSchema();
+            boolean fullRagAvailable = embeddingConfigured() && models.chatAvailable();
+            List<RagReference> references = fullRagAvailable
+                    ? search(question, properties.ragMaxReferences())
+                    : repository.fallbackSearch(question, properties.ragMaxReferences());
             referenceCount = references.size();
             if (references.isEmpty()) {
                 success = true;
                 return new RagAnswer("관련 Obsidian 문맥을 찾지 못했습니다. 먼저 /api/obsidian/sync로 문서를 동기화하세요.", List.of());
+            }
+
+            if (!fullRagAvailable) {
+                success = true;
+                return new RagAnswer(buildFallbackAnswer(question, references), references);
             }
 
             String promptText = buildPrompt(question, references);
@@ -154,6 +163,10 @@ public class ObsidianRagService {
         if (!models.embeddingAvailable()) {
             throw new AiUnavailableException("EmbeddingModel bean is unavailable. Check Spring AI OpenAI configuration.");
         }
+    }
+
+    private boolean embeddingConfigured() {
+        return properties.openAiConfigured() && models.embeddingAvailable();
     }
 
     private void requireChatConfigured() {
@@ -200,5 +213,22 @@ public class ObsidianRagService {
                 Context:
                 %s
                 """.formatted(question, String.join("\n---\n", contexts));
+    }
+
+    private String buildFallbackAnswer(String question, List<RagReference> references) {
+        List<String> lines = new ArrayList<>();
+        lines.add("OpenAI API key 또는 embedding/chat model이 준비되지 않아 rule-based fallback으로 답변합니다.");
+        lines.add("질문: " + question);
+        lines.add("현재 ArchiveOS Knowledge DB에는 관련 문서 chunk가 적재되어 있으며, 아래 문서를 우선 확인할 수 있습니다.");
+        for (int index = 0; index < Math.min(references.size(), 5); index += 1) {
+            RagReference reference = references.get(index);
+            lines.add("%d. %s (%s)%s".formatted(
+                    index + 1,
+                    reference.title(),
+                    reference.path(),
+                    reference.heading() == null || reference.heading().isBlank() ? "" : " / " + reference.heading()));
+        }
+        lines.add("정확한 자연어 요약과 vector similarity는 OPENAI_API_KEY 설정 후 활성화됩니다.");
+        return String.join("\n", lines);
     }
 }

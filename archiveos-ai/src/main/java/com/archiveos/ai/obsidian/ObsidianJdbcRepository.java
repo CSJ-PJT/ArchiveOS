@@ -122,7 +122,7 @@ public class ObsidianJdbcRepository {
                 chunkIndex,
                 chunk.heading(),
                 chunk.text(),
-                toVectorLiteral(embedding),
+                embedding == null ? null : toVectorLiteral(embedding),
                 Json.write(metadata));
     }
 
@@ -141,6 +141,54 @@ public class ObsidianJdbcRepository {
                 (rs, rowNum) -> mapReference(rs),
                 toVectorLiteral(queryEmbedding),
                 Math.min(Math.max(limit, 1), 20));
+    }
+
+    public List<RagReference> fallbackSearch(String query, int limit) {
+        int safeLimit = Math.min(Math.max(limit, 1), 20);
+        String normalized = query == null ? "" : query.trim();
+        if (normalized.isBlank()) {
+            return latestChunks(safeLimit);
+        }
+
+        String like = "%" + normalized
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+                .toLowerCase() + "%";
+        List<RagReference> rows = jdbcTemplate.query("""
+                select
+                  d.title,
+                  d.file_path,
+                  c.heading,
+                  c.chunk_text,
+                  case
+                    when lower(c.chunk_text) like ? escape '\\' then 0.55
+                    when lower(d.title) like ? escape '\\' then 0.45
+                    else 0.35
+                  end as score
+                from public.obsidian_chunks c
+                join public.obsidian_documents d on d.id = c.document_id
+                where lower(c.chunk_text) like ? escape '\\'
+                   or lower(d.title) like ? escape '\\'
+                   or lower(d.file_path) like ? escape '\\'
+                order by score desc, c.created_at desc
+                limit ?
+                """,
+                (rs, rowNum) -> mapReference(rs),
+                like, like, like, like, like, safeLimit);
+        return rows.isEmpty() ? latestChunks(safeLimit) : rows;
+    }
+
+    private List<RagReference> latestChunks(int limit) {
+        return jdbcTemplate.query("""
+                select d.title, d.file_path, c.heading, c.chunk_text, 0.10::double precision as score
+                from public.obsidian_chunks c
+                join public.obsidian_documents d on d.id = c.document_id
+                order by c.created_at desc
+                limit ?
+                """,
+                (rs, rowNum) -> mapReference(rs),
+                limit);
     }
 
     public KnowledgeStatistics safeKnowledgeStatistics() {

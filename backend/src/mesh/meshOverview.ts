@@ -98,7 +98,7 @@ export async function getAgentMeshOverview(): Promise<MeshOverview> {
       id: "loop",
       label: "MCP Loop",
       role: "Queue runner",
-      status: runtime.processes.loop ? (runtime.queue.processing > 0 ? "working" : "idle") : runtime.queue.inbox > 0 ? "warning" : "not_detected",
+      status: runtime.queue.processing > 0 ? "working" : runtime.processes.loop ? "idle" : runtime.queue.inbox > 0 ? "warning" : "not_detected",
       source: "runtime",
       summary: `Queue: inbox ${runtime.queue.inbox}, processing ${runtime.queue.processing}, outbox ${runtime.queue.outbox}, reviews ${runtime.queue.reviews}.`,
       metadata: {

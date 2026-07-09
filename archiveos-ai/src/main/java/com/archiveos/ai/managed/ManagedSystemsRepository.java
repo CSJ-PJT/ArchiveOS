@@ -87,6 +87,16 @@ public class ManagedSystemsRepository {
                 """, this::auditRow);
     }
 
+    public Map<String, Object> latestEcosystemHealth(String serviceType) {
+        return queryOne("""
+                select id, service_type, service_name, base_url, status, http_status, summary::text as summary_json,
+                       error_message, checked_at, created_at
+                  from public.ecosystem_health_snapshot
+                 where service_type = ?
+                 order by checked_at desc limit 1
+                """, this::ecosystemHealthRow, serviceType);
+    }
+
     public Map<String, Object> inboxState(String id) {
         return queryOne("select id, status, acknowledged_at, resolved_at, updated_at, metadata::text as metadata_json from public.pm_inbox_item_states where id = ?",
                 this::inboxStateRow, id);
@@ -175,6 +185,21 @@ public class ManagedSystemsRepository {
         value.put("http_status", nullableInt(rs, "http_status"));
         value.put("latency_ms", nullableInt(rs, "latency_ms"));
         value.put("checked_at", instant(rs, "checked_at"));
+        return value;
+    }
+
+    private Map<String, Object> ecosystemHealthRow(ResultSet rs, int row) throws SQLException {
+        Map<String, Object> value = base();
+        value.put("id", rs.getLong("id"));
+        value.put("service_type", rs.getString("service_type"));
+        value.put("service_name", rs.getString("service_name"));
+        value.put("base_url", rs.getString("base_url"));
+        value.put("status", rs.getString("status"));
+        value.put("http_status", nullableInt(rs, "http_status"));
+        value.put("summary", Json.readObject(rs.getString("summary_json")));
+        value.put("error_message", rs.getString("error_message"));
+        value.put("checked_at", instant(rs, "checked_at"));
+        value.put("created_at", instant(rs, "created_at"));
         return value;
     }
 

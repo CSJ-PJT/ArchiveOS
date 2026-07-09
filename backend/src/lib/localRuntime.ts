@@ -106,11 +106,13 @@ async function readLocalRuntimeStatusFresh(): Promise<LocalRuntimeStatus> {
   const configuredQueuePath = process.env.MCP_QUEUE_PATH?.trim() || null;
   const configuredRepoPath = process.env.MCP_REPO_PATH?.trim() || null;
   const repoPath = configuredRepoPath ?? (loop ? extractRepoPath(loop.commandLine) : null);
-  const queuePath = configuredQueuePath ?? (repoPath ? path.join(repoPath, "tools", "mcp-codex-bridge", "queue") : null);
+  const processRoot = path.basename(process.cwd()).toLowerCase() === "backend" ? path.resolve(process.cwd(), "..") : process.cwd();
+  const localQueuePath = path.join(processRoot, "tools", "runtime", "queue");
+  const queuePath = configuredQueuePath ?? (repoPath ? path.join(repoPath, "tools", "mcp-codex-bridge", "queue") : localQueuePath);
   const queue = await readQueueSnapshot(queuePath);
   const latestDetails = await readLatestDetails(queuePath, queue.latest.outbox, queue.latest.review);
   const activeTask = queue.latest.processing ? stripTaskExtension(queue.latest.processing.name) : null;
-  const status = queue.counts.processing > 0 && implementer ? "working" : queue.counts.processing > 0 ? "unknown" : "idle";
+  const status = queue.counts.processing > 0 ? "working" : "idle";
 
   return {
     checked_at: checkedAt,
@@ -231,7 +233,7 @@ async function readPidFile(filePath: string) {
 async function readBroadCodexProcesses(): Promise<ProcessSnapshot[]> {
   const script = [
     "$items = Get-CimInstance Win32_Process -Filter \"Name = 'codex.exe' OR Name = 'node.exe' OR Name = 'powershell.exe' OR Name = 'pwsh.exe' OR Name = 'bash.exe'\" | Where-Object {",
-    "  $_.CommandLine -match 'Run-ModularLoop|run-modular-loop|gpt-session-bridge|@openai\\\\codex|codex.exe'",
+    "  $_.CommandLine -match 'Run-ModularLoop|run-modular-loop|archive-factory-runner|gpt-session-bridge|@openai\\\\codex|codex.exe'",
     "} | ForEach-Object {",
     "  $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue",
     "  [PSCustomObject]@{",
@@ -589,6 +591,7 @@ function parseReviewerVerdict(value: string) {
 function findLoopProcess(processes: ProcessSnapshot[]) {
   return (
     processes.find((processItem) => /-File\s+.+Run-ModularLoop\.ps1/i.test(processItem.commandLine)) ??
+    processes.find((processItem) => /archive-factory-runner\.ps1/i.test(processItem.commandLine)) ??
     processes.find((processItem) => /bash\.exe.+run-modular-loop/i.test(processItem.commandLine)) ??
     null
   );
@@ -711,6 +714,10 @@ function buildJudgement(
   }
 
   if (processingCount > 0 && !implementer) {
+    if (latestOutbox?.name === "archive-factory-runner.result.json") {
+      return "Archive factory runner is active through the runtime queue. Host process PID is not visible from the Docker backend container.";
+    }
+
     return "A task is in processing, but no active Codex implementer process was detected.";
   }
 

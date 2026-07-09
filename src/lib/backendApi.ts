@@ -247,6 +247,74 @@ export type EcosystemDryRun = {
   steps: Array<{ order: number; service: string; action: string; mode: string }>;
 };
 
+export type SettlementGameServiceEconomics = {
+  service: string;
+  cashBefore: number | string;
+  revenue: number | string;
+  cost: number | string;
+  profit: number | string;
+  cashAfter: number | string;
+  burnRate: number | string;
+  bankruptcyRisk: "LOW" | "WARNING" | "CRITICAL" | string;
+  explanation: string;
+};
+
+export type SettlementGameEvent = {
+  eventId: string;
+  idempotencyKey: string;
+  eventType: string;
+  source: string;
+  target: string;
+  simulationRunId: string;
+  settlementCycleId: string;
+  tickId: string;
+  day: number;
+  correlationId: string;
+  hop: number;
+  maxHop: number;
+  payload: Record<string, unknown>;
+};
+
+export type SettlementGameProposal = {
+  proposalId: string;
+  agentName: string;
+  targetService: string;
+  actionType: string;
+  summary: string;
+  expectedCashImpact: number | string;
+  confidence: number;
+  safeModeRequired: boolean;
+  approvalRequired: boolean;
+  evidence: string[];
+};
+
+export type SettlementAgencyGameSummary = {
+  simulationRunId: string;
+  settlementCycleId: string;
+  tickId: string;
+  day: number;
+  correlationId: string;
+  maxHop: number;
+  status: "RUNNING" | "ATTENTION" | "BANKRUPTCY_RISK" | string;
+  ecosystemCashBalance: number | string;
+  ecosystemDailyProfit: number | string;
+  bankruptcyRisk: "LOW" | "WARNING" | "CRITICAL" | string;
+  services: Record<"nexus" | "logistics" | "ledger" | string, SettlementGameServiceEconomics>;
+  events: SettlementGameEvent[];
+  proposals: SettlementGameProposal[];
+  createdAt: string;
+  simulationSource: "Archive-Ledger" | "ArchiveOS fallback" | string;
+  syntheticData: boolean;
+  dryRun: boolean;
+  gameNamespace: "GAME/SIMULATION" | string;
+  safeMode: boolean;
+  allowExternalWrite: boolean;
+  agentMode: "PROPOSAL_ONLY" | string;
+  writePolicy: string;
+  processedEventGuard: Record<string, unknown>;
+  ledgerSimulationError?: string;
+};
+
 export type ExternalApprovalEvidence = {
   id: string;
   approval_request_id: string;
@@ -440,6 +508,28 @@ export async function refreshEcosystem() {
 export async function runEcosystemDryRun() {
   const response = await request<ApiEnvelope<EcosystemDryRun>>("/api/ecosystem/demo/dry-run", { method: "POST" });
   return response.data;
+}
+
+export async function getSettlementAgencyGameSummary() {
+  const response = await request<ApiEnvelope<SettlementAgencyGameSummary>>("/api/game/survival/summary");
+  return response.data;
+}
+
+export async function simulateSettlementAgencyGame(input: Record<string, unknown> = {}, dryRun = true) {
+  const response = await request<ApiEnvelope<SettlementAgencyGameSummary>>(`/api/game/survival/simulate?dryRun=${dryRun}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
+export async function getEcosystemSurvivalSummary() {
+  return getSettlementAgencyGameSummary();
+}
+
+export async function simulateEcosystemSurvival(input: Record<string, unknown> = {}, dryRun = true) {
+  return simulateSettlementAgencyGame(input, dryRun);
 }
 
 export async function getAtlasServices() {
@@ -805,7 +895,11 @@ export type LocalAction =
   | "git_log_recent"
   | "frontend_build"
   | "backend_typecheck"
-  | "backend_build";
+  | "backend_build"
+  | "runtime_status"
+  | "runtime_start_all"
+  | "runtime_stop_all"
+  | "runtime_restart_all";
 
 export type LocalActionProject = {
   id: string;
@@ -1265,6 +1359,33 @@ export async function getRpaTaskDetail(id: string) {
   return response.data;
 }
 
+export async function classifyRpaTask(input: {
+  title: string;
+  description: string;
+  targetProject?: string | null;
+  requestedBy?: string | null;
+  metadata?: Record<string, unknown>;
+}) {
+  const response = await request<ApiEnvelope<{ task: RpaTaskRecord; jobExecutionId?: number; batchStatus: string; safety: string; error?: string }>>("/api/rpa/classify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
+export async function decideRpaTask(
+  id: string,
+  input: { action: "approve" | "reject" | "hold" | "request_retry"; reason?: string | null; decidedBy?: string | null },
+) {
+  const response = await request<ApiEnvelope<{ task: RpaTaskRecord; decision: RpaDecisionRecord }>>(`/api/rpa/tasks/${encodeURIComponent(id)}/decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
 export async function getSecurityStatus() {
   const response = await request<ApiEnvelope<SecurityStatus>>("/api/security/status");
   return response.data;
@@ -1318,6 +1439,7 @@ export async function createPmTask(input: {
 }) {
   const response = await request<ApiEnvelope<PmTask>>("/api/tasks", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
   return response.data;
@@ -1326,6 +1448,7 @@ export async function createPmTask(input: {
 export async function decidePmTask(taskId: string, input: { action: PmDecisionAction; reason?: string | null }) {
   const response = await request<ApiEnvelope<{ task: PmTask }>>(`/api/tasks/${taskId}/decision`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
   return response.data;
@@ -1334,6 +1457,7 @@ export async function decidePmTask(taskId: string, input: { action: PmDecisionAc
 export async function retryPmTask(taskId: string, reason?: string | null) {
   const response = await request<ApiEnvelope<{ task: PmTask }>>(`/api/tasks/${taskId}/retry`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ reason }),
   });
   return response.data;

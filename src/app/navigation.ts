@@ -1,6 +1,6 @@
 import type { IconName } from "../components/shared/Icon";
 
-export type AppRoute = "overview" | "managed" | "ecosystem" | "approvals" | "agents" | "workflows" | "knowledge" | "history" | "batch" | "rpa" | "atlas" | "mcp" | "settings";
+export type AppRoute = "overview" | "managed" | "ecosystem" | "game" | "approvals" | "agents" | "workflows" | "knowledge" | "history" | "batch" | "rpa" | "atlas" | "mcp" | "settings";
 
 export type NavigationItem = {
   id: AppRoute;
@@ -37,6 +37,13 @@ export const navigationItems: NavigationItem[] = [
     label: "Ecosystem",
     shortLabel: "Eco",
     description: "Nexus, Logistics, Ledger topology and degraded isolation",
+    icon: "activity",
+  },
+  {
+    id: "game",
+    label: "Ecosystem Survival Mode",
+    shortLabel: "Game",
+    description: "Ecosystem simulation for synthetic settlement, risk, and cash flow control",
     icon: "activity",
   },
   {

@@ -79,7 +79,7 @@ export function LedgerApprovalsPage({ data, onRefresh }: { data: AppData; onRefr
       <SectionCard title="Approval Requests" eyebrow="Synthetic transaction approvals">
         <div className="workflow-list">
           {approvals.map((approval) => <button
-            className={`workflow-row ${selected?.approval_request_id === approval.approval_request_id ? "selected" : ""}`}
+            className={`workflow-row ledger-approval-row ${selected?.approval_request_id === approval.approval_request_id ? "selected" : ""}`}
             key={approval.approval_request_id}
             type="button"
             onClick={() => setSelectedId(approval.approval_request_id)}

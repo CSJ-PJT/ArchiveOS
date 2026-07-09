@@ -3,7 +3,7 @@ import type { AppData } from "../app/AppShell";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { MetricCard } from "../components/shared/MetricCard";
-import { decidePmTask, retryPmTask } from "../lib/backendApi";
+import { createPmTask, decidePmTask, retryPmTask } from "../lib/backendApi";
 import type { PmDecisionAction, PmTask, PmTaskStatus } from "../types/database";
 import { formatTimeAgo, stringifyMeta } from "./pageUtils";
 
@@ -33,8 +33,12 @@ export function WorkflowsPage({ data, onRefresh }: { data: AppData; onRefresh: (
   const [filter, setFilter] = useState<WorkflowFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [newTitle, setNewTitle] = useState("Archive factory pipeline check");
+  const [newDescription, setNewDescription] = useState("Run the Archive Platform control pipeline as a PM-visible work item. Validate Nexus, Logistics, Ledger, MCP/RPA, RAG, and approval gates before any risky action.");
+  const [newTarget, setNewTarget] = useState("Archive Platform");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const canDecide = data.auth.role === "PM" || data.auth.role === "ADMIN";
+  const canCreate = data.auth.role === "ADMIN";
 
   const filteredTasks = useMemo(() => data.tasks.filter((task) => matchesFilter(task, filter)), [data.tasks, filter]);
   const selectedTask = data.tasks.find((task) => task.id === selectedId) || filteredTasks[0] || null;
@@ -66,6 +70,24 @@ export function WorkflowsPage({ data, onRefresh }: { data: AppData; onRefresh: (
     }
   }
 
+  async function createInstruction() {
+    if (!newTitle.trim() || !newDescription.trim()) return;
+    setBusyAction("create");
+    try {
+      const task = await createPmTask({
+        title: newTitle.trim(),
+        description: newDescription.trim(),
+        target_project: newTarget.trim() || "Archive Platform",
+        priority: "high",
+        max_iterations: 3,
+      });
+      setSelectedId(task.id);
+      await onRefresh();
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   return (
     <div className="page-stack">
       <section className="summary-strip">
@@ -75,6 +97,30 @@ export function WorkflowsPage({ data, onRefresh }: { data: AppData; onRefresh: (
         <MetricCard label="Approval Required" value={summary.approval} status={summary.approval > 0 ? "blocked" : "healthy"} />
         <MetricCard label="Failed" value={summary.failed} status={summary.failed > 0 ? "critical" : "healthy"} />
       </section>
+
+      <SectionCard title="PM Work Instruction" eyebrow="Control Tower command intake">
+        <div className="form-stack">
+          <label>
+            <span>Title</span>
+            <input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} />
+          </label>
+          <label>
+            <span>Target</span>
+            <input value={newTarget} onChange={(event) => setNewTarget(event.target.value)} />
+          </label>
+          <label>
+            <span>Instruction</span>
+            <textarea value={newDescription} onChange={(event) => setNewDescription(event.target.value)} />
+          </label>
+          <p className="small-note">
+            This creates an auditable PM workflow item. It does not execute shell, deployment, MCP, or external writes by itself.
+          </p>
+          <button className="button button-primary" type="button" disabled={!canCreate || Boolean(busyAction)} onClick={() => void createInstruction()}>
+            {busyAction === "create" ? "Creating..." : "Create Work Instruction"}
+          </button>
+          {!canCreate ? <p className="small-note">Admin unlock is required to create new work instructions.</p> : null}
+        </div>
+      </SectionCard>
 
       <section className="workflows-layout">
         <SectionCard title="Workflow Queue" eyebrow="Queue + pipeline + PM decisions">
