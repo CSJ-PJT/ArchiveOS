@@ -4,11 +4,73 @@
 
 # ArchiveOS
 
-> **AI 프로젝트를 실행하고 관리하는 차세대 운영 플랫폼**
+> **제조·물류·정산 서비스를 통합 관제하는 Spring Boot 기반 AI/AX Control Tower**
 
-ArchiveOS는 AI 에이전트, 지능형 RPA, 배치 작업, 워크플로우, 지식 검색과 외부 도구를 하나의 환경에서 실행하고 관제하는 엔터프라이즈 AI 런타임 플랫폼입니다.
+ArchiveOS는 Archive-Nexus, Archive-Logistics, Archive-Ledger를 외부 운영 대상 시스템으로 등록하고, 상태 관제, 승인, 정책 근거, callback outbox, 감사 로그를 통합 관리하는 Control Tower 서비스입니다.
 
-사람이 모든 시스템을 직접 운영하는 방식을 넘어, AI가 반복 업무와 운영 분석을 지원하고 사람은 중요한 의사결정과 승인에 집중하는 환경을 지향합니다.
+운영자는 ArchiveOS에서 각 서비스의 health, operations summary, topology, approval queue, callback 상태를 확인합니다. 외부 서비스 장애는 `DEGRADED` 또는 `UNAVAILABLE`로 격리되며 ArchiveOS 런타임 자체로 전파되지 않도록 설계했습니다.
+
+## Operating Role
+
+- External System Registry
+- Ecosystem Summary
+- Topology
+- External Approval Gateway
+- Policy Evidence / Fallback Evidence
+- Approval Callback Outbox
+- Audit Log
+- Safe-mode
+- DEGRADED / UNAVAILABLE 상태 분리
+
+## Primary APIs
+
+```http
+GET /api/ecosystem/summary
+GET /api/ecosystem/topology
+GET /api/integrations/ledger/approval-required
+GET /api/approvals/external/summary
+GET /api/approvals/callbacks
+```
+
+## Related Repositories
+
+- Archive-Nexus: https://github.com/CSJ-PJT/Archive-Nexus
+- Archive-Logistics: https://github.com/CSJ-PJT/Archive-Logistics
+- Archive-Ledger: https://github.com/CSJ-PJT/Archive-Ledger
+
+## Operating Principles
+
+- Read-only 관제를 우선한다.
+- External write는 `ARCHIVE_INTEGRATION_SAFE_MODE=true`, `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=false` 기본값으로 차단한다.
+- Nexus, Logistics, Ledger 장애는 ArchiveOS API 종료로 전파하지 않는다.
+- Approval 결정, callback, evidence, audit 이벤트는 추적 가능하게 남긴다.
+- Secret, webhook, token, private key는 UI/API/docs에 노출하지 않는다.
+
+## Quick Start
+
+```powershell
+docker compose up -d --build
+curl.exe http://localhost:5173/api/ecosystem/summary
+curl.exe http://localhost:5173/api/ecosystem/topology
+```
+
+## Smoke Script
+
+```powershell
+.\scripts\smoke-ecosystem.ps1
+.\scripts\smoke-ecosystem.ps1 -OsApiUrl "http://localhost:5173" -NexusUrl "http://localhost:8080" -LogisticsUrl "http://localhost:8092" -LedgerUrl "http://localhost:18080"
+```
+
+`-WriteSmoke`는 실제 외부 서비스 상태를 변경할 수 있으므로 운영 데모 전 safe-mode와 integration enabled 상태를 먼저 확인합니다.
+
+## Runbook
+
+1. `docker compose ps`로 ArchiveOS frontend, backend, archiveos-ai, postgres 상태를 확인한다.
+2. `GET /api/ecosystem/summary`로 외부 서비스 상태를 확인한다.
+3. `GET /api/ecosystem/topology`로 Nexus → Logistics → Ledger → ArchiveOS 흐름을 확인한다.
+4. `GET /api/approvals/external/summary`로 승인 대기 상태를 확인한다.
+5. `GET /api/approvals/callbacks`로 callback retry/failed 상태를 확인한다.
+6. 외부 write가 필요한 경우 `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=true`를 명시적으로 설정하고 승인된 smoke만 수행한다.
 
 ---
 
