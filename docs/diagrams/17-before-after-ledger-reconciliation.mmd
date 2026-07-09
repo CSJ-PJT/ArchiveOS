@@ -1,0 +1,16 @@
+flowchart LR
+  subgraph Before[Before]
+    B1["received + duplicate - created - failed"]
+    B2["Duplicate counted twice"]
+    B3["False mismatch"]
+    B1 --> B2 --> B3
+  end
+
+  subgraph After[After]
+    A1["received - duplicate - created - failed"]
+    A2["Duplicate-safe reconciliation"]
+    A3["mismatch = 0 when counts match"]
+    A1 --> A2 --> A3
+  end
+
+  Before --> After

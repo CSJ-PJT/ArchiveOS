@@ -1,0 +1,50 @@
+erDiagram
+  external_approval_requests ||--o{ external_approval_evidence : has
+  external_approval_requests ||--o{ external_approval_decisions : receives
+  external_approval_requests ||--o{ external_approval_callbacks : triggers
+  external_approval_callbacks ||--o{ approval_callback_outbox : queues
+  ecosystem_health_snapshot ||--o{ ecosystem_event_timeline : records
+  policy_evidence_snapshot ||--o{ external_approval_evidence : references
+
+  external_approval_requests {
+    string approval_request_id
+    string source
+    string status
+    decimal amount
+  }
+  external_approval_evidence {
+    string evidence_id
+    string evidence_type
+    string source_path
+  }
+  external_approval_decisions {
+    string decision_id
+    string decision
+    string decided_by
+  }
+  external_approval_callbacks {
+    string callback_id
+    string status
+    int retry_count
+  }
+  ecosystem_health_snapshot {
+    string snapshot_id
+    string service_name
+    string status
+  }
+  approval_callback_outbox {
+    string callback_id
+    string status
+    string last_error
+  }
+  ecosystem_event_timeline {
+    string event_id
+    string source_service
+    string title
+  }
+  policy_evidence_snapshot {
+    string snapshot_id
+    string policy_name
+    string fallback_reason
+  }
+

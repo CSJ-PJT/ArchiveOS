@@ -54,4 +54,4 @@ External write actions such as Nexus event generation, Nexus publish, Logistics 
 
 ## Naming
 
-External repository and public display name are `Archive-Logistics`. Some internal settings and source values can remain `logitics` or `Archive-Logitics` to preserve existing event and configuration contracts.
+External repository and public display name are `Archive-Logistics`. Some internal settings and source values can remain `logitics` or `LOGITICS` to preserve existing event and configuration contracts.

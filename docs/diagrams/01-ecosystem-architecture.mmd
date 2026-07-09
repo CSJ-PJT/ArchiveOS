@@ -1,0 +1,46 @@
+flowchart LR
+  subgraph NX[Archive-Nexus - Manufacturing Event Source]
+    NXR[Factory A/B/C Runtime]
+    NXO[Nexus Outbox]
+    NXR --> NXO
+    NXO --> NXRTRY[Retry / last_error]
+  end
+
+  subgraph LG[Archive-Logistics - Route / ETA / Cost Calculator]
+    LGI[Nexus Event Ingestion]
+    LGR[Route + ETA Calculator]
+    LGO[Logistics Outbox]
+    LGI --> LGR --> LGO
+  end
+
+  subgraph LD[Archive-Ledger - Transaction / Ledger / Settlement / Reconciliation]
+    LDI[Event Receiver]
+    LDT[Transaction Normalizer]
+    LDL[Ledger Entry Generator]
+    LDS[Settlement + Reconciliation]
+    LDI --> LDT --> LDL --> LDS
+  end
+
+  subgraph OS[ArchiveOS - Control Tower / Approval / Evidence / Audit]
+    OSR[Ecosystem Registry]
+    OSH[Health Aggregator]
+    OSA[External Approval Gateway]
+    OSE[Policy Evidence / Fallback Evidence]
+    OSC[Callback Outbox]
+    OSA --> OSE --> OSC
+    OSR --> OSH
+  end
+
+  NXO -->|Logistics events| LGI
+  NXO -->|Cost / settlement events| LDI
+  LGO -->|Finalized logistics cost event| LDI
+  LDT -->|APPROVAL_REQUIRED| OSA
+  OSC -->|approve / reject callback| LDT
+  OSH -. polls .-> NXO
+  OSH -. polls .-> LGI
+  OSH -. polls .-> LDI
+
+  Safe[Safe-mode / dry-run] -. guards external writes .-> NXO
+  Safe -. guards callbacks .-> OSC
+  Iso[DEGRADED / UNAVAILABLE isolation] -. prevents failure propagation .-> OSH
+

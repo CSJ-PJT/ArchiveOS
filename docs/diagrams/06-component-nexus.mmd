@@ -1,0 +1,18 @@
+flowchart TB
+  Runtime[Event Generator]
+  Outbox[Nexus Outbox]
+  Policy[Routing Policy]
+  LogisticsPub[Logistics Publisher - compatibility key LOGITICS]
+  LedgerPub[Ledger Publisher]
+  Summary[Integration Summary]
+  DryRun[Dry-run]
+
+  Runtime --> Outbox
+  Outbox --> Policy
+  Policy --> LogisticsPub
+  Policy --> LedgerPub
+  Policy --> DryRun
+  Outbox --> Summary
+  LogisticsPub --> ArchiveLogistics[Archive-Logistics]
+  LedgerPub --> ArchiveLedger[Archive-Ledger]
+

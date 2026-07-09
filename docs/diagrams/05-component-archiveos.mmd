@@ -1,0 +1,29 @@
+flowchart TB
+  subgraph UI[React UI]
+    Overview[Ecosystem Overview]
+    Registry[Service Registry]
+    Queue[Ledger Approval Queue]
+    Evidence[Policy Evidence Panel]
+  end
+
+  subgraph Node[Node Compatibility Layer]
+    Proxy[API Proxy]
+    Legacy[Legacy API Compatibility]
+  end
+
+  subgraph Spring[Spring Boot API]
+    Ecosystem[Ecosystem Registry]
+    Health[Health Aggregator]
+    Topology[Topology API]
+    Approval[External Approval Gateway]
+    Policy[Policy Evidence]
+    Callback[Callback Outbox]
+    Audit[Audit Log]
+  end
+
+  UI --> Node --> Spring
+  Ecosystem --> Health --> Topology
+  Approval --> Policy --> Callback
+  Approval --> Audit
+  Callback --> Audit
+

@@ -1,0 +1,42 @@
+erDiagram
+  nexus_logistics_event ||--o{ route_plan : creates
+  route_plan ||--|| route_cost : calculates
+  route_cost ||--o{ logistics_outbox_event : emits
+  logistics_outbox_event ||--o{ ledger_publish_attempt : attempts
+  nexus_logistics_event ||--o{ audit_log : records
+
+  nexus_logistics_event {
+    string event_id
+    string idempotency_key
+    string event_type
+    string processing_status
+  }
+  route_plan {
+    string route_plan_id
+    string origin_code
+    string destination_code
+    string status
+  }
+  route_cost {
+    string route_cost_id
+    decimal estimated_cost
+    string currency
+    boolean approval_required
+  }
+  logistics_outbox_event {
+    string event_id
+    string status
+    int retry_count
+    string last_error
+  }
+  ledger_publish_attempt {
+    string attempt_id
+    string status
+    string response_code
+  }
+  audit_log {
+    string audit_id
+    string action
+    string target_id
+  }
+

@@ -1,0 +1,13 @@
+flowchart TB
+  Ingest[Nexus Event Ingestion]
+  Matrix[Synthetic Distance Matrix]
+  Route[Route Calculator]
+  Plan[Route Plan]
+  Cost[Route Cost]
+  Outbox[Logistics Outbox]
+  Batch[Spring Batch Publisher]
+  Client[Ledger Publisher Client]
+
+  Ingest --> Matrix --> Route --> Plan --> Cost
+  Cost --> Outbox --> Batch --> Client --> Ledger[Archive-Ledger]
+

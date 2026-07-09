@@ -1,0 +1,16 @@
+flowchart LR
+  subgraph Before[Before]
+    B1["Repeated INSERT / DELETE"]
+    B2["Lock contention"]
+    B3["Low batch throughput"]
+    B1 --> B2 --> B3
+  end
+
+  subgraph After[After]
+    A1["Only INSERT"]
+    A2["Time partitioning"]
+    A3["855x throughput improvement"]
+    A1 --> A2 --> A3
+  end
+
+  Before --> After

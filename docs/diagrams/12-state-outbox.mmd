@@ -1,0 +1,13 @@
+stateDiagram-v2
+  [*] --> PENDING
+  PENDING --> PUBLISHED: publish success
+  PENDING --> RETRY: transient failure
+  RETRY --> PUBLISHED: retry success
+  RETRY --> FAILED: max retry exceeded
+  PENDING --> SKIPPED: target NONE or disabled
+  PENDING --> DRY_RUN: dryRun=true
+  DRY_RUN --> PENDING: no external write
+  PUBLISHED --> [*]
+  FAILED --> [*]
+  SKIPPED --> [*]
+

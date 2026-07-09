@@ -1,0 +1,11 @@
+stateDiagram-v2
+  [*] --> RECEIVED
+  RECEIVED --> PROCESSED: validated and normalized
+  PROCESSED --> APPROVAL_REQUIRED: policy threshold met
+  PROCESSED --> SETTLEMENT_READY: no approval required
+  APPROVAL_REQUIRED --> SETTLEMENT_READY: approved callback
+  APPROVAL_REQUIRED --> REJECTED: rejected callback
+  SETTLEMENT_READY --> SETTLED: settlement batch
+  SETTLED --> [*]
+  REJECTED --> [*]
+

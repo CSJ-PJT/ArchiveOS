@@ -1,0 +1,21 @@
+sequenceDiagram
+  autonumber
+  participant Operator
+  participant Nexus as Archive-Nexus
+  participant Logistics as Archive-Logistics
+  participant Ledger as Archive-Ledger
+  participant OS as ArchiveOS
+
+  Operator->>Nexus: Generate synthetic logistics event
+  Nexus->>Nexus: Store event in Nexus Outbox
+  Nexus->>Nexus: Resolve target_service = LOGITICS
+  Nexus->>Logistics: Publish event batch
+  Logistics->>Logistics: Calculate route, ETA, delay risk, cost
+  Logistics->>Logistics: Store logistics outbox event
+  Logistics->>Ledger: Publish finalized logistics cost event
+  Ledger->>Ledger: Create transaction and ledger_entry
+  OS->>Nexus: Poll outbox summary
+  OS->>Logistics: Poll operations and routes summary
+  OS->>Ledger: Poll operations summary
+  OS->>OS: Update ecosystem summary and topology
+
