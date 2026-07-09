@@ -32,6 +32,22 @@ GET /api/approvals/external/summary
 GET /api/approvals/callbacks
 ```
 
+## Visual Documentation
+
+ArchiveOS stores operating diagrams, screenshot evidence, and wireframes under `docs/`.
+
+- Ecosystem diagrams: [`docs/diagrams`](docs/diagrams)
+- Screenshot guide and captured images: [`docs/screenshots`](docs/screenshots)
+- Wireframes / 화면설계도: [`docs/wireframes`](docs/wireframes)
+
+The diagrams describe the live Archive Platform operating model. Screenshots under `docs/screenshots` are actual captured UI/API evidence when the local services are available. Wireframes are explicitly marked as design artifacts and must not be presented as implemented screens.
+
+Local visual artifact copies are generated outside the repository under:
+
+```text
+C:\Users\dan18\Desktop\Task\산출물
+```
+
 ## Related Repositories
 
 - Archive-Nexus: https://github.com/CSJ-PJT/Archive-Nexus
@@ -126,7 +142,7 @@ curl.exe -X POST http://localhost:5173/api/ecosystem/refresh
 curl.exe -X POST http://localhost:5173/api/ecosystem/demo/run
 ```
 
-External write actions (Nexus/Ledger/Logitics generation/publish, Ledger approval callback) are blocked in safe mode unless `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=true`.
+External write actions (Nexus/Logistics/Ledger generation and publish, Ledger approval callback) are blocked in safe mode unless `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=true`.
 
 ### 4-service smoke script
 
@@ -140,7 +156,7 @@ Defaults:
 
 ```text
 Nexus URL    : http://localhost:8080
-Logitics URL : http://localhost:8092
+Logistics URL: http://localhost:8092
 Ledger URL   : http://localhost:18080
 OS API URL   : http://localhost:5173
 ```
@@ -388,46 +404,19 @@ cd ../archiveos-ai
 
 ---
 
-## Final Submission Package
+## Visual Operations Package
 
-ArchiveOS is the Control Tower for the final Archive Platform Ecosystem submission package.
+ArchiveOS keeps the ecosystem visual documentation in the repository as operating evidence for local and demo operations.
 
-Local package path:
+- [Diagrams](docs/diagrams)
+- [Screenshots](docs/screenshots)
+- [Wireframes](docs/wireframes)
 
-`C:\Users\dan18\Desktop\Task\산출물\00-Archive-Platform-Ecosystem`
+Local presentation copies can be produced under:
 
-Package contents:
+`C:\Users\dan18\Desktop\Task\산출물`
 
-- `00-Archive-Platform-Ecosystem-통합최종본-요약.pdf`
-- `00-Archive-Platform-Ecosystem-통합최종본-상세.pdf`
-- `00-Archive-Platform-Ecosystem-제출파일-인덱스.pdf`
-- `Archive-Platform-Ecosystem-최종제출.zip`
-
-Ecosystem roles:
-
-- Archive-Nexus: manufacturing and shipment event generation, Outbox routing
-- Archive-Logistics: synthetic route, ETA, logistics cost calculation, Ledger cost event publishing
-- Archive-Ledger: transaction normalization, double-entry ledger, settlement, reconciliation, approval callback
-- ArchiveOS: observability, approval gateway, policy evidence, audit log, safe-mode, DEGRADED / UNAVAILABLE status control
-
-Portfolio statement:
-
-Archive Platform Ecosystem은 Archive-Nexus, Archive-Logistics, Archive-Ledger, ArchiveOS를 연결해 제조 이벤트 생성, 물류 경로·비용 계산, 금융성 원장·정산·대사, 승인·정책 근거·장애 관제를 하나의 이벤트 드리븐 AX 백엔드 흐름으로 구현한 Java/Spring 기반 프로젝트입니다. 각 서비스는 Outbox, idempotency, retry, safe-mode, DEGRADED 상태 분리를 통해 외부 장애가 전체 런타임으로 전파되지 않도록 설계했습니다.
-
-Notes:
-
-- External submission naming uses `Archive-Logistics`.
-- Some internal keys and source names may remain `Archive-Logitics` or `logitics` for compatibility with existing events and configuration contracts.
-- `/api/routes/summary` 500 is documented as resolved in the current Archive-Logistics submission material.
-- Mail body and attachment list are maintained in `docs/final-submission-mail-body.md` and the local package folder.
-
-Related docs:
-
-- [Final Archive Platform Summary](docs/final-archive-platform-summary.md)
-- [Final Archive Platform Detailed](docs/final-archive-platform-detailed.md)
-- [Final Archive Platform Index](docs/final-archive-platform-index.md)
-- [Final Submission Mail Body](docs/final-submission-mail-body.md)
-- [Atlas v0.1 Healthcheck Result](docs/atlas-v0.1-healthcheck-result.md)
+External display naming uses `Archive-Logistics`. Internal compatibility keys can remain `logitics` or `LOGITICS` where existing APIs, database values, or environment variables require them.
 
 ---
 

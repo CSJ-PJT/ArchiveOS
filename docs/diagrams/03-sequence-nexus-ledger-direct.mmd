@@ -1,0 +1,19 @@
+sequenceDiagram
+  autonumber
+  participant Operator
+  participant Nexus as Archive-Nexus
+  participant Ledger as Archive-Ledger
+  participant OS as ArchiveOS
+
+  Operator->>Nexus: Generate synthetic cost / settlement event
+  Nexus->>Nexus: Store event in Nexus Outbox
+  Nexus->>Nexus: Resolve target_service = LEDGER
+  Nexus->>Ledger: Publish direct Ledger event
+  Ledger->>Ledger: Validate idempotency
+  Ledger->>Ledger: Normalize finance_transaction
+  Ledger->>Ledger: Generate debit / credit ledger_entry
+  Ledger->>Ledger: Run settlement / reconciliation
+  OS->>Nexus: Poll outbox summary
+  OS->>Ledger: Poll transactions and reconciliation summary
+  OS->>OS: Update Control Tower status
+

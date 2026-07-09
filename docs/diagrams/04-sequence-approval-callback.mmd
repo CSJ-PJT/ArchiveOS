@@ -1,0 +1,24 @@
+sequenceDiagram
+  autonumber
+  participant Ledger as Archive-Ledger
+  participant OS as ArchiveOS
+  participant Policy as Policy Evidence
+  participant PM as PM / Admin
+  participant Callback as Callback Outbox
+
+  Ledger->>Ledger: Detect APPROVAL_REQUIRED transaction
+  Ledger->>OS: POST external approval request
+  OS->>Policy: Build RAG evidence
+  alt LLM or RAG unavailable
+    Policy-->>OS: Rule fallback evidence
+  else Evidence available
+    Policy-->>OS: Policy evidence snapshot
+  end
+  OS->>PM: Show approval request
+  PM->>OS: Approve / reject / hold
+  OS->>Callback: Store callback outbox item
+  Callback->>Ledger: POST approval callback
+  Ledger->>Ledger: Update transaction status
+  Ledger-->>OS: Callback accepted
+  OS->>OS: Audit decision and callback result
+

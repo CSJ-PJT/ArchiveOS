@@ -1,0 +1,18 @@
+flowchart TB
+  Receiver[Event Receiver]
+  Normalizer[Transaction Normalizer]
+  Entry[Ledger Entry Generator]
+  Settlement[Settlement Batch]
+  Recon[Reconciliation]
+  Approval[Approval Request]
+  Callback[Approval Callback]
+  Audit[Audit Log]
+
+  Receiver --> Normalizer --> Entry
+  Entry --> Settlement --> Recon
+  Normalizer --> Approval --> ArchiveOS[ArchiveOS]
+  ArchiveOS --> Callback --> Normalizer
+  Receiver --> Audit
+  Settlement --> Audit
+  Callback --> Audit
+

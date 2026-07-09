@@ -43,11 +43,11 @@ Notes:
   - `/api/operations/summary`
   - `/api/outbox/summary`
   - `/api/routes/summary`
-- `/api/routes/summary` 500 was resolved in the current Archive-Logistics submission material. The root cause was JPQL nullable parameter and PostgreSQL JDBC type inference. Archive-Logistics now handles default, `factoryId`, `date`, and `factoryId + date` paths through explicit Repository/Service branches.
+- `/api/routes/summary` 500 was resolved in the current Archive-Logistics implementation. The root cause was JPQL nullable parameter and PostgreSQL JDBC type inference. Archive-Logistics now handles default, `factoryId`, `date`, and `factoryId + date` paths through explicit Repository/Service branches.
 - Archive-Ledger supports native logistics bulk endpoint:
   - `POST /api/events/logistics/bulk`
 
-Note: GitHub repository and public display name are Archive-Logistics. Some internal keys and source names may remain `Archive-Logitics/logitics` for backward compatibility with existing events and API contracts.
+Note: GitHub repository and public display name are Archive-Logistics. Some internal keys and source names may remain `logitics` or `LOGITICS` for backward compatibility with existing events and API contracts.
 
 ## Status mapping
 

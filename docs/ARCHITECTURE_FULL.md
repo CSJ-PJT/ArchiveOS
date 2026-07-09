@@ -240,7 +240,7 @@ Obsidian Vault에 저장된 Markdown 문서를 수집하고 Vector DB화한다.
 
 - 프로젝트 문서
 - 이력서
-- 면접 준비 자료
+- 개인 학습 자료
 - DeepStake3D 기획 문서
 - ArchiveOS 설계 문서
 - 운영 기록

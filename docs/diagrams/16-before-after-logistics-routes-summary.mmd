@@ -1,0 +1,16 @@
+flowchart LR
+  subgraph Before[Before]
+    B1["JPQL nullable parameter"]
+    B2["PostgreSQL JDBC type inference failure"]
+    B3["/api/routes/summary unstable"]
+    B1 --> B2 --> B3
+  end
+
+  subgraph After[After]
+    A1["Service-layer branch"]
+    A2["Repository method per filter case"]
+    A3["Stable summary response"]
+    A1 --> A2 --> A3
+  end
+
+  Before --> After

@@ -1,0 +1,25 @@
+flowchart TB
+  subgraph Host[Developer Host]
+    Browser[Browser]
+    HostNet[host.docker.internal bridge]
+    Nexus[Archive-Nexus :8080]
+    Logistics[Archive-Logistics :8092]
+    Ledger[Archive-Ledger :18080]
+  end
+
+  subgraph Compose[ArchiveOS Docker Compose]
+    Frontend[ArchiveOS frontend :5173]
+    NodeApi[Node compatibility API]
+    JavaApi[Spring Boot API]
+    Pg[(PostgreSQL)]
+  end
+
+  Browser --> Frontend
+  Frontend --> NodeApi
+  NodeApi --> JavaApi
+  JavaApi --> Pg
+  JavaApi --> HostNet
+  HostNet --> Nexus
+  HostNet --> Logistics
+  HostNet --> Ledger
+

@@ -1,0 +1,51 @@
+erDiagram
+  received_event ||--o| finance_transaction : normalizes
+  finance_transaction ||--o{ ledger_entry : posts
+  finance_transaction ||--o{ settlement_detail : settles
+  settlement_batch ||--o{ settlement_detail : includes
+  finance_transaction ||--o| approval_request : may_require
+  reconciliation_result ||--o{ audit_log : records
+
+  received_event {
+    string event_id
+    string idempotency_key
+    string processing_status
+  }
+  finance_transaction {
+    string transaction_id
+    string transaction_type
+    decimal amount
+    string status
+  }
+  ledger_entry {
+    string transaction_id
+    string account_code
+    decimal debit_amount
+    decimal credit_amount
+  }
+  settlement_batch {
+    string batch_id
+    string status
+    decimal total_amount
+  }
+  settlement_detail {
+    string batch_id
+    string transaction_id
+    decimal amount
+  }
+  reconciliation_result {
+    string reconciliation_date
+    int mismatch_count
+    string status
+  }
+  approval_request {
+    string approval_request_id
+    string status
+    string policy_evidence
+  }
+  audit_log {
+    string trace_id
+    string action
+    string detail
+  }
+
