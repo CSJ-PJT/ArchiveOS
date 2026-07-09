@@ -15,10 +15,18 @@ ArchiveOS can run without Nexus, Logistics, or Ledger. In that mode:
 3. Start Archive-Nexus on `http://localhost:8080`.
 4. Start ArchiveOS.
 5. Check:
-   - `curl.exe http://localhost:4000/api/ecosystem/summary`
-   - `curl.exe http://localhost:4000/api/ecosystem/topology`
-   - `curl.exe -X POST http://localhost:4000/api/ecosystem/refresh`
-   - `curl.exe -X POST http://localhost:4000/api/ecosystem/demo/dry-run`
+   - `curl.exe http://localhost:5173/api/ecosystem/summary`
+   - `curl.exe http://localhost:5173/api/ecosystem/topology`
+   - `curl.exe -X POST http://localhost:5173/api/ecosystem/refresh` (admin session required)
+   - `curl.exe -X POST http://localhost:5173/api/ecosystem/demo/dry-run`
+
+6. Write-mode smoke (optional, typically safe-mode blocked):
+   - `curl.exe -X POST "http://localhost:8080/api/outbox/events/generate?count=10&type=logistics"`
+   - `curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=logitics"`
+   - `curl.exe -X POST "http://localhost:8092/api/outbox/publish"`
+   - `curl.exe -X POST "http://localhost:8080/api/outbox/events/generate?count=10&type=ledger"`
+   - `curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=ledger"`
+   - `curl.exe http://localhost:18080/api/transactions?status=APPROVAL_REQUIRED`
 
 ## Docker Compose host URLs
 
@@ -37,3 +45,8 @@ ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL=http://host.docker.internal:8080
 3. Approve or reject from ArchiveOS.
 4. Check callback outbox status.
 5. Retry failed callback if Ledger was unavailable.
+
+Notes:
+- Base URL defaults: Nexus `http://localhost:8080`, Logistics `http://localhost:8092`, Ledger `http://localhost:18080`, ArchiveOS API `http://localhost:5173`.
+- ArchiveOS safe mode defaults: `ARCHIVE_INTEGRATION_SAFE_MODE=true`, `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=false`.
+- External write API endpoints are still guarded by ArchiveOS safe-mode policies.
