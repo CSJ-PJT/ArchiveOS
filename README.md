@@ -326,6 +326,48 @@ cd ../archiveos-ai
 
 ---
 
+## Final Submission Package
+
+ArchiveOS is the Control Tower for the final Archive Platform Ecosystem submission package.
+
+Local package path:
+
+`C:\Users\dan18\Desktop\Task\산출물\00-Archive-Platform-Ecosystem`
+
+Package contents:
+
+- `00-Archive-Platform-Ecosystem-통합최종본-요약.pdf`
+- `00-Archive-Platform-Ecosystem-통합최종본-상세.pdf`
+- `00-Archive-Platform-Ecosystem-제출파일-인덱스.pdf`
+- `Archive-Platform-Ecosystem-최종제출.zip`
+
+Ecosystem roles:
+
+- Archive-Nexus: manufacturing and shipment event generation, Outbox routing
+- Archive-Logistics: synthetic route, ETA, logistics cost calculation, Ledger cost event publishing
+- Archive-Ledger: transaction normalization, double-entry ledger, settlement, reconciliation, approval callback
+- ArchiveOS: observability, approval gateway, policy evidence, audit log, safe-mode, DEGRADED / UNAVAILABLE status control
+
+Portfolio statement:
+
+Archive Platform Ecosystem은 Archive-Nexus, Archive-Logistics, Archive-Ledger, ArchiveOS를 연결해 제조 이벤트 생성, 물류 경로·비용 계산, 금융성 원장·정산·대사, 승인·정책 근거·장애 관제를 하나의 이벤트 드리븐 AX 백엔드 흐름으로 구현한 Java/Spring 기반 프로젝트입니다. 각 서비스는 Outbox, idempotency, retry, safe-mode, DEGRADED 상태 분리를 통해 외부 장애가 전체 런타임으로 전파되지 않도록 설계했습니다.
+
+Notes:
+
+- External submission naming uses `Archive-Logistics`.
+- Some internal keys and source names may remain `Archive-Logitics` or `logitics` for compatibility with existing events and configuration contracts.
+- `/api/routes/summary` 500 is documented as resolved in the current Archive-Logistics submission material.
+- Mail body and attachment list are maintained in `docs/final-submission-mail-body.md` and the local package folder.
+
+Related docs:
+
+- [Final Archive Platform Summary](docs/final-archive-platform-summary.md)
+- [Final Archive Platform Detailed](docs/final-archive-platform-detailed.md)
+- [Final Archive Platform Index](docs/final-archive-platform-index.md)
+- [Final Submission Mail Body](docs/final-submission-mail-body.md)
+
+---
+
 ## License
 
 라이선스 정책은 프로젝트 운영 방침에 따라 추후 정의합니다.
