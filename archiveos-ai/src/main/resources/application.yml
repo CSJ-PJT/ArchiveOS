@@ -53,6 +53,10 @@ archiveos:
     slack-webhook-url: ${SLACK_WEBHOOK_URL:}
     slack-bot-token: ${SLACK_BOT_TOKEN:}
     slack-channel: ${SLACK_CHANNEL:}
+  ledger:
+    base-url: ${ARCHIVE_LEDGER_BASE_URL:}
+    callback-token: ${ARCHIVE_LEDGER_CALLBACK_TOKEN:}
+    enabled: ${ARCHIVE_LEDGER_ENABLED:false}
   scheduler:
     enabled: ${ARCHIVEOS_SCHEDULER_ENABLED:false}
     nightly-cron: ${ARCHIVEOS_NIGHTLY_CRON:0 50 23 * * *}
@@ -64,3 +68,39 @@ archiveos:
     max-login-attempts: ${ARCHIVEOS_LOGIN_MAX_ATTEMPTS:5}
     lockout-minutes: ${ARCHIVEOS_LOGIN_LOCKOUT_MINUTES:15}
     secure-cookie: ${ARCHIVEOS_SECURE_COOKIE:false}
+
+archive:
+  ecosystem:
+    enabled: ${ARCHIVE_ECOSYSTEM_ENABLED:true}
+    refresh-timeout-ms: ${ARCHIVE_ECOSYSTEM_REFRESH_TIMEOUT_MS:3000}
+    services:
+      nexus:
+        enabled: ${ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_ENABLED:true}
+        name: Archive-Nexus
+        base-url: ${ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL:http://localhost:8080}
+        health-path: /actuator/health
+        summary-path: /api/outbox/summary
+      logitics:
+        enabled: ${ARCHIVE_ECOSYSTEM_SERVICES_LOGITICS_ENABLED:true}
+        name: Archive-Logitics
+        base-url: ${ARCHIVE_ECOSYSTEM_SERVICES_LOGITICS_BASE_URL:http://localhost:8092}
+        health-path: /actuator/health
+        summary-path: /api/operations/summary
+        outbox-summary-path: /api/outbox/summary
+        route-summary-path: /api/routes/summary
+      ledger:
+        enabled: ${ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_ENABLED:true}
+        name: Archive-Ledger
+        base-url: ${ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_BASE_URL:http://localhost:18080}
+        health-path: /actuator/health
+        summary-path: /api/operations/summary
+        approval-required-path: /api/transactions?status=APPROVAL_REQUIRED
+        reconciliation-summary-path: /api/reconciliation/summary
+        approval-callback-path: /api/approvals/callback
+  integration:
+    safe-mode: ${ARCHIVE_INTEGRATION_SAFE_MODE:true}
+    allow-external-write: ${ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE:false}
+    callback:
+      enabled: ${ARCHIVE_INTEGRATION_CALLBACK_ENABLED:true}
+      max-retry-count: ${ARCHIVE_INTEGRATION_CALLBACK_MAX_RETRY_COUNT:5}
+      retry-delay-seconds: ${ARCHIVE_INTEGRATION_CALLBACK_RETRY_DELAY_SECONDS:30}

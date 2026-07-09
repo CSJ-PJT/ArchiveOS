@@ -1,5 +1,6 @@
 package com.archiveos.ai.managed;
 
+import com.archiveos.ai.approval.ExternalApprovalRepository;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -7,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,9 +16,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class ManagedSystemsService {
     private static final List<String> SEVERITY_ORDER = List.of("critical", "high", "medium", "low", "info");
     private final ManagedSystemsRepository repository;
+    private final ExternalApprovalRepository approvals;
+    @Value("${archiveos.ledger.base-url:}")
+    private String ledgerBaseUrl;
+    @Value("${archiveos.ledger.callback-token:}")
+    private String ledgerCallbackToken;
+    @Value("${archiveos.ledger.enabled:false}")
+    private boolean ledgerEnabled;
 
-    public ManagedSystemsService(ManagedSystemsRepository repository) {
+    public ManagedSystemsService(ManagedSystemsRepository repository, ExternalApprovalRepository approvals) {
         this.repository = repository;
+        this.approvals = approvals;
     }
 
     public Map<String, Object> overview() {
@@ -44,7 +54,7 @@ public class ManagedSystemsService {
     public List<Map<String, Object>> systems() {
         List<Map<String, Object>> tasks = repository.pmTasks();
         Map<String, Object> queue = repository.queueSummary();
-        return List.of(archiveOsSystem(queue), archiveNexusSystem(tasks), atlasSystem(), deepStakePlaceholder());
+        return List.of(archiveOsSystem(queue), archiveNexusSystem(tasks), archiveLogiticsSystem(), atlasSystem(), archiveLedgerSystem(), deepStakePlaceholder());
     }
 
     public Map<String, Object> system(String systemId) {
@@ -77,6 +87,8 @@ public class ManagedSystemsService {
         addIfNotNull(items, atlasStatusItem());
         addIfNotNull(items, atlasRecoveryItem());
         addIfNotNull(items, dailyReportItem());
+        items.addAll(ledgerApprovalItems());
+        items.addAll(ledgerCallbackFailedItems());
         items.addAll(workLogFailureItems());
         addIfNotNull(items, securityBlockedItem("public_cud_blocked", "medium", "Public CUD blocked repeatedly",
                 "Public session attempted protected write operations more than once.", "Review public access and confirm this is expected."));
@@ -149,6 +161,44 @@ public class ManagedSystemsService {
         return system("deepstake-placeholder", "DeepStake", "PLACEHOLDER", "development", "unknown", "not_connected",
                 "DeepStake is registered as a future managed system placeholder.", null,
                 0, 0, 0, 0, 0, 0, null, null, null, null, null, "manual");
+    }
+
+    private Map<String, Object> archiveLogiticsSystem() {
+        Map<String, Object> system = system("archive-logitics", "Archive-Logitics", "LOGISTICS_OPERATIONS_BACKEND", "development", "local", "not_connected",
+                "Archive-Logitics is managed through the Ecosystem Control Tower and may be unavailable during local development.",
+                null, 1, 0, 0, 0, 0, 0, null, null, null, null, "CSJ-PJT/Archive-Logitics", "archiveos");
+        system.put("role", "Synthetic Logistics Operations Backend");
+        return system;
+    }
+
+    private Map<String, Object> archiveLedgerSystem() {
+        Map<String, Object> summary = approvals.summary();
+        Map<String, Object> latest = approvals.latest();
+        int pending = integer(summary.get("pending"));
+        int callbackFailed = integer(summary.get("callback_failed"));
+        boolean configured = ledgerEnabled && ledgerBaseUrl != null && !ledgerBaseUrl.isBlank();
+        String status = callbackFailed > 0 ? "degraded" : pending > 0 ? "degraded" : configured ? "normal" : "not_connected";
+        String reason = callbackFailed > 0
+                ? "Archive-Ledger callback failures require review."
+                : pending > 0
+                    ? "Archive-Ledger approval requests are waiting for PM decision."
+                    : configured
+                        ? "Archive-Ledger integration endpoint is configured. No pending approval request is open."
+                        : "Archive-Ledger integration endpoint is not configured yet.";
+        Map<String, Object> system = system("archive-ledger", "Archive-Ledger", "FINANCIAL_OPERATIONS_BACKEND", "development", "local", status, reason,
+                string(latest, "updated_at", null), 1, "not_connected".equals(status) ? 0 : 1,
+                "degraded".equals(status) ? 1 : 0, 0, pending, callbackFailed,
+                string(latest, "approval_request_id"), null, null, null, "CSJ-PJT/Archive-Ledger", "archiveos");
+        system.put("role", "Synthetic Financial Operations Backend");
+        system.put("baseUrlConfigured", ledgerBaseUrl != null && !ledgerBaseUrl.isBlank());
+        system.put("approvalCallbackConfigured", ledgerCallbackToken != null && !ledgerCallbackToken.isBlank());
+        system.put("integrationEnabled", ledgerEnabled);
+        system.put("secrets", "hidden");
+        system.put("environmentRequirements", List.of(
+                Map.of("name", "ARCHIVE_LEDGER_BASE_URL", "secret", false),
+                Map.of("name", "ARCHIVE_LEDGER_CALLBACK_TOKEN", "secret", true),
+                Map.of("name", "ARCHIVE_LEDGER_ENABLED", "secret", false)));
+        return system;
     }
 
     private Map<String, Object> system(String id, String name, String type, String environment, String provider, String status,
@@ -235,6 +285,31 @@ public class ManagedSystemsService {
                 .toList();
     }
 
+    private List<Map<String, Object>> ledgerApprovalItems() {
+        return approvals.pending(50).stream()
+                .map(request -> {
+                    String severity = ledgerSeverity(request);
+                    return inboxItem("ledger-approval-" + request.get("approval_request_id"), severity, "archive-ledger", "approval",
+                            "Ledger approval required: " + request.get("transaction_id") + " " + request.get("amount") + " " + request.get("currency"),
+                            string(request, "reason", "Archive-Ledger synthetic transaction requires approval."),
+                            "Review policy evidence and approve or reject the transaction.",
+                            string(request, "created_at", Instant.now().toString()), null, string(request, "approval_request_id"),
+                            null, null, null);
+                })
+                .toList();
+    }
+
+    private List<Map<String, Object>> ledgerCallbackFailedItems() {
+        return approvals.callbackFailed(50).stream()
+                .map(request -> inboxItem("ledger-callback-failed-" + request.get("approval_request_id"), "high", "archive-ledger", "integration",
+                        "Ledger callback failed: " + request.get("approval_request_id"),
+                        string(request, "callback_last_error", "Archive-Ledger callback failed."),
+                        "Check Archive-Ledger availability and retry callback in a later gateway increment.",
+                        string(request, "updated_at", Instant.now().toString()), null, string(request, "approval_request_id"),
+                        null, null, null))
+                .toList();
+    }
+
     private Map<String, Object> securityBlockedItem(String key, String severity, String title, String summary, String action) {
         long count = repository.recentAuditLogs(100).stream()
                 .filter(log -> matchesSecurityRule(key, log))
@@ -315,12 +390,21 @@ public class ManagedSystemsService {
         return false;
     }
 
+    private String ledgerSeverity(Map<String, Object> request) {
+        Map<String, Object> metadata = map(request.get("metadata"));
+        String severity = String.valueOf(metadata.getOrDefault("severity", "")).toUpperCase(Locale.ROOT);
+        if ("CRITICAL".equals(severity)) return "critical";
+        if ("HIGH".equals(severity) || decimal(request.get("amount")).compareTo(java.math.BigDecimal.valueOf(3_000_000)) >= 0) return "high";
+        return "medium";
+    }
+
     private void addIfNotNull(List<Map<String, Object>> rows, Map<String, Object> value) { if (value != null) rows.add(value); }
     private long countSystems(List<Map<String, Object>> systems, String status) { return systems.stream().filter(system -> status.equals(system.get("status"))).count(); }
     private long severityCount(List<Map<String, Object>> inbox, String severity) { return inbox.stream().filter(item -> severity.equals(item.get("severity"))).count(); }
     private int countServices(List<Map<String, Object>> services, String status) { return (int) services.stream().filter(service -> status.equals(service.get("current_status"))).count(); }
     private int severityWeight(String value) { int index = SEVERITY_ORDER.indexOf(value); return index < 0 ? SEVERITY_ORDER.size() : index; }
     private int integer(Object value) { return value instanceof Number number ? number.intValue() : 0; }
+    private java.math.BigDecimal decimal(Object value) { return value instanceof java.math.BigDecimal d ? d : value instanceof Number n ? java.math.BigDecimal.valueOf(n.doubleValue()) : java.math.BigDecimal.ZERO; }
     private long number(Object value) { return value instanceof Number number ? number.longValue() : 0; }
     @SuppressWarnings("unchecked") private Map<String, Object> map(Object value) { return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of(); }
     private String string(Map<String, Object> value, String key) { return string(value, key, null); }

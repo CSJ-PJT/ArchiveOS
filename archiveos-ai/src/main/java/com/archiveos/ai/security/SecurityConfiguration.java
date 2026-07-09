@@ -32,6 +32,8 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/mcp/**", "/api/runtime/timeline/**").hasAnyRole("OPERATOR", "PM", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/tasks/*/decision", "/api/tasks/*/retry", "/api/rpa/tasks/*/decision")
                             .hasAnyRole("PM", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/approvals/external/*/approve", "/api/approvals/external/*/reject", "/api/approvals/external/*/hold")
+                            .hasAnyRole("PM", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/batch/**", "/api/batches/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/**").permitAll()
                         .requestMatchers("/api/**").hasRole("ADMIN")

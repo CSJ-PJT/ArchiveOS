@@ -12,6 +12,58 @@ ArchiveOS는 AI 에이전트, 지능형 RPA, 배치 작업, 워크플로우, 지
 
 ---
 
+## Archive Platform Ecosystem
+
+ArchiveOS can run as the control tower for the Archive Platform ecosystem:
+
+- **Archive-Nexus**: synthetic manufacturing, shipment, maintenance, and quality event outbox.
+- **Archive-Logitics**: synthetic logistics route, ETA, delay, and cost event backend.
+- **Archive-Ledger**: synthetic transaction, ledger, settlement, reconciliation, and approval callback backend.
+- **ArchiveOS**: health aggregation, human approval gate, RAG/fallback policy evidence, audit log, Slack notification, callback outbox, and retry.
+
+ArchiveOS is intentionally loosely coupled. If Nexus, Logitics, or Ledger is not running, ArchiveOS still starts and reports the external service as `UNAVAILABLE`, `UNKNOWN`, or `DEGRADED` through `/api/ecosystem/summary`.
+
+### Ecosystem environment variables
+
+```env
+ARCHIVE_ECOSYSTEM_ENABLED=true
+ARCHIVE_ECOSYSTEM_REFRESH_TIMEOUT_MS=3000
+ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL=http://localhost:8080
+ARCHIVE_ECOSYSTEM_SERVICES_LOGITICS_BASE_URL=http://localhost:8092
+ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_BASE_URL=http://localhost:18080
+ARCHIVE_INTEGRATION_SAFE_MODE=true
+ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=false
+ARCHIVE_INTEGRATION_CALLBACK_ENABLED=true
+ARCHIVE_INTEGRATION_CALLBACK_MAX_RETRY_COUNT=5
+ARCHIVE_INTEGRATION_CALLBACK_RETRY_DELAY_SECONDS=30
+```
+
+When ArchiveOS runs in Docker Compose and external services run on the host, use:
+
+```env
+ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_BASE_URL=http://host.docker.internal:18080
+ARCHIVE_ECOSYSTEM_SERVICES_LOGITICS_BASE_URL=http://host.docker.internal:8092
+ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL=http://host.docker.internal:8080
+```
+
+### Ecosystem API
+
+```powershell
+curl.exe http://localhost:4000/api/ecosystem/services
+curl.exe http://localhost:4000/api/ecosystem/summary
+curl.exe http://localhost:4000/api/ecosystem/topology
+curl.exe -X POST http://localhost:4000/api/ecosystem/refresh
+curl.exe -X POST http://localhost:4000/api/ecosystem/demo/dry-run
+```
+
+External write actions such as Nexus generation/publish, Logitics publish, and Ledger callback dispatch are blocked unless `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=true`. The default portfolio-safe mode is read-only/dry-run.
+
+### Ledger approval callback
+
+External approval requests are accepted through `/api/approvals/external`. ArchiveOS records policy evidence, PM/Admin decision, audit trail, and callback outbox state. Ledger remains responsible for transaction, ledger, settlement, and reconciliation state.
+
+---
+
 ## 현재 구현 상태
 
 | 영역 | 현재 상태 |

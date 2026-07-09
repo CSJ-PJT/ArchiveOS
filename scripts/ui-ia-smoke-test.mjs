@@ -8,8 +8,10 @@ const knowledge = readFileSync("src/pages/KnowledgePage.tsx", "utf-8");
 const backendApi = readFileSync("src/lib/backendApi.ts", "utf-8");
 const sidebar = readFileSync("src/components/shared/Sidebar.tsx", "utf-8");
 const overviewViewModel = readFileSync("src/lib/viewModels/overview.ts", "utf-8");
+const ledgerApprovals = readFileSync("src/pages/LedgerApprovalsPage.tsx", "utf-8");
+const ecosystemPage = readFileSync("src/pages/EcosystemPage.tsx", "utf-8");
 
-for (const label of ["Overview", "Agents", "Workflows", "Knowledge", "History", "Batch", "RPA", "Settings"]) {
+for (const label of ["Overview", "Agents", "Managed Systems", "Ecosystem", "Workflows", "Ledger Approvals", "Knowledge", "History", "Batch", "RPA", "Settings"]) {
   if (!navigation.includes(label)) {
     throw new Error(`Missing final navigation label: ${label}`);
   }
@@ -57,6 +59,18 @@ for (const contract of ["sidebar-nav", "aria-current", "System Health", "Active 
 
 if (!backendApi.includes("getAiRuntime") || !appShell.includes("getAiRuntime")) {
   throw new Error("Spring AI runtime data is not wired through the frontend API layer.");
+}
+
+for (const approvalContract of ["getExternalApprovals", "decideExternalApproval", "Ledger Approval Queue", "Admin unlock or PM session is required", "RAG / Fallback Evidence", "callback_status"]) {
+  if (!backendApi.includes(approvalContract) && !appShell.includes(approvalContract) && !ledgerApprovals.includes(approvalContract)) {
+    throw new Error(`Ledger approval UI/API contract missing: ${approvalContract}`);
+  }
+}
+
+for (const ecosystemContract of ["getEcosystemSummary", "getEcosystemTopology", "runEcosystemDryRun", "Ecosystem Overview", "Nexus → Logitics → Ledger → ArchiveOS", "Callback Outbox"]) {
+  if (!backendApi.includes(ecosystemContract) && !appShell.includes(ecosystemContract) && !ecosystemPage.includes(ecosystemContract) && !ledgerApprovals.includes(ecosystemContract)) {
+    throw new Error(`Ecosystem Control Tower contract missing: ${ecosystemContract}`);
+  }
 }
 
 for (const forbidden of [

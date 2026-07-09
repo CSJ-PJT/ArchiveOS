@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.archiveos.ai.approval.ExternalApprovalRepository;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import org.mockito.Mockito;
 class ManagedSystemsServiceTest {
     @Test void overviewAggregatesArchiveOsNexusAtlasAndDeepStake() {
         ManagedSystemsRepository repository = Mockito.mock(ManagedSystemsRepository.class);
+        ExternalApprovalRepository approvals = baseApprovalRepository();
         when(repository.pmTasks()).thenReturn(List.of());
         when(repository.queueSummary()).thenReturn(Map.of("pendingApprovalCount", 0, "failedCount", 0, "taskCount", 0));
         when(repository.atlasSystem()).thenReturn(Map.of(
@@ -30,17 +32,24 @@ class ManagedSystemsServiceTest {
         when(repository.latestDailyReport()).thenReturn(null);
         when(repository.recentAuditLogs(100)).thenReturn(List.of());
 
-        ManagedSystemsService service = new ManagedSystemsService(repository);
+        ManagedSystemsService service = new ManagedSystemsService(repository, approvals);
 
         Map<String, Object> overview = service.overview();
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> systems = (List<Map<String, Object>>) overview.get("systems");
         assertThat(systems).extracting(system -> system.get("systemId"))
-                .containsExactly("archiveos", "archive-nexus", "atlas-platform", "deepstake-placeholder");
+                .containsExactly("archiveos", "archive-nexus", "archive-logitics", "atlas-platform", "archive-ledger", "deepstake-placeholder");
         assertThat(systems).anySatisfy(system -> {
             assertThat(system).containsEntry("systemId", "deepstake-placeholder");
             assertThat(system).containsEntry("status", "not_connected");
+        });
+        assertThat(systems).anySatisfy(system -> {
+            assertThat(system).containsEntry("systemId", "archive-ledger");
+            assertThat(system).containsEntry("type", "FINANCIAL_OPERATIONS_BACKEND");
+            assertThat(system).containsEntry("status", "not_connected");
+            assertThat(system).containsEntry("secrets", "hidden");
+            assertThat(system).containsKey("environmentRequirements");
         });
     }
 
@@ -57,7 +66,7 @@ class ManagedSystemsServiceTest {
                 "updated_at", "2026-07-08T00:00:00Z")));
         when(repository.queueSummary()).thenReturn(Map.of("pendingApprovalCount", 1, "failedCount", 0, "taskCount", 1));
 
-        ManagedSystemsService service = new ManagedSystemsService(repository);
+        ManagedSystemsService service = new ManagedSystemsService(repository, baseApprovalRepository());
 
         List<Map<String, Object>> inbox = service.pmInbox();
 
@@ -68,13 +77,36 @@ class ManagedSystemsServiceTest {
         });
     }
 
+    @Test void ledgerPendingApprovalCreatesPmInboxItem() {
+        ManagedSystemsRepository repository = baseRepository();
+        ExternalApprovalRepository approvals = baseApprovalRepository();
+        when(approvals.pending(50)).thenReturn(List.of(Map.of(
+                "approval_request_id", "APR-1",
+                "transaction_id", "TX-1",
+                "amount", java.math.BigDecimal.valueOf(4_800_000),
+                "currency", "KRW",
+                "reason", "Maintenance expense exceeds approval threshold",
+                "metadata", Map.of("severity", "HIGH"),
+                "created_at", "2026-07-08T00:00:00Z")));
+        ManagedSystemsService service = new ManagedSystemsService(repository, approvals);
+
+        List<Map<String, Object>> inbox = service.pmInbox();
+
+        assertThat(inbox).anySatisfy(item -> {
+            assertThat(item).containsEntry("severity", "high");
+            assertThat(item).containsEntry("sourceSystemId", "archive-ledger");
+            assertThat(String.valueOf(item.get("title"))).contains("Ledger approval required");
+            assertThat(String.valueOf(item.get("recommendedAction"))).contains("approve or reject");
+        });
+    }
+
     @Test void acknowledgeAndResolvePersistInboxStateAndTimeline() {
         ManagedSystemsRepository repository = baseRepository();
         when(repository.updateInboxState(eq("item-1"), eq("acknowledged"), any()))
                 .thenReturn(Map.of("id", "item-1", "status", "acknowledged"));
         when(repository.updateInboxState(eq("item-1"), eq("resolved"), any()))
                 .thenReturn(Map.of("id", "item-1", "status", "resolved"));
-        ManagedSystemsService service = new ManagedSystemsService(repository);
+        ManagedSystemsService service = new ManagedSystemsService(repository, baseApprovalRepository());
 
         assertThat(service.acknowledge("item-1")).containsEntry("status", "acknowledged");
         assertThat(service.resolve("item-1")).containsEntry("status", "resolved");
@@ -95,5 +127,14 @@ class ManagedSystemsServiceTest {
         when(repository.latestDailyReport()).thenReturn(null);
         when(repository.recentAuditLogs(100)).thenReturn(List.of());
         return repository;
+    }
+
+    private ExternalApprovalRepository baseApprovalRepository() {
+        ExternalApprovalRepository approvals = Mockito.mock(ExternalApprovalRepository.class);
+        when(approvals.summary()).thenReturn(Map.of("pending", 0, "callback_failed", 0, "total", 0));
+        when(approvals.latest()).thenReturn(null);
+        when(approvals.pending(50)).thenReturn(List.of());
+        when(approvals.callbackFailed(50)).thenReturn(List.of());
+        return approvals;
     }
 }

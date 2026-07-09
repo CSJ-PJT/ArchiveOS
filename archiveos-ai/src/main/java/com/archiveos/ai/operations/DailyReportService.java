@@ -1,6 +1,7 @@
 package com.archiveos.ai.operations;
 
 import com.archiveos.ai.atlas.AtlasService;
+import com.archiveos.ai.ecosystem.EcosystemService;
 import com.archiveos.ai.managed.ManagedSystemsService;
 import com.archiveos.ai.notification.NotificationResult;
 import com.archiveos.ai.notification.NotificationService;
@@ -23,6 +24,7 @@ public class DailyReportService {
     private final String publicUrl;
     private AtlasService atlasService;
     private ManagedSystemsService managedSystems;
+    private EcosystemService ecosystemService;
 
     public DailyReportService(
             OperationsRepository repository,
@@ -47,6 +49,11 @@ public class DailyReportService {
         this.managedSystems = managedSystems;
     }
 
+    @Autowired(required = false)
+    void setEcosystemService(EcosystemService ecosystemService) {
+        this.ecosystemService = ecosystemService;
+    }
+
     public Map<String, Object> run(LocalDate today) {
         LocalDate localToday = today == null ? LocalDate.now(SEOUL) : today;
         LocalDate targetDate = localToday.minusDays(1);
@@ -54,7 +61,8 @@ public class DailyReportService {
         Map<String, Object> nightlySummary = loadNightly(targetDate);
         Map<String, Object> managedSummary = managedSystemsSummary();
         Map<String, Object> atlasSummary = atlasSummary();
-        String reportText = message(targetDate, nightlySummary, businessDay.businessDay() ? null : businessDay.reason(), managedSummary, atlasSummary);
+        Map<String, Object> ecosystemSummary = ecosystemSummary();
+        String reportText = message(targetDate, nightlySummary, businessDay.businessDay() ? null : businessDay.reason(), managedSummary, atlasSummary, ecosystemSummary);
         List<NotificationResult> results = businessDay.businessDay() ? notifications.send(reportText) : List.of();
         boolean anyConfigured = results.stream().anyMatch(NotificationResult::configured);
         boolean anySent = results.stream().anyMatch(NotificationResult::sent);
@@ -75,6 +83,7 @@ public class DailyReportService {
         metadata.put("nightly", nightlySummary); metadata.put("notification_results", results); metadata.put("daily_report_id", dailyRow.get("id"));
         metadata.put("managed_systems", managedSummary);
         metadata.put("atlas", atlasSummary);
+        metadata.put("ecosystem", ecosystemSummary);
         metadata.put("archiveos_public_url_configured", publicUrl != null && !publicUrl.isBlank());
         String summary = switch (batchStatus) {
             case "sent" -> "일일 운영 보고 전송 완료: " + targetDate;
@@ -91,7 +100,7 @@ public class DailyReportService {
         return nightly.buildSummary(targetDate);
     }
 
-    private String message(LocalDate targetDate, Map<String, Object> summary, String skippedReason, Map<String, Object> managedSummary, Map<String, Object> atlasSummary) {
+    private String message(LocalDate targetDate, Map<String, Object> summary, String skippedReason, Map<String, Object> managedSummary, Map<String, Object> atlasSummary, Map<String, Object> ecosystemSummary) {
         Map<String, Object> queue = map(summary.get("queue")); Map<String, Object> operators = map(summary.get("operators"));
         @SuppressWarnings("unchecked") List<String> warnings = summary.get("warnings") instanceof List<?> list ? (List<String>) list : List.of();
         String status = switch (String.valueOf(summary.get("operationStatus"))) { case "problem" -> "🔴 문제"; case "warning" -> "🟡 주의"; default -> "🟢 정상"; };
@@ -107,6 +116,8 @@ public class DailyReportService {
         text.append("\n\n경고\n").append(warnings.isEmpty() ? "• 감지된 경고 없음" : warnings.stream().map(item -> "• " + item).reduce((a,b) -> a + "\n" + b).orElse(""));
         text.append("\n\nDecisions / Commands\n• Decisions: ").append(count(summary, "decisions")).append("\n• Commands: ").append(count(summary, "commands"));
         appendManagedSystemsSummary(text, managedSummary);
+        appendEcosystemSummary(text, ecosystemSummary);
+        appendLedgerSummary(text, managedSummary);
         text.append("\n\nAtlas Platform")
                 .append("\n• Status: ").append(atlasSummary.getOrDefault("status", "unknown"))
                 .append("\n• Services: ").append(atlasSummary.getOrDefault("normalServices", 0)).append("/")
@@ -115,6 +126,17 @@ public class DailyReportService {
                 .append("\n• Reason: ").append(atlasSummary.getOrDefault("reason", "Atlas summary unavailable"));
         if (publicUrl != null && !publicUrl.isBlank()) text.append("\n\nDashboard:\n").append(publicUrl);
         return text.toString();
+    }
+
+    private void appendEcosystemSummary(StringBuilder text, Map<String, Object> ecosystemSummary) {
+        Map<String, Object> services = map(ecosystemSummary.get("services"));
+        text.append("\n\nArchive Platform Ecosystem")
+                .append("\n• Status: ").append(ecosystemSummary.getOrDefault("status", "unknown"));
+        for (String key : List.of("nexus", "logitics", "ledger")) {
+            Map<String, Object> service = map(services.get(key));
+            if (!service.isEmpty()) text.append("\n• ").append(service.getOrDefault("name", key)).append(": ")
+                    .append(service.getOrDefault("status", "unknown"));
+        }
     }
 
     private void appendManagedSystemsSummary(StringBuilder text, Map<String, Object> managedSummary) {
@@ -138,6 +160,23 @@ public class DailyReportService {
                 .append("\n• Info: ").append(summary.getOrDefault("infoInboxCount", 0));
         text.append("\n\nRecommended PM Action:\n")
                 .append(recommended.getOrDefault("title", "No urgent action required."));
+    }
+
+    private void appendLedgerSummary(StringBuilder text, Map<String, Object> managedSummary) {
+        @SuppressWarnings("unchecked") List<Map<String, Object>> systems = managedSummary.get("systems") instanceof List<?> list
+                ? (List<Map<String, Object>>) (List<?>) list
+                : List.of();
+        Map<String, Object> ledger = systems.stream()
+                .filter(system -> "archive-ledger".equals(system.get("systemId")))
+                .findFirst()
+                .orElse(Map.of());
+        if (ledger.isEmpty()) return;
+        text.append("\n\nArchive-Ledger Summary")
+                .append("\n• Status: ").append(ledger.getOrDefault("status", "unknown"))
+                .append("\n• Pending Approvals: ").append(ledger.getOrDefault("pendingApprovalCount", 0))
+                .append("\n• Callback Failed: ").append(ledger.getOrDefault("openIncidentCount", 0))
+                .append("\n• Latest Approval: ").append(ledger.getOrDefault("latestWorkflowId", "n/a"))
+                .append("\n• RAG Evidence: fallback-safe");
     }
 
     private Map<String, Object> atlasSummary() {
@@ -189,6 +228,18 @@ public class DailyReportService {
             return value;
         } catch (Exception error) {
             return Map.of("available", false, "summary", Map.of("recommendedPmAction", Map.of("title", "Managed Systems summary unavailable.")), "systems", List.of());
+        }
+    }
+
+    private Map<String, Object> ecosystemSummary() {
+        if (ecosystemService == null) return Map.of("available", false, "status", "unknown", "services", Map.of());
+        try {
+            Map<String, Object> summary = ecosystemService.summary();
+            Map<String, Object> value = new LinkedHashMap<>(summary);
+            value.put("available", true);
+            return value;
+        } catch (Exception error) {
+            return Map.of("available", false, "status", "unknown", "services", Map.of(), "reason", "Ecosystem summary failed: " + error.getClass().getSimpleName());
         }
     }
 

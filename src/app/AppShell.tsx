@@ -7,6 +7,10 @@ import {
   getAiRuntime,
   getDashboardData,
   getEndpointHealth,
+  getEcosystemSummary,
+  getEcosystemTopology,
+  getEcosystemTimeline,
+  getExternalApprovals,
   getHistorianStatus,
   getKnowledgeOverview,
   getLatestArchitectureReview,
@@ -33,6 +37,10 @@ import {
   type AiRuntime,
   type DashboardData,
   type EndpointHealth,
+  type EcosystemSummary,
+  type EcosystemTopology,
+  type EcosystemTimeline,
+  type ExternalApprovalRequest,
   type HistorianStatus,
   type KnowledgeOverview,
   type KpiOverview,
@@ -62,6 +70,8 @@ import { RpaPage } from "../pages/RpaPage";
 import { AtlasPage } from "../pages/AtlasPage";
 import { McpRegistryPage } from "../pages/McpRegistryPage";
 import { ManagedSystemsPage } from "../pages/ManagedSystemsPage";
+import { LedgerApprovalsPage } from "../pages/LedgerApprovalsPage";
+import { EcosystemPage } from "../pages/EcosystemPage";
 import { Icon } from "../components/shared/Icon";
 import { Sidebar } from "../components/shared/Sidebar";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -93,6 +103,10 @@ export type AppData = {
   auth: AuthSession;
   atlas: AtlasOverview | null;
   managedSystems: ManagedSystemsOverview | null;
+  ecosystem: EcosystemSummary | null;
+  ecosystemTopology: EcosystemTopology | null;
+  ecosystemTimeline: EcosystemTimeline | null;
+  externalApprovals: ExternalApprovalRequest[];
   mcpRegistry: McpRegistryEntry[];
   timeline: RuntimeTimelineEntry[];
 };
@@ -124,6 +138,10 @@ const emptyData: AppData = {
   auth: { actor: "anonymous", role: "PUBLIC", authenticated: false },
   atlas: null,
   managedSystems: null,
+  ecosystem: null,
+  ecosystemTopology: null,
+  ecosystemTimeline: null,
+  externalApprovals: [],
   mcpRegistry: [],
   timeline: [],
 };
@@ -170,6 +188,10 @@ function AppShellInner() {
       settle("dailyReport", getLatestDailyReport),
       settle("atlas", getAtlasOverview),
       settle("managedSystems", getManagedSystemsOverview),
+      settle("ecosystem", getEcosystemSummary),
+      settle("ecosystemTopology", getEcosystemTopology),
+      settle("ecosystemTimeline", () => getEcosystemTimeline(50)),
+      settle("externalApprovals", () => getExternalApprovals(50)),
       operatorAccess ? settle("mcpRegistry", getMcpRegistry) : Promise.resolve({ key: "mcpRegistry", value: [], error: null }),
       operatorAccess ? settle("timeline", () => getRuntimeTimeline(100)) : Promise.resolve({ key: "timeline", value: [], error: null }),
     ]))];
@@ -200,6 +222,8 @@ function AppShellInner() {
   const page = {
     overview: <OverviewPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
     managed: <ManagedSystemsPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
+    ecosystem: <EcosystemPage data={data} onRefresh={refresh} />,
+    approvals: <LedgerApprovalsPage data={data} onRefresh={refresh} />,
     agents: <AgentsPage data={data} />,
     workflows: <WorkflowsPage data={data} onRefresh={refresh} />,
     knowledge: <KnowledgePage data={data} />,
