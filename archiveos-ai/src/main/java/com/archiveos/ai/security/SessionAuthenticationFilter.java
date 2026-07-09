@@ -52,10 +52,19 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
         String token = request.getHeader("X-ArchiveOS-Integration-Token");
         if (!sessions.properties().integrationConfigured() || token == null || token.isBlank()) return;
         if (!sessions.properties().integrationToken().equals(token)) return;
-        PlatformSession session = new PlatformSession("integration:archive-nexus", "archive-nexus", PlatformRole.ADMIN,
+        String source = integrationSource(request);
+        PlatformSession session = new PlatformSession("integration:" + source, source, PlatformRole.ADMIN,
                 java.time.Instant.now(), java.time.Instant.now().plus(java.time.Duration.ofMinutes(5)));
         var authority = new SimpleGrantedAuthority(session.role().authority());
         var authentication = new UsernamePasswordAuthenticationToken(session, "integration-token", java.util.List.of(authority));
         SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
+    private String integrationSource(HttpServletRequest request) {
+        String header = request.getHeader("X-ArchiveOS-Integration-Source");
+        if (header != null && !header.isBlank()) return header.trim().toLowerCase();
+        String path = request.getRequestURI();
+        if (path != null && path.contains("/approvals/external")) return "archive-ledger";
+        return "archive-nexus";
     }
 }

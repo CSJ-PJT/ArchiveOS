@@ -114,6 +114,13 @@ export function ManagedSystemsPage({
               <span>Repository<strong>{system.repository || "n/a"}</strong></span>
               <span>Latest workflow<strong>{system.latestWorkflowId || "n/a"}</strong></span>
               <span>Latest work log<strong>{system.latestWorkLogId || "n/a"}</strong></span>
+              {system.systemId === "archive-ledger" ? <>
+                <span>Role<strong>{system.role || "Synthetic Financial Operations Backend"}</strong></span>
+                <span>Base URL configured<strong>{system.baseUrlConfigured ? "yes" : "no"}</strong></span>
+                <span>Approval Callback<strong>{system.approvalCallbackConfigured ? "configured" : "not configured"}</strong></span>
+                <span>Secrets<strong>{system.secrets || "hidden"}</strong></span>
+                <span>Required env<strong>{(system.environmentRequirements || []).map((env) => `${env.name}${env.secret ? " (hidden)" : ""}`).join(", ") || "n/a"}</strong></span>
+              </> : null}
             </div>
           </article>)}
         </div>
@@ -174,6 +181,7 @@ function InboxRow({
 
 function navigateSystem(systemId: string, onNavigate: (route: AppRoute) => void) {
   if (systemId === "atlas-platform") onNavigate("atlas");
-  else if (systemId === "archive-nexus") onNavigate("workflows");
+  else if (systemId === "archive-nexus" || systemId === "archive-logitics") onNavigate("ecosystem");
+  else if (systemId === "archive-ledger") onNavigate("approvals");
   else onNavigate("overview");
 }

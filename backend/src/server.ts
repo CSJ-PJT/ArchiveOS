@@ -123,6 +123,31 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "PM Inbox", method: "GET", path: "/api/pm-inbox", service: "runtime", description: "Recommended PM action inbox." },
   { name: "PM Inbox Acknowledge", method: "POST", path: "/api/pm-inbox/:id/acknowledge", service: "runtime", description: "Admin acknowledgement for a PM inbox item." },
   { name: "PM Inbox Resolve", method: "POST", path: "/api/pm-inbox/:id/resolve", service: "runtime", description: "Admin resolution for a PM inbox item." },
+  { name: "Ecosystem Services", method: "GET", path: "/api/ecosystem/services", service: "runtime", description: "Archive Platform external service registry." },
+  { name: "Ecosystem Summary", method: "GET", path: "/api/ecosystem/summary", service: "runtime", description: "Nexus, Logitics, Ledger integrated operations status." },
+  { name: "Ecosystem Topology", method: "GET", path: "/api/ecosystem/topology", service: "runtime", description: "Control Tower topology nodes and edges." },
+  { name: "Ecosystem Timeline", method: "GET", path: "/api/ecosystem/timeline", service: "runtime", description: "Cross-service timeline events." },
+  { name: "Refresh Ecosystem", method: "POST", path: "/api/ecosystem/refresh", service: "runtime", description: "Read-only external service health refresh." },
+  { name: "Ecosystem Demo Dry-run", method: "POST", path: "/api/ecosystem/demo/dry-run", service: "runtime", description: "Safe dry-run ecosystem scenario." },
+  { name: "Ecosystem Demo Run", method: "POST", path: "/api/ecosystem/demo/run", service: "runtime", description: "Blocked unless external writes are explicitly enabled." },
+  { name: "Nexus Outbox", method: "GET", path: "/api/integrations/nexus/outbox", service: "runtime", description: "Archive-Nexus outbox summary proxy." },
+  { name: "Nexus Generate", method: "POST", path: "/api/integrations/nexus/outbox/generate", service: "runtime", description: "Safe-mode guarded Nexus event generation." },
+  { name: "Nexus Publish", method: "POST", path: "/api/integrations/nexus/outbox/publish", service: "runtime", description: "Safe-mode guarded Nexus outbox publish." },
+  { name: "Logitics Summary", method: "GET", path: "/api/integrations/logitics/summary", service: "runtime", description: "Archive-Logitics operations summary proxy." },
+  { name: "Logitics Outbox", method: "GET", path: "/api/integrations/logitics/outbox", service: "runtime", description: "Archive-Logitics outbox summary proxy." },
+  { name: "Logitics Publish", method: "POST", path: "/api/integrations/logitics/outbox/publish", service: "runtime", description: "Safe-mode guarded Logitics outbox publish." },
+  { name: "Ledger Summary", method: "GET", path: "/api/integrations/ledger/summary", service: "runtime", description: "Archive-Ledger operations summary proxy." },
+  { name: "Ledger Approval Required", method: "GET", path: "/api/integrations/ledger/approval-required", service: "runtime", description: "Archive-Ledger APPROVAL_REQUIRED transaction proxy." },
+  { name: "Approval Callback Outbox", method: "GET", path: "/api/approvals/callbacks", service: "runtime", description: "Approval callback outbox queue." },
+  { name: "Retry Approval Callback", method: "POST", path: "/api/approvals/callbacks/:callbackId/retry", service: "runtime", description: "Retry one callback outbox item." },
+  { name: "Retry Failed Callbacks", method: "POST", path: "/api/approvals/callbacks/retry-failed", service: "runtime", description: "Retry failed callback outbox items." },
+  { name: "External Approvals", method: "GET", path: "/api/approvals/external", service: "runtime", description: "Archive-Ledger external approval request queue." },
+  { name: "External Approval Summary", method: "GET", path: "/api/approvals/external/summary", service: "runtime", description: "External approval aggregate status." },
+  { name: "External Approval Detail", method: "GET", path: "/api/approvals/external/:id", service: "runtime", description: "Archive-Ledger external approval detail." },
+  { name: "Create External Approval", method: "POST", path: "/api/approvals/external", service: "runtime", description: "Archive-Ledger synthetic approval request ingress." },
+  { name: "Approve External Approval", method: "POST", path: "/api/approvals/external/:id/approve", service: "runtime", description: "PM/Admin approval decision for Ledger callback." },
+  { name: "Reject External Approval", method: "POST", path: "/api/approvals/external/:id/reject", service: "runtime", description: "PM/Admin rejection decision for Ledger callback." },
+  { name: "Hold External Approval", method: "POST", path: "/api/approvals/external/:id/hold", service: "runtime", description: "PM/Admin hold decision without Ledger mutation." },
   { name: "Queue Summary", method: "GET", path: "/api/queue/summary", service: "queue", description: "Semi-auto queue summary." },
   { name: "Queue Run Once", method: "POST", path: "/api/queue/run-once", service: "queue", description: "State transition and instruction generation only." },
   { name: "Queue Nightly Summary", method: "POST", path: "/api/queue/nightly-summary", service: "queue", description: "Slack queue summary without execution." },
@@ -209,7 +234,8 @@ app.use("/api", async (request, response, next) => {
   try {
     const session = await readJavaSession(request);
     const role = String(session.role ?? "PUBLIC").toUpperCase();
-    const pmAction = /^\/api\/(tasks|rpa\/tasks)\/[^/]+\/(decision|retry)$/.test(requestPath);
+    const pmAction = /^\/api\/(tasks|rpa\/tasks)\/[^/]+\/(decision|retry)$/.test(requestPath)
+      || /^\/api\/approvals\/external\/[^/]+\/(approve|reject|hold)$/.test(requestPath);
     if (role === "PUBLIC") {
       response.status(401).json({ error: "Authentication required." });
       return;
@@ -693,6 +719,125 @@ app.post("/api/pm-inbox/:id/acknowledge", async (request, response) => {
 
 app.post("/api/pm-inbox/:id/resolve", async (request, response) => {
   await relayArchiveOsAi(response, `/api/pm-inbox/${encodeURIComponent(request.params.id)}/resolve`, { method: "POST" }, undefined, request);
+});
+
+app.get("/api/ecosystem/services", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ecosystem/services", undefined, undefined, request);
+});
+
+app.get("/api/ecosystem/summary", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ecosystem/summary", undefined, undefined, request);
+});
+
+app.get("/api/ecosystem/topology", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ecosystem/topology", undefined, undefined, request);
+});
+
+app.get("/api/ecosystem/timeline", async (request, response) => {
+  const limit = Number(request.query.limit ?? 50);
+  await relayArchiveOsAi(response, `/api/ecosystem/timeline?limit=${encodeURIComponent(String(limit))}`, undefined, undefined, request);
+});
+
+app.post("/api/ecosystem/refresh", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ecosystem/refresh", { method: "POST" }, undefined, request);
+});
+
+app.post("/api/ecosystem/demo/dry-run", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ecosystem/demo/dry-run", { method: "POST" }, undefined, request);
+});
+
+app.post("/api/ecosystem/demo/run", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ecosystem/demo/run", { method: "POST" }, undefined, request);
+});
+
+app.get("/api/integrations/nexus/outbox", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/nexus/outbox", undefined, undefined, request);
+});
+
+app.post("/api/integrations/nexus/outbox/generate", async (request, response) => {
+  const count = Number(request.query.count ?? 100);
+  await relayArchiveOsAi(response, `/api/integrations/nexus/outbox/generate?count=${encodeURIComponent(String(count))}`, { method: "POST" }, undefined, request);
+});
+
+app.post("/api/integrations/nexus/outbox/publish", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/nexus/outbox/publish", { method: "POST" }, undefined, request);
+});
+
+app.get("/api/integrations/logitics/summary", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/logitics/summary", undefined, undefined, request);
+});
+
+app.get("/api/integrations/logitics/outbox", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/logitics/outbox", undefined, undefined, request);
+});
+
+app.get("/api/integrations/logitics/routes", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/logitics/routes", undefined, undefined, request);
+});
+
+app.post("/api/integrations/logitics/outbox/publish", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/logitics/outbox/publish", { method: "POST" }, undefined, request);
+});
+
+app.get("/api/integrations/ledger/summary", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/ledger/summary", undefined, undefined, request);
+});
+
+app.get("/api/integrations/ledger/approval-required", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/ledger/approval-required", undefined, undefined, request);
+});
+
+app.get("/api/integrations/ledger/reconciliation", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/ledger/reconciliation", undefined, undefined, request);
+});
+
+app.get("/api/approvals/callbacks", async (request, response) => {
+  const limit = Number(request.query.limit ?? 50);
+  await relayArchiveOsAi(response, `/api/approvals/callbacks?limit=${encodeURIComponent(String(limit))}`, undefined, undefined, request);
+});
+
+app.post("/api/approvals/callbacks/retry-failed", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/approvals/callbacks/retry-failed", { method: "POST" }, undefined, request);
+});
+
+app.get("/api/approvals/callbacks/:callbackId", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/approvals/callbacks/${encodeURIComponent(request.params.callbackId)}`, undefined, undefined, request);
+});
+
+app.post("/api/approvals/callbacks/:callbackId/retry", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/approvals/callbacks/${encodeURIComponent(request.params.callbackId)}/retry`, { method: "POST" }, undefined, request);
+});
+
+app.get("/api/approvals/external/summary", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/approvals/external/summary", undefined, undefined, request);
+});
+
+app.get("/api/approvals/external", async (request, response) => {
+  const params = new URLSearchParams();
+  params.set("limit", String(Number(request.query.limit ?? 50)));
+  if (typeof request.query.status === "string") params.set("status", request.query.status);
+  if (typeof request.query.source === "string") params.set("source", request.query.source);
+  await relayArchiveOsAi(response, `/api/approvals/external?${params.toString()}`, undefined, undefined, request);
+});
+
+app.post("/api/approvals/external", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/approvals/external", jsonProxyRequest("POST", request.body), undefined, request);
+});
+
+app.get("/api/approvals/external/:id", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/approvals/external/${encodeURIComponent(request.params.id)}`, undefined, undefined, request);
+});
+
+app.post("/api/approvals/external/:id/approve", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/approvals/external/${encodeURIComponent(request.params.id)}/approve`, jsonProxyRequest("POST", request.body), undefined, request);
+});
+
+app.post("/api/approvals/external/:id/reject", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/approvals/external/${encodeURIComponent(request.params.id)}/reject`, jsonProxyRequest("POST", request.body), undefined, request);
+});
+
+app.post("/api/approvals/external/:id/hold", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/approvals/external/${encodeURIComponent(request.params.id)}/hold`, jsonProxyRequest("POST", request.body), undefined, request);
 });
 
 app.get("/api/queue/summary", async (_request, response) => {

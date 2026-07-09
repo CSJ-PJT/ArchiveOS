@@ -159,6 +159,12 @@ export type ManagedSystemSummary = {
   publicUrl: string | null;
   repository: string | null;
   source: "archiveos" | "nexus" | "atlas" | "manual" | string;
+  role?: string;
+  baseUrlConfigured?: boolean;
+  approvalCallbackConfigured?: boolean;
+  integrationEnabled?: boolean;
+  secrets?: "hidden" | string;
+  environmentRequirements?: Array<{ name: string; secret: boolean }>;
 };
 
 export type PmInboxItem = {
@@ -204,6 +210,112 @@ export type ManagedSystemsOverview = {
   };
   systems: ManagedSystemSummary[];
   pmInbox: PmInboxItem[];
+};
+
+export type EcosystemServiceView = {
+  status: string;
+  name: string;
+  baseUrl: string | null;
+  lastCheckedAt: string | null;
+  summary: Record<string, unknown>;
+  errorMessage: string | null;
+};
+
+export type EcosystemSummary = {
+  traceId: string;
+  status: string;
+  checkedAt: string;
+  services: Record<"nexus" | "logitics" | "ledger", EcosystemServiceView>;
+  approval: Record<string, number>;
+};
+
+export type EcosystemTopology = {
+  nodes: Array<{ id: string; label: string; type: string; status: string }>;
+  edges: Array<{ from: string; to: string; label: string }>;
+};
+
+export type EcosystemTimeline = {
+  traceId: string;
+  events: Array<Record<string, unknown>>;
+};
+
+export type EcosystemDryRun = {
+  traceId: string;
+  status: string;
+  safeMode: boolean;
+  allowExternalWrite: boolean;
+  steps: Array<{ order: number; service: string; action: string; mode: string }>;
+};
+
+export type ExternalApprovalEvidence = {
+  id: string;
+  approval_request_id: string;
+  evidence_type: "RAG" | "RULE_FALLBACK" | "POLICY" | "SYSTEM" | string;
+  title: string;
+  content: string;
+  source_path: string | null;
+  confidence: number | null;
+  created_at: string;
+};
+
+export type ExternalApprovalDecision = {
+  id: string;
+  approval_request_id: string;
+  decision: "APPROVED" | "REJECTED" | "HOLD" | string;
+  decided_by: string;
+  comment: string | null;
+  decided_at: string;
+};
+
+export type ExternalApprovalCallback = {
+  id: string;
+  approval_request_id: string;
+  target_system_id: string;
+  callback_url_masked: string | null;
+  status: string;
+  attempt_count: number;
+  last_error: string | null;
+  requested_at: string;
+  completed_at: string | null;
+};
+
+export type ExternalApprovalRequest = {
+  id: string;
+  approval_request_id: string;
+  source: string;
+  target_system_id: string;
+  correlation_id: string;
+  transaction_id: string;
+  amount: number;
+  currency: string;
+  reason: string;
+  policy_question: string | null;
+  metadata: Record<string, unknown>;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "HOLD" | "CALLBACK_PENDING" | "CALLBACK_SUCCEEDED" | "CALLBACK_FAILED" | string;
+  callback_path: string | null;
+  callback_status: string | null;
+  source_service?: string | null;
+  callback_target?: string | null;
+  route_plan_id?: string | null;
+  event_id?: string | null;
+  policy_evidence_id?: string | null;
+  callback_attempt_count: number;
+  callback_last_error: string | null;
+  created_at: string;
+  updated_at: string;
+  decided_at: string | null;
+  decided_by: string | null;
+  priority?: "critical" | "high" | "medium" | string;
+  evidence_type?: string;
+  evidence?: ExternalApprovalEvidence[];
+  decisions?: ExternalApprovalDecision[];
+  callbacks?: ExternalApprovalCallback[];
+  ledger_config?: {
+    enabled: boolean;
+    baseUrlConfigured: boolean;
+    callbackTokenConfigured: boolean;
+    secrets: "hidden" | string;
+  };
 };
 
 export async function getAuthSession() {
@@ -266,6 +378,67 @@ export async function resolvePmInboxItem(id: string) {
   const response = await request<ApiEnvelope<Record<string, unknown>>>(`/api/pm-inbox/${encodeURIComponent(id)}/resolve`, {
     method: "POST",
   });
+  return response.data;
+}
+
+export async function getExternalApprovals(limit = 50) {
+  const response = await request<ApiEnvelope<ExternalApprovalRequest[]>>(`/api/approvals/external?limit=${limit}`);
+  return response.data;
+}
+
+export async function getExternalApprovalSummary() {
+  const response = await request<ApiEnvelope<Record<string, number>>>("/api/approvals/external/summary");
+  return response.data;
+}
+
+export async function getExternalApproval(id: string) {
+  const response = await request<ApiEnvelope<ExternalApprovalRequest>>(`/api/approvals/external/${encodeURIComponent(id)}`);
+  return response.data;
+}
+
+export async function decideExternalApproval(id: string, action: "approve" | "reject" | "hold", comment: string) {
+  const response = await request<ApiEnvelope<ExternalApprovalRequest>>(`/api/approvals/external/${encodeURIComponent(id)}/${action}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comment }),
+  });
+  return response.data;
+}
+
+export async function getApprovalCallbacks(limit = 50) {
+  const response = await request<ApiEnvelope<Array<Record<string, unknown>>>>(`/api/approvals/callbacks?limit=${limit}`);
+  return response.data;
+}
+
+export async function retryApprovalCallback(callbackId: string) {
+  const response = await request<ApiEnvelope<Record<string, unknown>>>(`/api/approvals/callbacks/${encodeURIComponent(callbackId)}/retry`, {
+    method: "POST",
+  });
+  return response.data;
+}
+
+export async function getEcosystemSummary() {
+  const response = await request<ApiEnvelope<EcosystemSummary>>("/api/ecosystem/summary");
+  return response.data;
+}
+
+export async function getEcosystemTopology() {
+  const response = await request<ApiEnvelope<EcosystemTopology>>("/api/ecosystem/topology");
+  return response.data;
+}
+
+export async function getEcosystemTimeline(limit = 50) {
+  const response = await request<ApiEnvelope<EcosystemTimeline>>(`/api/ecosystem/timeline?limit=${limit}`);
+  return response.data;
+}
+
+export async function refreshEcosystem() {
+  const response = await request<ApiEnvelope<EcosystemSummary>>("/api/ecosystem/refresh", { method: "POST" });
+  return response.data;
+}
+
+export async function runEcosystemDryRun() {
+  const response = await request<ApiEnvelope<EcosystemDryRun>>("/api/ecosystem/demo/dry-run", { method: "POST" });
   return response.data;
 }
 

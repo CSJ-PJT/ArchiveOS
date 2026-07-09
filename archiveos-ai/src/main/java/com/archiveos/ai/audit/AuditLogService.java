@@ -57,6 +57,16 @@ public class AuditLogService {
         recordTimeline(path, status, correlationId, resourceId, actor);
     }
 
+    public void recordEvent(String action, String resourceType, String resourceId, String correlationId, Map<String, Object> metadata) {
+        Actor actor = actor();
+        jdbc.update("""
+                insert into public.audit_logs(actor, role, action, resource_type, resource_id, correlation_id,
+                    request_method, request_path, response_status, old_value, new_value, metadata)
+                values (?, ?, ?, ?, ?, ?, 'SYSTEM', ?, 200, null, null, ?::jsonb)
+                """, actor.name(), actor.role().name(), action, resourceType, resourceId, correlationId,
+                "/api/" + resourceType + "/" + (resourceId == null ? "" : resourceId), json(metadata));
+    }
+
     public List<Map<String, Object>> recent(int limit) {
         return jdbc.queryForList("select * from public.audit_logs order by occurred_at desc limit ?",
                 Math.max(1, Math.min(limit, 200)));
@@ -109,5 +119,9 @@ public class AuditLogService {
     }
 
     private String json(JsonNode node) { return node == null ? null : node.toString(); }
+    private String json(Map<String, Object> map) {
+        try { return mapper.writeValueAsString(map == null ? Map.of() : map); }
+        catch (Exception ignored) { return "{}"; }
+    }
     public record Actor(String name, PlatformRole role) {}
 }

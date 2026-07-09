@@ -1,6 +1,6 @@
 import type { IconName } from "../components/shared/Icon";
 
-export type AppRoute = "overview" | "managed" | "agents" | "workflows" | "knowledge" | "history" | "batch" | "rpa" | "atlas" | "mcp" | "settings";
+export type AppRoute = "overview" | "managed" | "ecosystem" | "approvals" | "agents" | "workflows" | "knowledge" | "history" | "batch" | "rpa" | "atlas" | "mcp" | "settings";
 
 export type NavigationItem = {
   id: AppRoute;
@@ -31,6 +31,20 @@ export const navigationItems: NavigationItem[] = [
     shortLabel: "Tower",
     description: "Control Tower and PM Inbox",
     icon: "activity",
+  },
+  {
+    id: "ecosystem",
+    label: "Ecosystem",
+    shortLabel: "Eco",
+    description: "Nexus, Logitics, Ledger topology and degraded isolation",
+    icon: "activity",
+  },
+  {
+    id: "approvals",
+    label: "Ledger Approvals",
+    shortLabel: "Ledger",
+    description: "Archive-Ledger approval gateway",
+    icon: "approval",
   },
   {
     id: "workflows",

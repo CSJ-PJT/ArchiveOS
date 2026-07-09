@@ -29,4 +29,24 @@ class SessionAuthenticationFilterTest {
         assertThat(session.role()).isEqualTo(PlatformRole.ADMIN);
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
+
+    @Test
+    void externalApprovalIntegrationTokenUsesArchiveLedgerActor() throws Exception {
+        SessionService sessions = new SessionService(new SecurityProperties("admin", "shared-token", 30, 5, 15, false));
+        SessionAuthenticationFilter filter = new SessionAuthenticationFilter(sessions);
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/approvals/external");
+        request.addHeader("X-ArchiveOS-Integration-Token", "shared-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        final Object[] principal = new Object[1];
+        FilterChain chain = (servletRequest, servletResponse) ->
+                principal[0] = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(principal[0]).isInstanceOf(PlatformSession.class);
+        PlatformSession session = (PlatformSession) principal[0];
+        assertThat(session.actor()).isEqualTo("archive-ledger");
+        assertThat(session.role()).isEqualTo(PlatformRole.ADMIN);
+    }
 }
