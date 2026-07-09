@@ -2,7 +2,7 @@
 
 ## ArchiveOS only
 
-ArchiveOS can run without Nexus, Logitics, or Ledger. In that mode:
+ArchiveOS can run without Nexus, Logistics, or Ledger. In that mode:
 
 - `/api/ecosystem/summary` returns 200.
 - external services are `UNAVAILABLE`, `UNKNOWN`, or `DEGRADED`.
@@ -11,7 +11,7 @@ ArchiveOS can run without Nexus, Logitics, or Ledger. In that mode:
 ## Full local order
 
 1. Start Archive-Ledger on `http://localhost:18080`.
-2. Start Archive-Logitics on `http://localhost:8092`.
+2. Start Archive-Logistics on `http://localhost:8092`.
 3. Start Archive-Nexus on `http://localhost:8080`.
 4. Start ArchiveOS.
 5. Check:

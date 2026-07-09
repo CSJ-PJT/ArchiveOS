@@ -36,7 +36,7 @@ export const navigationItems: NavigationItem[] = [
     id: "ecosystem",
     label: "Ecosystem",
     shortLabel: "Eco",
-    description: "Nexus, Logitics, Ledger topology and degraded isolation",
+    description: "Nexus, Logistics, Ledger topology and degraded isolation",
     icon: "activity",
   },
   {

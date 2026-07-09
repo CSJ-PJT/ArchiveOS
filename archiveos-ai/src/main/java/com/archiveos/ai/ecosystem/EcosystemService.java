@@ -60,7 +60,7 @@ public class EcosystemService {
         return Map.of(
                 "nodes", List.of(
                         node("archive-nexus", "Archive-Nexus", "DOMAIN", latestStatus("NEXUS")),
-                        node("archive-logitics", "Archive-Logitics", "LOGISTICS", latestStatus("LOGITICS")),
+                        node("archive-logitics", "Archive-Logistics", "LOGISTICS", latestStatus("LOGITICS")),
                         node("archive-ledger", "Archive-Ledger", "FINANCE", latestStatus("LEDGER")),
                         node("archive-os", "ArchiveOS", "CONTROL_TOWER", "HEALTHY")),
                 "edges", List.of(
@@ -83,7 +83,7 @@ public class EcosystemService {
                 "status", "DRY_RUN",
                 "steps", List.of(
                         step(1, "Archive-Nexus", "Generate synthetic shipment/domain event", "dry-run only"),
-                        step(2, "Archive-Logitics", "Calculate route, ETA, delay, and logistics cost", "dry-run only"),
+                        step(2, "Archive-Logistics", "Calculate route, ETA, delay, and logistics cost", "dry-run only"),
                         step(3, "Archive-Ledger", "Create synthetic transaction and mark high-risk items APPROVAL_REQUIRED", "dry-run only"),
                         step(4, "ArchiveOS", "Generate policy evidence, present approval queue, audit decision", "dry-run only"),
                         step(5, "ArchiveOS → Ledger", "Send approval callback through callback outbox", "blocked unless allow-external-write=true")));
