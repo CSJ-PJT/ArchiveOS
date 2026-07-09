@@ -26,11 +26,15 @@ services:
       ARCHIVEOS_AI_BASE_URL: http://archiveos-ai:4100
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
-      ARCHIVEOS_OBSIDIAN_VAULT_PATH: ${ARCHIVEOS_OBSIDIAN_VAULT_PATH:-}
+      ARCHIVEOS_OBSIDIAN_VAULT_PATH: ${ARCHIVEOS_OBSIDIAN_VAULT_PATH:-/vault}
       OBSIDIAN_VAULT_PATH: ${OBSIDIAN_VAULT_PATH:-}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      MCP_QUEUE_PATH: /runtime/queue
     ports:
       - "127.0.0.1:4000:4000"
+    volumes:
+      - ./tools/runtime/queue:/runtime/queue
+      - ${HOST_OBSIDIAN_VAULT_PATH:-./docs}:/vault
     healthcheck:
       test:
         - CMD

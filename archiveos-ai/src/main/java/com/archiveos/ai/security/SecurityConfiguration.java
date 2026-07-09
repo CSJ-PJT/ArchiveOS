@@ -30,6 +30,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/security/**", "/api/audit/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/mcp/**", "/api/runtime/timeline/**").hasAnyRole("OPERATOR", "PM", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/rag/ask", "/api/ecosystem/demo/dry-run", "/api/game/settlement-agency/simulate").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/tasks/*/decision", "/api/tasks/*/retry", "/api/rpa/tasks/*/decision")
                             .hasAnyRole("PM", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/approvals/external/*/approve", "/api/approvals/external/*/reject", "/api/approvals/external/*/hold")

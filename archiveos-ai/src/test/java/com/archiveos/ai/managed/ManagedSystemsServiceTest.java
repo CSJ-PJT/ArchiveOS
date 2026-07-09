@@ -29,6 +29,8 @@ class ManagedSystemsServiceTest {
         when(repository.latestAtlasHealthcheck()).thenReturn(Map.of("id", "check-1", "status", "ok", "checked_at", "2026-07-08T00:00:00Z"));
         when(repository.atlasWorkLogs(1)).thenReturn(List.of());
         when(repository.atlasWorkLogs(20)).thenReturn(List.of());
+        when(repository.latestEcosystemHealth("LOGITICS")).thenReturn(null);
+        when(repository.latestEcosystemHealth("LEDGER")).thenReturn(null);
         when(repository.latestDailyReport()).thenReturn(null);
         when(repository.recentAuditLogs(100)).thenReturn(List.of());
 
@@ -50,6 +52,39 @@ class ManagedSystemsServiceTest {
             assertThat(system).containsEntry("status", "not_connected");
             assertThat(system).containsEntry("secrets", "hidden");
             assertThat(system).containsKey("environmentRequirements");
+        });
+    }
+
+    @Test void ecosystemHealthSnapshotMarksLogisticsAndLedgerConnected() {
+        ManagedSystemsRepository repository = baseRepository();
+        when(repository.latestEcosystemHealth("LOGITICS")).thenReturn(Map.of(
+                "service_type", "LOGITICS",
+                "service_name", "Archive-Logistics",
+                "base_url", "http://localhost:8092",
+                "status", "HEALTHY",
+                "checked_at", "2026-07-08T00:00:00Z"));
+        when(repository.latestEcosystemHealth("LEDGER")).thenReturn(Map.of(
+                "service_type", "LEDGER",
+                "service_name", "Archive-Ledger",
+                "base_url", "http://localhost:18080",
+                "status", "HEALTHY",
+                "checked_at", "2026-07-08T00:00:00Z"));
+        ManagedSystemsService service = new ManagedSystemsService(repository, baseApprovalRepository());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> systems = (List<Map<String, Object>>) service.overview().get("systems");
+
+        assertThat(systems).anySatisfy(system -> {
+            assertThat(system).containsEntry("systemId", "archive-logitics");
+            assertThat(system).containsEntry("name", "Archive-Logistics");
+            assertThat(system).containsEntry("status", "normal");
+            assertThat(system).containsEntry("healthSource", "ecosystem_health_snapshot");
+        });
+        assertThat(systems).anySatisfy(system -> {
+            assertThat(system).containsEntry("systemId", "archive-ledger");
+            assertThat(system).containsEntry("status", "normal");
+            assertThat(system).containsEntry("readIntegrationStatus", "HEALTHY");
+            assertThat(system).containsEntry("healthSource", "ecosystem_health_snapshot");
         });
     }
 
@@ -124,6 +159,8 @@ class ManagedSystemsServiceTest {
         when(repository.latestAtlasHealthcheck()).thenReturn(null);
         when(repository.atlasWorkLogs(1)).thenReturn(List.of());
         when(repository.atlasWorkLogs(20)).thenReturn(List.of());
+        when(repository.latestEcosystemHealth("LOGITICS")).thenReturn(null);
+        when(repository.latestEcosystemHealth("LEDGER")).thenReturn(null);
         when(repository.latestDailyReport()).thenReturn(null);
         when(repository.recentAuditLogs(100)).thenReturn(List.of());
         return repository;

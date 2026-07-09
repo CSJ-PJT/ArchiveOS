@@ -110,10 +110,15 @@ function RagView() {
     try {
       const response = await fetch(`${configuredBackendUrl}/api/rag/ask`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question }),
       });
       const payload = await response.json();
+      if (!response.ok) {
+        setAnswer({ error: payload?.error ?? `RAG ask failed with status ${response.status}.`, details: payload });
+        return;
+      }
       setAnswer(payload);
     } catch (err) {
       setAnswer({ error: err instanceof Error ? err.message : String(err) });

@@ -19,6 +19,7 @@ archiveos-ai/build/
 tools/runtime/runtime.config.json
 tools/runtime/logs/
 tools/runtime/pids/
+tools/runtime/queue/
 backend/data/approved-devices.json
 docker-compose.override.yml
 compose.override.yml

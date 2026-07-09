@@ -27,6 +27,7 @@ import {
   getRecentRuntimeEvents,
   getRuntimeVersion,
   getSecurityStatus,
+  getSettlementAgencyGameSummary,
   getKpiOverview,
   getMcpRegistry,
   getRuntimeTimeline,
@@ -54,6 +55,7 @@ import {
   type RuntimeEvent,
   type RuntimeVersion,
   type SecurityStatus,
+  type SettlementAgencyGameSummary,
   type McpRegistryEntry,
   type RuntimeTimelineEntry,
 } from "../lib/backendApi";
@@ -72,6 +74,7 @@ import { McpRegistryPage } from "../pages/McpRegistryPage";
 import { ManagedSystemsPage } from "../pages/ManagedSystemsPage";
 import { LedgerApprovalsPage } from "../pages/LedgerApprovalsPage";
 import { EcosystemPage } from "../pages/EcosystemPage";
+import { SettlementGamePage } from "../pages/SettlementGamePage";
 import { Icon } from "../components/shared/Icon";
 import { Sidebar } from "../components/shared/Sidebar";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -106,6 +109,7 @@ export type AppData = {
   ecosystem: EcosystemSummary | null;
   ecosystemTopology: EcosystemTopology | null;
   ecosystemTimeline: EcosystemTimeline | null;
+  settlementGame: SettlementAgencyGameSummary | null;
   externalApprovals: ExternalApprovalRequest[];
   mcpRegistry: McpRegistryEntry[];
   timeline: RuntimeTimelineEntry[];
@@ -141,6 +145,7 @@ const emptyData: AppData = {
   ecosystem: null,
   ecosystemTopology: null,
   ecosystemTimeline: null,
+  settlementGame: null,
   externalApprovals: [],
   mcpRegistry: [],
   timeline: [],
@@ -191,6 +196,7 @@ function AppShellInner() {
       settle("ecosystem", getEcosystemSummary),
       settle("ecosystemTopology", getEcosystemTopology),
       settle("ecosystemTimeline", () => getEcosystemTimeline(50)),
+      settle("settlementGame", getSettlementAgencyGameSummary),
       settle("externalApprovals", () => getExternalApprovals(50)),
       operatorAccess ? settle("mcpRegistry", getMcpRegistry) : Promise.resolve({ key: "mcpRegistry", value: [], error: null }),
       operatorAccess ? settle("timeline", () => getRuntimeTimeline(100)) : Promise.resolve({ key: "timeline", value: [], error: null }),
@@ -223,13 +229,14 @@ function AppShellInner() {
     overview: <OverviewPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
     managed: <ManagedSystemsPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
     ecosystem: <EcosystemPage data={data} onRefresh={refresh} />,
+    game: <SettlementGamePage data={data} onRefresh={refresh} />,
     approvals: <LedgerApprovalsPage data={data} onRefresh={refresh} />,
-    agents: <AgentsPage data={data} />,
+    agents: <AgentsPage data={data} onRefresh={refresh} />,
     workflows: <WorkflowsPage data={data} onRefresh={refresh} />,
     knowledge: <KnowledgePage data={data} />,
     history: <HistoryPage data={data} />,
     batch: <BatchPage role={data.auth.role} />,
-    rpa: <RpaPage />,
+    rpa: <RpaPage role={data.auth.role} />,
     atlas: <AtlasPage data={data} onRefresh={refresh} />,
     mcp: <McpRegistryPage data={data} />,
     settings: <SettingsPage data={data} onRefresh={refresh} backendOrigin={configuredBackendUrl} />,
@@ -243,7 +250,7 @@ function AppShellInner() {
       <div className="content-shell">
         <header className="topbar">
           <button className="mobile-menu-button" type="button" aria-label="Open navigation" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>☰</button>
-          <div><span className="eyebrow">AI Agent Operations Platform</span><h1>{navigationItems.find((item) => item.id === route)?.label}</h1></div>
+          <div><span className="eyebrow">ArchiveOS Control Tower</span><h1>{navigationItems.find((item) => item.id === route)?.label}</h1></div>
           <div className="topbar-status"><span className="last-sync">Updated {data.refreshedAt ? new Date(data.refreshedAt).toLocaleTimeString() : "waiting"}</span><button className="icon-button" type="button" onClick={refresh} aria-label="Refresh all operational data" title="Refresh"><Icon name="refresh" /></button></div>
         </header>
         <main className="page-host" id="main-content">{page}</main>

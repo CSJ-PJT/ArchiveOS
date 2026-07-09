@@ -8,6 +8,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 import org.springframework.stereotype.Component;
@@ -43,7 +45,7 @@ public class EcosystemServiceClient {
                 builder.GET();
             }
             HttpResponse<String> response = http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
-            Map<String, Object> parsed = Json.readObject(response.body());
+            Map<String, Object> parsed = parseBody(response.body());
             EcosystemServiceStatus status = response.statusCode() >= 200 && response.statusCode() < 300
                     ? EcosystemServiceStatus.HEALTHY
                     : EcosystemServiceStatus.DEGRADED;
@@ -66,5 +68,20 @@ public class EcosystemServiceClient {
 
     private long latency(Instant started) {
         return Duration.between(started, Instant.now()).toMillis();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseBody(String body) {
+        Object parsed = Json.readObjectArrayCompatible(body);
+        if (parsed instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        if (parsed instanceof List<?> list) {
+            Map<String, Object> wrapped = new LinkedHashMap<>();
+            wrapped.put("items", list);
+            wrapped.put("count", list.size());
+            return wrapped;
+        }
+        return Map.of();
     }
 }

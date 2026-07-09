@@ -44,6 +44,10 @@ const localActionTypes = new Set([
   "frontend_build",
   "backend_typecheck",
   "backend_build",
+  "runtime_status",
+  "runtime_start_all",
+  "runtime_stop_all",
+  "runtime_restart_all",
 ]);
 const seedWorkLogIds = [
   "10000000-0000-4000-8000-000000000001",
@@ -130,6 +134,12 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Refresh Ecosystem", method: "POST", path: "/api/ecosystem/refresh", service: "runtime", description: "Read-only external service health refresh." },
   { name: "Ecosystem Demo Dry-run", method: "POST", path: "/api/ecosystem/demo/dry-run", service: "runtime", description: "Safe dry-run ecosystem scenario." },
   { name: "Ecosystem Demo Run", method: "POST", path: "/api/ecosystem/demo/run", service: "runtime", description: "Blocked unless external writes are explicitly enabled." },
+  { name: "Settlement Game Summary", method: "GET", path: "/api/game/settlement-agency/summary", service: "runtime", description: "Synthetic settlement agency revenue and bankruptcy risk summary." },
+  { name: "Settlement Game Preset", method: "GET", path: "/api/game/settlement-agency/preset", service: "runtime", description: "Synthetic settlement simulation preset." },
+  { name: "Settlement Game Simulate", method: "POST", path: "/api/game/settlement-agency/simulate", service: "runtime", description: "Read-only dry-run bankruptcy prevention simulation." },
+  { name: "Survival Mode Summary", method: "GET", path: "/api/game/survival/summary", service: "runtime", description: "Ecosystem survival mode summary (alias to settlement simulation engine)." },
+  { name: "Survival Mode Preset", method: "GET", path: "/api/game/survival/preset", service: "runtime", description: "Ecosystem survival mode preset (alias to settlement simulation engine)." },
+  { name: "Survival Mode Simulate", method: "POST", path: "/api/game/survival/simulate", service: "runtime", description: "Read-only dry-run survival simulation (alias to settlement simulation engine)." },
   { name: "Nexus Outbox", method: "GET", path: "/api/integrations/nexus/outbox", service: "runtime", description: "Archive-Nexus outbox summary proxy." },
   { name: "Nexus Generate", method: "POST", path: "/api/integrations/nexus/outbox/generate", service: "runtime", description: "Safe-mode guarded Nexus event generation." },
   { name: "Nexus Publish", method: "POST", path: "/api/integrations/nexus/outbox/publish", service: "runtime", description: "Safe-mode guarded Nexus outbox publish." },
@@ -192,6 +202,12 @@ function parseCsvEnv(value: string | undefined) {
     .filter(Boolean);
 }
 
+function normalizeApiPath(value: string) {
+  const pathOnly = value.split("?")[0] || "/";
+  const normalized = pathOnly.replace(/\/+$/, "");
+  return normalized || "/";
+}
+
 function readOptionalUrlEnv(name: string) {
   const value = process.env[name]?.trim();
   return value ? value : null;
@@ -225,8 +241,13 @@ app.post("/api/auth/logout", async (request, response) => {
 });
 
 app.use("/api", async (request, response, next) => {
-  const requestPath = String(request.originalUrl ?? request.path).split("?")[0];
+  const requestPath = normalizeApiPath(String(request.originalUrl ?? request.path));
   const adminRead = ["/api/security/status", "/api/runtime/public-access", "/api/audit/logs"].includes(requestPath);
+  const readOnlyPost = new Set(["/api/rag/ask", "/api/ecosystem/demo/dry-run", "/api/game/settlement-agency/simulate", "/api/game/survival/simulate"]);
+  if (request.method === "POST" && readOnlyPost.has(requestPath)) {
+    next();
+    return;
+  }
   if (["HEAD", "OPTIONS"].includes(request.method) || (request.method === "GET" && !adminRead)) {
     next();
     return;
@@ -234,7 +255,7 @@ app.use("/api", async (request, response, next) => {
   try {
     const session = await readJavaSession(request);
     const role = String(session.role ?? "PUBLIC").toUpperCase();
-    const pmAction = /^\/api\/(tasks|rpa\/tasks)\/[^/]+\/(decision|retry)$/.test(requestPath)
+    const pmAction = /^\/api\/(tasks|rpa\/tasks)\/[^/]+\/(decision|retry|approve|reject|hold|request_retry)$/.test(requestPath)
       || /^\/api\/approvals\/external\/[^/]+\/(approve|reject|hold)$/.test(requestPath);
     if (role === "PUBLIC") {
       response.status(401).json({ error: "Authentication required." });
@@ -392,21 +413,13 @@ app.post("/api/rpa/classify", async (request, response) => {
     return;
   }
 
-  try {
-    response.status(200).json(await proxyArchiveOsAi("/api/rpa/classify", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        title,
-        description,
-        targetProject: typeof request.body?.targetProject === "string" ? request.body.targetProject : undefined,
-        requestedBy: typeof request.body?.requestedBy === "string" ? request.body.requestedBy : "archiveos-node-proxy",
-        metadata: typeof request.body?.metadata === "object" && request.body.metadata !== null ? request.body.metadata : {},
-      }),
-    }));
-  } catch (error) {
-    sendProxyError(response, error, "Spring Batch RPA classification failed.");
-  }
+  await relayArchiveOsAi(response, "/api/rpa/classify", jsonProxyRequest("POST", {
+    title,
+    description,
+    targetProject: typeof request.body?.targetProject === "string" ? request.body.targetProject : undefined,
+    requestedBy: typeof request.body?.requestedBy === "string" ? request.body.requestedBy : "archiveos-node-proxy",
+    metadata: typeof request.body?.metadata === "object" && request.body.metadata !== null ? request.body.metadata : {},
+  }), undefined, request);
 });
 
 app.get("/api/rpa/tasks/recent", async (request, response) => {
@@ -748,6 +761,44 @@ app.post("/api/ecosystem/demo/dry-run", async (request, response) => {
 
 app.post("/api/ecosystem/demo/run", async (request, response) => {
   await relayArchiveOsAi(response, "/api/ecosystem/demo/run", { method: "POST" }, undefined, request);
+});
+
+app.get("/api/game/settlement-agency/summary", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/game/settlement-agency/summary", undefined, undefined, request);
+});
+
+app.get("/api/game/settlement-agency/preset", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/game/settlement-agency/preset", undefined, undefined, request);
+});
+
+app.post("/api/game/settlement-agency/simulate", async (request, response) => {
+  const dryRun = request.query.dryRun === undefined ? "true" : String(request.query.dryRun);
+  await relayArchiveOsAi(
+    response,
+    `/api/game/settlement-agency/simulate?dryRun=${encodeURIComponent(dryRun)}`,
+    jsonProxyRequest("POST", typeof request.body === "object" && request.body !== null ? request.body : {}),
+    undefined,
+    request,
+  );
+});
+
+app.get("/api/game/survival/summary", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/game/settlement-agency/summary", undefined, undefined, request);
+});
+
+app.get("/api/game/survival/preset", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/game/settlement-agency/preset", undefined, undefined, request);
+});
+
+app.post("/api/game/survival/simulate", async (request, response) => {
+  const dryRun = request.query.dryRun === undefined ? "true" : String(request.query.dryRun);
+  await relayArchiveOsAi(
+    response,
+    `/api/game/settlement-agency/simulate?dryRun=${encodeURIComponent(dryRun)}`,
+    jsonProxyRequest("POST", typeof request.body === "object" && request.body !== null ? request.body : {}),
+    undefined,
+    request,
+  );
 });
 
 app.get("/api/integrations/nexus/outbox", async (request, response) => {
@@ -1118,7 +1169,17 @@ app.listen(port, () => {
   console.log(`archiveos-backend listening on port ${port}`);
 });
 
-type LocalAction = "git_status" | "git_branch" | "git_log_recent" | "frontend_build" | "backend_typecheck" | "backend_build";
+type LocalAction =
+  | "git_status"
+  | "git_branch"
+  | "git_log_recent"
+  | "frontend_build"
+  | "backend_typecheck"
+  | "backend_build"
+  | "runtime_status"
+  | "runtime_start_all"
+  | "runtime_stop_all"
+  | "runtime_restart_all";
 
 type LocalActionBody = {
   project_id: string;
@@ -1652,7 +1713,7 @@ function validateLocalActionBody(body: unknown): LocalActionValidationResult {
   if (typeof candidate.action !== "string" || !localActionTypes.has(candidate.action)) {
     return {
       ok: false,
-      error: "action must be one of git_status, git_branch, git_log_recent, frontend_build, backend_typecheck, backend_build.",
+      error: `action must be one of ${Array.from(localActionTypes).join(", ")}.`,
     };
   }
 
@@ -1665,16 +1726,28 @@ function validateLocalActionBody(body: unknown): LocalActionValidationResult {
   };
 }
 
+function resolveProjectRoot(projectPath: string) {
+  return path.basename(projectPath).toLowerCase() === "backend" ? path.dirname(projectPath) : projectPath;
+}
+
 function runLocalAction(projectPath: string, action: LocalAction): Promise<LocalActionResult> {
   const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
-  const backendPath = path.join(projectPath, "backend");
-  const definitions: Record<LocalAction, { command: string; args: string[]; cwd: string }> = {
-    git_status: { command: "git", args: ["status", "--short"], cwd: projectPath },
-    git_branch: { command: "git", args: ["branch", "--show-current"], cwd: projectPath },
-    git_log_recent: { command: "git", args: ["log", "--oneline", "-5"], cwd: projectPath },
-    frontend_build: { command: npmExecutable, args: ["run", "build"], cwd: projectPath },
+  const rootPath = resolveProjectRoot(projectPath);
+  const backendPath = path.join(rootPath, "backend");
+  const runtimeDir = path.join(rootPath, "tools", "runtime");
+  const runtimeScript = (name: string) => path.join(runtimeDir, name);
+  const powershell = process.platform === "win32" ? "powershell.exe" : "pwsh";
+  const definitions: Record<LocalAction, { command: string; args: string[]; cwd: string; timeoutMs?: number }> = {
+    git_status: { command: "git", args: ["status", "--short"], cwd: rootPath },
+    git_branch: { command: "git", args: ["branch", "--show-current"], cwd: rootPath },
+    git_log_recent: { command: "git", args: ["log", "--oneline", "-5"], cwd: rootPath },
+    frontend_build: { command: npmExecutable, args: ["run", "build"], cwd: rootPath, timeoutMs: 120000 },
     backend_typecheck: { command: npmExecutable, args: ["run", "typecheck"], cwd: backendPath },
     backend_build: { command: npmExecutable, args: ["run", "build"], cwd: backendPath },
+    runtime_status: { command: powershell, args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", runtimeScript("status.ps1")], cwd: rootPath },
+    runtime_start_all: { command: powershell, args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", runtimeScript("start-all.ps1")], cwd: rootPath },
+    runtime_stop_all: { command: powershell, args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", runtimeScript("stop-all.ps1")], cwd: rootPath },
+    runtime_restart_all: { command: powershell, args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", `& '${runtimeScript("stop-all.ps1").replace(/'/g, "''")}'; & '${runtimeScript("start-all.ps1").replace(/'/g, "''")}'`], cwd: rootPath },
   };
 
   const definition = definitions[action];
@@ -1704,7 +1777,7 @@ function runLocalAction(projectPath: string, action: LocalAction): Promise<Local
         stderr: truncateOutput(`${stderr}\nCommand timed out after 60000ms.`.trim()),
         exitCode: -1,
       });
-    }, 60000);
+    }, definition.timeoutMs ?? 60000);
 
     child.stdout.on("data", (chunk: Buffer) => {
       stdout += chunk.toString();

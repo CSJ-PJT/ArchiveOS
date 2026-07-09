@@ -164,41 +164,81 @@ public class ManagedSystemsService {
     }
 
     private Map<String, Object> archiveLogiticsSystem() {
-        Map<String, Object> system = system("archive-logitics", "Archive-Logistics", "LOGISTICS_OPERATIONS_BACKEND", "development", "local", "not_connected",
-                "Archive-Logistics is managed through the Ecosystem Control Tower and may be unavailable during local development.",
-                null, 1, 0, 0, 0, 0, 0, null, null, null, null, "CSJ-PJT/Archive-Logistics", "archiveos");
+        Map<String, Object> health = repository.latestEcosystemHealth("LOGITICS");
+        String status = managedStatus(health, "not_connected");
+        String reason = managedReason(health, "Archive-Logistics has not been checked by the Ecosystem Control Tower yet.");
+        Map<String, Object> system = system("archive-logitics", "Archive-Logistics", "LOGISTICS_OPERATIONS_BACKEND", "development", "local", status,
+                reason, string(health, "checked_at", null), 1, "normal".equals(status) ? 1 : 0,
+                "degraded".equals(status) ? 1 : 0, "down_candidate".equals(status) ? 1 : 0,
+                0, "normal".equals(status) ? 0 : 1, null, null, null,
+                string(health, "base_url", "http://localhost:8092"), "CSJ-PJT/Archive-Logistics", "archiveos");
         system.put("role", "Synthetic Logistics Operations Backend");
+        system.put("baseUrlConfigured", string(health, "base_url", null) != null);
+        system.put("healthSource", health == null ? "not_checked" : "ecosystem_health_snapshot");
+        system.put("secrets", "hidden");
         return system;
     }
 
     private Map<String, Object> archiveLedgerSystem() {
         Map<String, Object> summary = approvals.summary();
         Map<String, Object> latest = approvals.latest();
+        Map<String, Object> health = repository.latestEcosystemHealth("LEDGER");
         int pending = integer(summary.get("pending"));
         int callbackFailed = integer(summary.get("callback_failed"));
         boolean configured = ledgerEnabled && ledgerBaseUrl != null && !ledgerBaseUrl.isBlank();
-        String status = callbackFailed > 0 ? "degraded" : pending > 0 ? "degraded" : configured ? "normal" : "not_connected";
+        boolean readConnected = health != null && "HEALTHY".equalsIgnoreCase(string(health, "status", ""));
+        String status = callbackFailed > 0
+                ? "degraded"
+                : pending > 0
+                    ? "degraded"
+                    : readConnected
+                        ? "normal"
+                        : managedStatus(health, configured ? "degraded" : "not_connected");
         String reason = callbackFailed > 0
                 ? "Archive-Ledger callback failures require review."
                 : pending > 0
                     ? "Archive-Ledger approval requests are waiting for PM decision."
+                    : readConnected
+                        ? "Archive-Ledger read integration is healthy. No pending approval request is open."
                     : configured
-                        ? "Archive-Ledger integration endpoint is configured. No pending approval request is open."
-                        : "Archive-Ledger integration endpoint is not configured yet.";
+                        ? managedReason(health, "Archive-Ledger endpoint is configured, but no healthy read snapshot has been recorded yet. Run ecosystem refresh.")
+                        : managedReason(health, "Archive-Ledger integration endpoint is not configured yet.");
         Map<String, Object> system = system("archive-ledger", "Archive-Ledger", "FINANCIAL_OPERATIONS_BACKEND", "development", "local", status, reason,
-                string(latest, "updated_at", null), 1, "not_connected".equals(status) ? 0 : 1,
-                "degraded".equals(status) ? 1 : 0, 0, pending, callbackFailed,
+                string(health, "checked_at", string(latest, "updated_at", null)), 1, "not_connected".equals(status) || "down_candidate".equals(status) ? 0 : 1,
+                "degraded".equals(status) ? 1 : 0, "down_candidate".equals(status) ? 1 : 0, pending, callbackFailed,
                 string(latest, "approval_request_id"), null, null, null, "CSJ-PJT/Archive-Ledger", "archiveos");
         system.put("role", "Synthetic Financial Operations Backend");
-        system.put("baseUrlConfigured", ledgerBaseUrl != null && !ledgerBaseUrl.isBlank());
+        system.put("baseUrlConfigured", ledgerBaseUrl != null && !ledgerBaseUrl.isBlank() || string(health, "base_url", null) != null);
         system.put("approvalCallbackConfigured", ledgerCallbackToken != null && !ledgerCallbackToken.isBlank());
         system.put("integrationEnabled", ledgerEnabled);
+        system.put("readIntegrationStatus", string(health, "status", "UNKNOWN"));
+        system.put("healthSource", health == null ? "not_checked" : "ecosystem_health_snapshot");
         system.put("secrets", "hidden");
         system.put("environmentRequirements", List.of(
                 Map.of("name", "ARCHIVE_LEDGER_BASE_URL", "secret", false),
                 Map.of("name", "ARCHIVE_LEDGER_CALLBACK_TOKEN", "secret", true),
                 Map.of("name", "ARCHIVE_LEDGER_ENABLED", "secret", false)));
         return system;
+    }
+
+    private String managedStatus(Map<String, Object> health, String fallback) {
+        if (health == null) return fallback;
+        return switch (string(health, "status", "UNKNOWN").toUpperCase(Locale.ROOT)) {
+            case "HEALTHY" -> "normal";
+            case "DEGRADED", "UNKNOWN" -> "degraded";
+            case "UNAVAILABLE", "DOWN" -> "down_candidate";
+            case "DISABLED" -> "not_connected";
+            default -> fallback;
+        };
+    }
+
+    private String managedReason(Map<String, Object> health, String fallback) {
+        if (health == null) return fallback;
+        String error = string(health, "error_message", null);
+        String name = string(health, "service_name", "External service");
+        String status = string(health, "status", "UNKNOWN");
+        if (error != null && !error.isBlank()) return name + " healthcheck returned " + status + ": " + error;
+        return name + " healthcheck returned " + status + ".";
     }
 
     private Map<String, Object> system(String id, String name, String type, String environment, String provider, String status,
