@@ -16,7 +16,16 @@ ArchiveOS is the control tower for the Archive Platform ecosystem. It does not o
 - `/api/ecosystem/timeline` returns MVP cross-service timeline events.
 - External services can be unavailable without terminating ArchiveOS.
 - Safe mode blocks external write actions unless explicitly enabled.
+- `/api/ecosystem/demo/dry-run` is allowed in safe-mode and returns planned execution intent.
+- `/api/ecosystem/demo/run` requires `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=true`.
 
 ## Failure isolation
 
-Connection refused, timeout, and 5xx responses are converted to `UNAVAILABLE` or `DEGRADED`. The ArchiveOS API still returns 200 for ecosystem summary so operators can inspect degraded state.
+- Connection refused, timeout, and 5xx responses are converted to `UNAVAILABLE` or `DEGRADED`. The ArchiveOS API still returns 200 for ecosystem summary so operators can inspect degraded state.
+- `DEGRADED` is used when service health is partial, while `UNAVAILABLE` is used for unreachable/disabled critical checks.
+- Safe mode / write guard failures are surfaced as `SAFE_MODE_BLOCKED` or `DRY_RUN` metadata in integration payloads.
+
+## Naming note
+
+GitHub repository and public display name are **Archive-Logistics**.  
+Internal keys/sources may remain `logitics` for backward compatibility with existing events, dashboards, and API contracts.

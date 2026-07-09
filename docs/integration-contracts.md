@@ -32,8 +32,21 @@ Note: integration keys in ArchiveOS configuration remain `logitics` internally f
   - `GET /api/operations/summary`
   - `GET /api/transactions?status=APPROVAL_REQUIRED`
   - `GET /api/reconciliation/summary`
+- Logistics native ingest endpoints:
+  - `POST /api/events/logistics`
+  - `POST /api/events/logistics/bulk`
 - Callback:
   - `POST /api/approvals/callback`
+
+Notes:
+- ArchiveOS reads `Logistics` data from `http://localhost:8092` APIs:
+  - `/api/operations/summary`
+  - `/api/outbox/summary`
+  - `/api/routes/summary` (internal service issue observed: this endpoint currently returns 500 in the current snapshot; treat as operational debt until fixed in Logistics)
+- Archive-Ledger supports native logistics bulk endpoint:
+  - `POST /api/events/logistics/bulk`
+
+Note: GitHub repository and public display name are Archive-Logistics. Some internal keys and source names may remain `Archive-Logitics/logitics` for backward compatibility with existing events and API contracts.
 
 ## Status mapping
 

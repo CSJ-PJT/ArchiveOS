@@ -49,14 +49,39 @@ ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL=http://host.docker.internal:8080
 ### Ecosystem API
 
 ```powershell
-curl.exe http://localhost:4000/api/ecosystem/services
-curl.exe http://localhost:4000/api/ecosystem/summary
-curl.exe http://localhost:4000/api/ecosystem/topology
-curl.exe -X POST http://localhost:4000/api/ecosystem/refresh
-curl.exe -X POST http://localhost:4000/api/ecosystem/demo/dry-run
+curl.exe http://localhost:5173/api/ecosystem/services
+curl.exe http://localhost:5173/api/ecosystem/summary
+curl.exe http://localhost:5173/api/ecosystem/topology
+curl.exe -X POST http://localhost:5173/api/ecosystem/demo/dry-run
 ```
 
-External write actions such as Nexus generation/publish, Logistics publish, and Ledger callback dispatch are blocked unless `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=true`. The default portfolio-safe mode is read-only/dry-run.
+For authenticated admin users:
+
+```powershell
+curl.exe -X POST http://localhost:5173/api/ecosystem/refresh
+curl.exe -X POST http://localhost:5173/api/ecosystem/demo/run
+```
+
+External write actions (Nexus/Ledger/Logitics generation/publish, Ledger approval callback) are blocked in safe mode unless `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=true`.
+
+### 4-service smoke script
+
+```powershell
+.\scripts\smoke-ecosystem.ps1
+.\scripts\smoke-ecosystem.ps1 -WriteSmoke
+.\scripts\smoke-ecosystem.ps1 -OsApiUrl "http://localhost:5173" -NexusUrl "http://localhost:8080" -LogisticsUrl "http://localhost:8092" -LedgerUrl "http://localhost:18080"
+```
+
+Defaults:
+
+```text
+Nexus URL    : http://localhost:8080
+Logitics URL : http://localhost:8092
+Ledger URL   : http://localhost:18080
+OS API URL   : http://localhost:5173
+```
+
+Read-only mode is default. With `-WriteSmoke`, the script executes real write attempts for the four-service flow and prints blocked/failed reasons when safe mode or service availability prevents execution.
 
 ### Ledger approval callback
 
@@ -221,8 +246,11 @@ docker compose ps
 | --- | --- |
 | Operator Console | `http://localhost:5173` |
 | Node Backend | `http://localhost:4000` |
-| Spring AI Runtime | `http://localhost:4100` |
+| Spring AI Runtime (ArchiveOS API port) | `http://localhost:4100` |
+| Local API through frontend proxy | `http://localhost:5173` |
 | PostgreSQL / pgvector | `localhost:5432` |
+
+ArchiveOS is exposed as Operator Console on `http://localhost:5173` and read-only ecosystem control APIs are normally reachable through that origin.
 
 ---
 
