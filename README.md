@@ -365,6 +365,7 @@ Related docs:
 - [Final Archive Platform Detailed](docs/final-archive-platform-detailed.md)
 - [Final Archive Platform Index](docs/final-archive-platform-index.md)
 - [Final Submission Mail Body](docs/final-submission-mail-body.md)
+- [Atlas v0.1 Healthcheck Result](docs/atlas-v0.1-healthcheck-result.md)
 
 ---
 
