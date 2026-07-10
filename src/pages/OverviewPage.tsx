@@ -22,6 +22,7 @@ export function OverviewPage({ data, onRefresh, onNavigate }: { data: AppData; o
   const tower = data.managedSystems;
   const recommendedPmAction = tower?.summary.recommendedPmAction;
   const liveFlow = data.liveFlow;
+  const workforce = data.workforce;
 
   return <div className="page-stack overview-page">
     <section className={`system-command-bar state-${overview.statusTone}`}>
@@ -35,6 +36,7 @@ export function OverviewPage({ data, onRefresh, onNavigate }: { data: AppData; o
       <MetricCard icon="health" label="System Health" value={overview.systemStatus} description="Runtime and endpoint condition" status={overview.statusTone} updatedAt={updated} onClick={() => onNavigate("settings")} actionLabel="Inspect health" />
       <MetricCard icon="activity" label="Control Tower" value={tower?.summary.managedSystemsCount ?? 0} description={`${tower?.summary.normalCount ?? 0} normal · ${tower?.summary.openPmInboxItems ?? 0} inbox open`} status={(tower?.summary.downCandidateCount ?? 0) > 0 ? "critical" : (tower?.summary.degradedCount ?? 0) > 0 ? "degraded" : "healthy"} updatedAt={tower?.summary.generatedAt ? formatTimeAgo(tower.summary.generatedAt) : updated} onClick={() => onNavigate("managed")} actionLabel="Open tower" />
       <MetricCard icon="workflow" label="Live Flow" value={liveFlow?.active_flows ?? 0} description={`${liveFlow?.pending_approvals ?? 0} approvals · ${liveFlow?.failed_callbacks ?? 0} callbacks failed`} status={(liveFlow?.failed_callbacks ?? 0) > 0 ? "critical" : (liveFlow?.degraded_systems ?? 0) > 0 ? "degraded" : (liveFlow?.active_flows ?? 0) > 0 ? "working" : "idle"} updatedAt={liveFlow?.latest_event_at ? formatTimeAgo(liveFlow.latest_event_at) : updated} onClick={() => onNavigate("liveflow")} actionLabel="Open Live Flow" />
+      <MetricCard icon="agents" label="Operational Workforce" value={workforce?.summary.totalHeadcount ?? 0} description={`${workforce?.summary.totalBacklog ?? 0} backlog · ${workforce?.summary.largestBottleneck ?? "no bottleneck"}`} status={(workforce?.summary.totalBacklog ?? 0) > 0 ? "warning" : workforce ? "healthy" : "idle"} updatedAt={workforce?.generatedAt ? formatTimeAgo(workforce.generatedAt) : updated} onClick={() => onNavigate("workforce")} actionLabel="Open workforce" />
       <MetricCard icon="activity" label="Atlas Platform" value={atlasStatus} description={atlasDescription} status={atlasStatus} updatedAt={atlasLatestCheck ? formatTimeAgo(atlasLatestCheck) : updated} onClick={() => onNavigate("atlas")} actionLabel="Open Atlas monitor" />
       <MetricCard icon="agents" label="Active Agents" value={`${activeAgents}/${data.mesh?.agents.length || 0}`} description={data.mesh?.health.summary || "Waiting for agent telemetry"} status={activeAgents > 0 ? "working" : "disconnected"} updatedAt={updated} onClick={() => onNavigate("agents")} actionLabel="Open monitor" />
       <MetricCard icon="workflow" label="Pipeline Status" value={overview.currentStage} description={`${runningTasks} task(s) currently processing`} status={runningTasks > 0 ? "working" : "idle"} updatedAt={updated} onClick={() => onNavigate("workflows")} actionLabel="View workflows" />

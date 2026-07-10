@@ -159,6 +159,10 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Live Flow Correlation", method: "GET", path: "/api/live-flow/correlation/:id", service: "runtime", description: "Trace one runtime correlation chain." },
   { name: "Live Flow Entity", method: "GET", path: "/api/live-flow/entity/:id", service: "runtime", description: "Trace one entity through the flow." },
   { name: "Live Flow Refresh", method: "POST", path: "/api/live-flow/refresh", service: "runtime", description: "Admin-only read-only collection from Archive services." },
+  { name: "Workforce Overview", method: "GET", path: "/api/workforce/overview", service: "runtime", description: "Synthetic workforce, capacity, productivity, and cashflow overview." },
+  { name: "Workforce Bottlenecks", method: "GET", path: "/api/workforce/bottlenecks", service: "runtime", description: "Service bottleneck and backlog summary." },
+  { name: "Workforce Recommendations", method: "GET", path: "/api/workforce/recommendations", service: "runtime", description: "Recommendation-only workforce actions." },
+  { name: "Workforce Productivity Trend", method: "GET", path: "/api/workforce/productivity-trend", service: "runtime", description: "Current productivity trend points by service." },
   { name: "Logistics Summary", method: "GET", path: "/api/integrations/logitics/summary", service: "runtime", description: "Archive-Logistics operations summary proxy." },
   { name: "Logistics Outbox", method: "GET", path: "/api/integrations/logitics/outbox", service: "runtime", description: "Archive-Logistics outbox summary proxy." },
   { name: "Logistics Publish", method: "POST", path: "/api/integrations/logitics/outbox/publish", service: "runtime", description: "Safe-mode guarded Logistics outbox publish." },
@@ -898,6 +902,22 @@ app.get("/api/live-flow/entity/:id", async (request, response) => {
 
 app.post("/api/live-flow/refresh", async (request, response) => {
   await relayArchiveOsAi(response, "/api/live-flow/refresh", { method: "POST" }, undefined, request);
+});
+
+app.get("/api/workforce/overview", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/workforce/overview", undefined, undefined, request);
+});
+
+app.get("/api/workforce/bottlenecks", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/workforce/bottlenecks", undefined, undefined, request);
+});
+
+app.get("/api/workforce/recommendations", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/workforce/recommendations", undefined, undefined, request);
+});
+
+app.get("/api/workforce/productivity-trend", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/workforce/productivity-trend", undefined, undefined, request);
 });
 
 app.get("/api/integrations/logitics/summary", async (request, response) => {

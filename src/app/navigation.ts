@@ -1,6 +1,6 @@
 import type { IconName } from "../components/shared/Icon";
 
-export type AppRoute = "overview" | "ecosystem" | "liveflow" | "finance" | "managed" | "approvals" | "agents" | "workflows" | "knowledge" | "history" | "batch" | "rpa" | "atlas" | "mcp" | "settings";
+export type AppRoute = "overview" | "ecosystem" | "liveflow" | "workforce" | "finance" | "managed" | "approvals" | "agents" | "workflows" | "knowledge" | "history" | "batch" | "rpa" | "atlas" | "mcp" | "settings";
 
 export type NavigationItem = {
   id: AppRoute;
@@ -38,6 +38,13 @@ export const navigationItems: NavigationItem[] = [
     shortLabel: "Flow",
     description: "Operational Twin from real runtime flow events",
     icon: "workflow",
+  },
+  {
+    id: "workforce",
+    label: "Workforce",
+    shortLabel: "Workers",
+    description: "Synthetic workforce capacity and bottleneck overview",
+    icon: "agents",
   },
   {
     id: "finance",

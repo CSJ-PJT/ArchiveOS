@@ -32,6 +32,7 @@ import {
   getLiveFlowSummary,
   getLiveFlowTopology,
   getLiveFlowRecentEvents,
+  getWorkforceOverview,
   getKpiOverview,
   getMcpRegistry,
   getRuntimeTimeline,
@@ -50,6 +51,7 @@ import {
   type LiveFlowSummary,
   type LiveFlowTopology,
   type LiveFlowEvent,
+  type WorkforceOverview,
   type HistorianStatus,
   type KnowledgeOverview,
   type KpiOverview,
@@ -84,6 +86,7 @@ import { LedgerApprovalsPage } from "../pages/LedgerApprovalsPage";
 import { EcosystemPage } from "../pages/EcosystemPage";
 import { SettlementGamePage } from "../pages/SettlementGamePage";
 import { LiveFlowPage } from "../pages/LiveFlowPage";
+import { WorkforcePage } from "../pages/WorkforcePage";
 import { Icon } from "../components/shared/Icon";
 import { Sidebar } from "../components/shared/Sidebar";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -125,6 +128,7 @@ export type AppData = {
   liveFlow: LiveFlowSummary | null;
   liveFlowTopology: LiveFlowTopology | null;
   liveFlowEvents: LiveFlowEvent[];
+  workforce: WorkforceOverview | null;
   mcpRegistry: McpRegistryEntry[];
   timeline: RuntimeTimelineEntry[];
 };
@@ -165,6 +169,7 @@ const emptyData: AppData = {
   liveFlow: null,
   liveFlowTopology: null,
   liveFlowEvents: [],
+  workforce: null,
   mcpRegistry: [],
   timeline: [],
 };
@@ -233,6 +238,7 @@ function AppShellInner() {
       settle("liveFlow", getLiveFlowSummary),
       settle("liveFlowTopology", getLiveFlowTopology),
       settle("liveFlowEvents", () => getLiveFlowRecentEvents(100)),
+      settle("workforce", getWorkforceOverview),
       operatorAccess ? settle("mcpRegistry", getMcpRegistry) : Promise.resolve({ key: "mcpRegistry", value: [], error: null }),
       operatorAccess ? settle("timeline", () => getRuntimeTimeline(100)) : Promise.resolve({ key: "timeline", value: [], error: null }),
     ]))];
@@ -264,6 +270,7 @@ function AppShellInner() {
     overview: <OverviewPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
     ecosystem: <EcosystemPage data={data} onRefresh={refresh} />,
     liveflow: <LiveFlowPage data={data} onRefresh={refresh} />,
+    workforce: <WorkforcePage data={data} />,
     finance: <SettlementGamePage data={data} onRefresh={refresh} />,
     managed: <ManagedSystemsPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
     approvals: <LedgerApprovalsPage data={data} onRefresh={refresh} />,

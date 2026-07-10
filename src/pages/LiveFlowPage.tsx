@@ -129,7 +129,7 @@ export function LiveFlowPage({ data, onRefresh }: { data: AppData; onRefresh: ()
               <span>Correlation<strong>{selected.correlation_id || "n/a"}</strong></span>
               <span>Occurred<strong>{formatTimeAgo(selected.occurred_at)}</strong></span>
             </dl>
-            <OperationalLinks event={selected} />
+            <OperationalLinks event={selected} workforce={data.workforce?.services || []} />
             <div className="inline-actions wrap">
               <button className="button button-secondary" type="button" onClick={() => void traceCorrelation(selected)}>Trace correlation</button>
               <button className="button button-secondary" type="button" onClick={() => void traceEntity(selected)}>Trace entity</button>
@@ -182,7 +182,7 @@ export function LiveFlowPage({ data, onRefresh }: { data: AppData; onRefresh: ()
   );
 }
 
-function OperationalLinks({ event }: { event: LiveFlowEvent }) {
+function OperationalLinks({ event, workforce }: { event: LiveFlowEvent; workforce: NonNullable<AppData["workforce"]>["services"] }) {
   const metadata = event.metadata || {};
   const links = [
     ["Order", metadata.orderId],
@@ -198,6 +198,7 @@ function OperationalLinks({ event }: { event: LiveFlowEvent }) {
 
   const callbackState = event.entity_type === "callback" || event.event_type.includes("CALLBACK");
   const settlementState = event.entity_type === "settlement" || event.event_type.includes("SETTLEMENT") || event.status === "settled";
+  const workforceImpact = workforce.find((item) => item.serviceId === event.source_system_id || item.serviceType.toLowerCase() === event.domain.toLowerCase());
 
   return (
     <div className="operational-links">
@@ -205,6 +206,13 @@ function OperationalLinks({ event }: { event: LiveFlowEvent }) {
       {links.length ? <dl className="detail-grid compact">
         {links.map(([label, value]) => <span key={String(label)}>{String(label)}<strong>{String(value)}</strong></span>)}
       </dl> : <p className="small-note">No linked synthetic identifiers were recorded for this event.</p>}
+      {workforceImpact ? <dl className="detail-grid compact">
+        <span>Capacity shortage<strong>{String(workforceImpact.capacityShortage)}</strong></span>
+        <span>Backlog<strong>{String(workforceImpact.backlog)}</strong></span>
+        <span>Bottleneck role<strong>{workforceImpact.bottleneckRole}</strong></span>
+        <span>Productivity score<strong>{String(workforceImpact.productivityScore)}</strong></span>
+        <span>Payroll cost<strong>{String(workforceImpact.payrollCost)}</strong></span>
+      </dl> : <p className="small-note">No workforce impact snapshot is linked to this source yet.</p>}
       {callbackState ? <p className="small-note">Callback chain: ArchiveOS → Archive-Ledger. Check callback status before retrying.</p> : null}
       {settlementState ? <p className="small-note">Settlement chain: Ledger transaction → settlement batch → reconciliation summary.</p> : null}
     </div>

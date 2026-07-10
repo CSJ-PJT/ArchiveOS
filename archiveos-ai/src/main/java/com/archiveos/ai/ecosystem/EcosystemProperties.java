@@ -41,6 +41,10 @@ public class EcosystemProperties {
         private String ordersPath;
         private String claimsPath;
         private String returnsPath;
+        private String workforceSummaryPath = "/api/workforce/summary";
+        private String productivitySummaryPath = "/api/productivity/summary";
+        private String capacitySummaryPath = "/api/capacity/summary";
+        private String cashflowSummaryPath;
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
         public String getName() { return name; }
@@ -69,6 +73,14 @@ public class EcosystemProperties {
         public void setClaimsPath(String claimsPath) { this.claimsPath = claimsPath; }
         public String getReturnsPath() { return returnsPath; }
         public void setReturnsPath(String returnsPath) { this.returnsPath = returnsPath; }
+        public String getWorkforceSummaryPath() { return workforceSummaryPath; }
+        public void setWorkforceSummaryPath(String workforceSummaryPath) { this.workforceSummaryPath = workforceSummaryPath; }
+        public String getProductivitySummaryPath() { return productivitySummaryPath; }
+        public void setProductivitySummaryPath(String productivitySummaryPath) { this.productivitySummaryPath = productivitySummaryPath; }
+        public String getCapacitySummaryPath() { return capacitySummaryPath; }
+        public void setCapacitySummaryPath(String capacitySummaryPath) { this.capacitySummaryPath = capacitySummaryPath; }
+        public String getCashflowSummaryPath() { return cashflowSummaryPath; }
+        public void setCashflowSummaryPath(String cashflowSummaryPath) { this.cashflowSummaryPath = cashflowSummaryPath; }
     }
 
     public static class Integration {

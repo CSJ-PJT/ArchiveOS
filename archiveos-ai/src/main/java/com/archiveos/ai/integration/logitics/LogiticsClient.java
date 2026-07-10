@@ -21,6 +21,9 @@ public class LogiticsClient {
     public IntegrationResult operationsSummary() { return get(config().getSummaryPath()); }
     public IntegrationResult outboxSummary() { return get(config().getOutboxSummaryPath()); }
     public IntegrationResult routesSummary() { return get(config().getRouteSummaryPath()); }
+    public IntegrationResult workforceSummary() { return get(config().getWorkforceSummaryPath()); }
+    public IntegrationResult productivitySummary() { return get(config().getProductivitySummaryPath()); }
+    public IntegrationResult capacitySummary() { return get(config().getCapacitySummaryPath()); }
     public IntegrationResult publishOutbox() {
         if (!properties.getIntegration().isAllowExternalWrite()) {
             return new IntegrationResult(EcosystemServiceStatus.DEGRADED, null, Map.of("blocked", true, "reason", "SAFE_MODE_BLOCKED"), "SAFE_MODE_BLOCKED", 0);

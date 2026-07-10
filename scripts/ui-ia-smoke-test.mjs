@@ -12,7 +12,7 @@ const ledgerApprovals = readFileSync("src/pages/LedgerApprovalsPage.tsx", "utf-8
 const ecosystemPage = readFileSync("src/pages/EcosystemPage.tsx", "utf-8");
 const liveFlowPage = readFileSync("src/pages/LiveFlowPage.tsx", "utf-8");
 
-for (const label of ["Overview", "Agents", "Ecosystem", "Live Flow", "Ecosystem Finance", "Managed Systems", "Workflows", "Ledger Approvals", "Knowledge", "History", "Batch", "RPA", "Settings"]) {
+for (const label of ["Overview", "Agents", "Ecosystem", "Live Flow", "Workforce", "Ecosystem Finance", "Managed Systems", "Workflows", "Ledger Approvals", "Knowledge", "History", "Batch", "RPA", "Settings"]) {
   if (!navigation.includes(label)) {
     throw new Error(`Missing final navigation label: ${label}`);
   }
@@ -77,6 +77,12 @@ for (const ecosystemContract of ["getEcosystemSummary", "getEcosystemTopology", 
 for (const liveFlowContract of ["getLiveFlowSummary", "refreshLiveFlow", "Live Flow / Operational Twin", "Synthetic Runtime Events", "No real customer, payment, account, or financial data"]) {
   if (!backendApi.includes(liveFlowContract) && !appShell.includes(liveFlowContract) && !liveFlowPage.includes(liveFlowContract)) {
     throw new Error(`Live Flow contract missing: ${liveFlowContract}`);
+  }
+}
+
+for (const workforceContract of ["getWorkforceOverview", "Operational Workforce", "AI Agent Recommendations", "Synthetic workforce"]) {
+  if (!backendApi.includes(workforceContract) && !appShell.includes(workforceContract) && !readFileSync("src/pages/WorkforcePage.tsx", "utf-8").includes(workforceContract)) {
+    throw new Error(`Workforce contract missing: ${workforceContract}`);
   }
 }
 

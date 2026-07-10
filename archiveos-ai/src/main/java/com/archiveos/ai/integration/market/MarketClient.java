@@ -22,6 +22,10 @@ public class MarketClient {
     public IntegrationResult orders() { return get(config().getOrdersPath()); }
     public IntegrationResult claims() { return get(config().getClaimsPath()); }
     public IntegrationResult returns() { return get(config().getReturnsPath()); }
+    public IntegrationResult workforceSummary() { return get(config().getWorkforceSummaryPath()); }
+    public IntegrationResult cashflowSummary() { return get(config().getCashflowSummaryPath()); }
+    public IntegrationResult productivitySummary() { return get(config().getProductivitySummaryPath()); }
+    public IntegrationResult capacitySummary() { return get(config().getCapacitySummaryPath()); }
 
     public EcosystemProperties.ServiceConfig config() {
         return properties.getEcosystem().getServices().get("market");

@@ -23,6 +23,9 @@ public class LedgerClient {
     public IntegrationResult approvalCallback(Map<String, Object> payload) { return client.post(config().getBaseUrl(), config().getApprovalCallbackPath(), payload, timeout()); }
     public IntegrationResult settlementGamePreset() { return get("/api/game/settlement-agency/preset"); }
     public IntegrationResult settlementGameSimulate(Map<String, Object> payload) { return client.post(config().getBaseUrl(), "/api/game/settlement-agency/simulate", payload, timeout()); }
+    public IntegrationResult workforceSummary() { return get(config().getWorkforceSummaryPath()); }
+    public IntegrationResult productivitySummary() { return get(config().getProductivitySummaryPath()); }
+    public IntegrationResult capacitySummary() { return get(config().getCapacitySummaryPath()); }
     public EcosystemProperties.ServiceConfig config() { return properties.getEcosystem().getServices().get("ledger"); }
     private IntegrationResult get(String path) { return client.get(config().getBaseUrl(), path, timeout()); }
     private int timeout() { return properties.getEcosystem().getRefreshTimeoutMs(); }
