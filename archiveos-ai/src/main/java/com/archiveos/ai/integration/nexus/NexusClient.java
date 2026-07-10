@@ -20,6 +20,9 @@ public class NexusClient {
     public IntegrationResult health() { return get(config().getHealthPath()); }
     public IntegrationResult outboxSummary() { return get(config().getSummaryPath()); }
     public IntegrationResult outboxEvents() { return get("/api/outbox/events"); }
+    public IntegrationResult workforceSummary() { return get(config().getWorkforceSummaryPath()); }
+    public IntegrationResult productivitySummary() { return get(config().getProductivitySummaryPath()); }
+    public IntegrationResult capacitySummary() { return get(config().getCapacitySummaryPath()); }
     public IntegrationResult generateEvents(int count) {
         if (!properties.getIntegration().isAllowExternalWrite()) return blocked("DRY_RUN", count);
         return client.post(config().getBaseUrl(), "/api/outbox/events/generate?count=" + Math.max(1, Math.min(count, 1000)), Map.of(), timeout());

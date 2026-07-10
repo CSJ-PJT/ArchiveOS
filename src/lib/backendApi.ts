@@ -307,6 +307,49 @@ export type LiveFlowReplay = {
   data: LiveFlowEvent[];
 };
 
+export type WorkforceServiceSummary = {
+  serviceId: string;
+  serviceName: string;
+  serviceType: string;
+  status: string;
+  headcount: number;
+  effectiveCapacity: number | string;
+  usedCapacity: number | string;
+  backlog: number;
+  payrollCost: number | string;
+  productivityScore: number | string;
+  bottleneckRole: string;
+  capacityShortage: boolean;
+  source?: Record<string, unknown>;
+};
+
+export type WorkforceRecommendation = {
+  serviceId: string;
+  serviceName: string;
+  severity: string;
+  bottleneckRole: string;
+  title: string;
+  reason: string;
+  mode: string;
+  externalWrite: string;
+};
+
+export type WorkforceOverview = {
+  generatedAt: string;
+  dataPolicy: string;
+  summary: {
+    totalHeadcount: number;
+    averageProductivity: number | string;
+    largestBottleneck: string;
+    largestBottleneckService: string;
+    totalBacklog: number;
+    payrollBurn: number | string;
+    recommendedAction: string;
+  };
+  services: WorkforceServiceSummary[];
+  recommendations: WorkforceRecommendation[];
+};
+
 export type SettlementGameServiceEconomics = {
   service: string;
   cashBefore: number | string;
@@ -693,6 +736,26 @@ export async function getLiveFlowCorrelation(correlationId: string) {
 
 export async function getLiveFlowEntity(entityId: string) {
   const response = await request<ApiEnvelope<{ entityId: string; data: LiveFlowEvent[] }>>(`/api/live-flow/entity/${encodeURIComponent(entityId)}`);
+  return response.data;
+}
+
+export async function getWorkforceOverview() {
+  const response = await request<ApiEnvelope<WorkforceOverview>>("/api/workforce/overview");
+  return response.data;
+}
+
+export async function getWorkforceBottlenecks() {
+  const response = await request<ApiEnvelope<{ generatedAt: string; items: WorkforceServiceSummary[] }>>("/api/workforce/bottlenecks");
+  return response.data;
+}
+
+export async function getWorkforceRecommendations() {
+  const response = await request<ApiEnvelope<{ generatedAt: string; items: WorkforceRecommendation[] }>>("/api/workforce/recommendations");
+  return response.data;
+}
+
+export async function getWorkforceProductivityTrend() {
+  const response = await request<ApiEnvelope<{ generatedAt: string; points: Array<Record<string, unknown>> }>>("/api/workforce/productivity-trend");
   return response.data;
 }
 
