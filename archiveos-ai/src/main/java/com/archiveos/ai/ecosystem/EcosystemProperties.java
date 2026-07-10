@@ -37,6 +37,10 @@ public class EcosystemProperties {
         private String approvalRequiredPath;
         private String reconciliationSummaryPath;
         private String approvalCallbackPath;
+        private String marketEconomyPath;
+        private String ordersPath;
+        private String claimsPath;
+        private String returnsPath;
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
         public String getName() { return name; }
@@ -57,6 +61,14 @@ public class EcosystemProperties {
         public void setReconciliationSummaryPath(String reconciliationSummaryPath) { this.reconciliationSummaryPath = reconciliationSummaryPath; }
         public String getApprovalCallbackPath() { return approvalCallbackPath; }
         public void setApprovalCallbackPath(String approvalCallbackPath) { this.approvalCallbackPath = approvalCallbackPath; }
+        public String getMarketEconomyPath() { return marketEconomyPath; }
+        public void setMarketEconomyPath(String marketEconomyPath) { this.marketEconomyPath = marketEconomyPath; }
+        public String getOrdersPath() { return ordersPath; }
+        public void setOrdersPath(String ordersPath) { this.ordersPath = ordersPath; }
+        public String getClaimsPath() { return claimsPath; }
+        public void setClaimsPath(String claimsPath) { this.claimsPath = claimsPath; }
+        public String getReturnsPath() { return returnsPath; }
+        public void setReturnsPath(String returnsPath) { this.returnsPath = returnsPath; }
     }
 
     public static class Integration {

@@ -165,6 +165,18 @@ export type ManagedSystemSummary = {
   integrationEnabled?: boolean;
   secrets?: "hidden" | string;
   environmentRequirements?: Array<{ name: string; secret: boolean }>;
+  marketSummary?: {
+    orders?: Record<string, unknown>;
+    totalRevenue?: string | number;
+    totalCost?: string | number;
+    profit?: string | number;
+    cashBalance?: string | number;
+    bankruptcyRisk?: string;
+    returnRate?: string | number;
+    claimRate?: string | number;
+    highRiskOrders?: string | number;
+    outbox?: Record<string, unknown>;
+  };
 };
 
 export type PmInboxItem = {
@@ -225,7 +237,7 @@ export type EcosystemSummary = {
   traceId: string;
   status: string;
   checkedAt: string;
-  services: Record<"nexus" | "logitics" | "ledger", EcosystemServiceView>;
+  services: Record<"market" | "nexus" | "logitics" | "ledger", EcosystemServiceView>;
   approval: Record<string, number>;
 };
 
@@ -341,7 +353,7 @@ export type SettlementAgencyGameSummary = {
   ecosystemCashBalance: number | string;
   ecosystemDailyProfit: number | string;
   bankruptcyRisk: "LOW" | "WARNING" | "CRITICAL" | string;
-  services: Record<"nexus" | "logistics" | "ledger" | string, SettlementGameServiceEconomics>;
+  services: Record<"market" | "nexus" | "logistics" | "ledger" | string, SettlementGameServiceEconomics>;
   events: SettlementGameEvent[];
   proposals: SettlementGameProposal[];
   createdAt: string;
@@ -539,6 +551,16 @@ export async function getEcosystemTopology() {
 
 export async function getEcosystemTimeline(limit = 50) {
   const response = await request<ApiEnvelope<EcosystemTimeline>>(`/api/ecosystem/timeline?limit=${limit}`);
+  return response.data;
+}
+
+export async function getMarketIntegrationSummary() {
+  const response = await request<ApiEnvelope<Record<string, unknown>>>("/api/integrations/market/summary");
+  return response.data;
+}
+
+export async function getMarketEconomySummary() {
+  const response = await request<ApiEnvelope<Record<string, unknown>>>("/api/integrations/market/economy");
   return response.data;
 }
 

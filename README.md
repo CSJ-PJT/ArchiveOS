@@ -51,6 +51,7 @@ C:\Users\dan18\Desktop\Task\산출물
 ## Related Repositories
 
 - Archive-Nexus: https://github.com/CSJ-PJT/Archive-Nexus
+- Archive-Market: https://github.com/CSJ-PJT/Archive-Market
 - Archive-Logistics: https://github.com/CSJ-PJT/Archive-Logistics
 - Archive-Ledger: https://github.com/CSJ-PJT/Archive-Ledger
 
@@ -106,19 +107,21 @@ curl.exe http://localhost:5173/api/ecosystem/topology
 ArchiveOS can run as the control tower for the Archive Platform ecosystem:
 
 - **Archive-Nexus**: synthetic manufacturing, shipment, maintenance, and quality event outbox.
+- **Archive-Market**: synthetic customer demand, order, payment, revenue, return, and claim event backend.
 - **Archive-Logistics**: synthetic logistics route, ETA, delay, and cost event backend.
 - **Archive-Ledger**: synthetic transaction, ledger, settlement, reconciliation, and approval callback backend.
 - **ArchiveOS**: health aggregation, human approval gate, RAG/fallback policy evidence, audit log, Slack notification, callback outbox, and retry.
 
 Archive Platform Ecosystem은 Archive-Nexus, Archive-Logistics, Archive-Ledger, ArchiveOS를 연결해 제조 이벤트 생성, 물류 경로·비용 계산, 금융성 원장·정산·대사, 승인·정책 근거·장애 관제를 하나의 이벤트 드리븐 AX 백엔드 흐름으로 구현한 프로젝트입니다. 각 서비스는 Outbox, idempotency, retry, safe-mode, DEGRADED 상태 분리를 통해 외부 장애가 전체 런타임으로 전파되지 않도록 설계했습니다.
 
-ArchiveOS is intentionally loosely coupled. If Nexus, Logistics, or Ledger is not running, ArchiveOS still starts and reports the external service as `UNAVAILABLE`, `UNKNOWN`, or `DEGRADED` through `/api/ecosystem/summary`.
+ArchiveOS is intentionally loosely coupled. If Market, Nexus, Logistics, or Ledger is not running, ArchiveOS still starts and reports the external service as `UNAVAILABLE`, `UNKNOWN`, or `DEGRADED` through `/api/ecosystem/summary`.
 
 ### Ecosystem environment variables
 
 ```env
 ARCHIVE_ECOSYSTEM_ENABLED=true
 ARCHIVE_ECOSYSTEM_REFRESH_TIMEOUT_MS=3000
+ARCHIVE_ECOSYSTEM_SERVICES_MARKET_BASE_URL=http://localhost:8094
 ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL=http://localhost:8080
 ARCHIVE_ECOSYSTEM_SERVICES_LOGITICS_BASE_URL=http://localhost:8092
 ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_BASE_URL=http://localhost:18080
@@ -135,6 +138,7 @@ When ArchiveOS runs in Docker Compose and external services run on the host, use
 ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_BASE_URL=http://host.docker.internal:18080
 ARCHIVE_ECOSYSTEM_SERVICES_LOGITICS_BASE_URL=http://host.docker.internal:8092
 ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL=http://host.docker.internal:8080
+ARCHIVE_ECOSYSTEM_SERVICES_MARKET_BASE_URL=http://host.docker.internal:8094
 ```
 
 ### Ecosystem API

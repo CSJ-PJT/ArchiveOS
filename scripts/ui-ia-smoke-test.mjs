@@ -11,7 +11,7 @@ const overviewViewModel = readFileSync("src/lib/viewModels/overview.ts", "utf-8"
 const ledgerApprovals = readFileSync("src/pages/LedgerApprovalsPage.tsx", "utf-8");
 const ecosystemPage = readFileSync("src/pages/EcosystemPage.tsx", "utf-8");
 
-for (const label of ["Overview", "Agents", "Managed Systems", "Ecosystem", "Workflows", "Ledger Approvals", "Knowledge", "History", "Batch", "RPA", "Settings"]) {
+for (const label of ["Overview", "Agents", "Managed Systems", "Workflows", "Ledger Approvals", "Knowledge", "History", "Batch", "RPA", "Settings"]) {
   if (!navigation.includes(label)) {
     throw new Error(`Missing final navigation label: ${label}`);
   }

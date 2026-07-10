@@ -7,9 +7,6 @@ import {
   getAiRuntime,
   getDashboardData,
   getEndpointHealth,
-  getEcosystemSummary,
-  getEcosystemTopology,
-  getEcosystemTimeline,
   getExternalApprovals,
   getHistorianStatus,
   getKnowledgeOverview,
@@ -27,9 +24,7 @@ import {
   getRecentRuntimeEvents,
   getRuntimeVersion,
   getSecurityStatus,
-  getSettlementAgencyGameSummary,
   getKpiOverview,
-  getGameFinanceSummary,
   getMcpRegistry,
   getRuntimeTimeline,
   type AuthSession,
@@ -39,10 +34,11 @@ import {
   type AiRuntime,
   type DashboardData,
   type EndpointHealth,
+  type ExternalApprovalRequest,
   type EcosystemSummary,
   type EcosystemTopology,
   type EcosystemTimeline,
-  type ExternalApprovalRequest,
+  type GameFinanceSummary,
   type HistorianStatus,
   type KnowledgeOverview,
   type KpiOverview,
@@ -56,10 +52,9 @@ import {
   type RuntimeEvent,
   type RuntimeVersion,
   type SecurityStatus,
-  type SettlementAgencyGameSummary,
-  type GameFinanceSummary,
   type McpRegistryEntry,
   type RuntimeTimelineEntry,
+  type SettlementAgencyGameSummary,
 } from "../lib/backendApi";
 import type { CommandRun, DailyReport, PmTask } from "../types/database";
 import { navigationItems, type AppRoute } from "./navigation";
@@ -75,8 +70,6 @@ import { AtlasPage } from "../pages/AtlasPage";
 import { McpRegistryPage } from "../pages/McpRegistryPage";
 import { ManagedSystemsPage } from "../pages/ManagedSystemsPage";
 import { LedgerApprovalsPage } from "../pages/LedgerApprovalsPage";
-import { EcosystemPage } from "../pages/EcosystemPage";
-import { SettlementGamePage } from "../pages/SettlementGamePage";
 import { Icon } from "../components/shared/Icon";
 import { Sidebar } from "../components/shared/Sidebar";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -109,12 +102,12 @@ export type AppData = {
   auth: AuthSession;
   atlas: AtlasOverview | null;
   managedSystems: ManagedSystemsOverview | null;
+  externalApprovals: ExternalApprovalRequest[];
   ecosystem: EcosystemSummary | null;
   ecosystemTopology: EcosystemTopology | null;
   ecosystemTimeline: EcosystemTimeline | null;
   settlementGame: SettlementAgencyGameSummary | null;
   gameFinance: GameFinanceSummary | null;
-  externalApprovals: ExternalApprovalRequest[];
   mcpRegistry: McpRegistryEntry[];
   timeline: RuntimeTimelineEntry[];
 };
@@ -146,12 +139,12 @@ const emptyData: AppData = {
   auth: { actor: "anonymous", role: "PUBLIC", authenticated: false },
   atlas: null,
   managedSystems: null,
+  externalApprovals: [],
   ecosystem: null,
   ecosystemTopology: null,
   ecosystemTimeline: null,
   settlementGame: null,
   gameFinance: null,
-  externalApprovals: [],
   mcpRegistry: [],
   timeline: [],
 };
@@ -211,11 +204,6 @@ function AppShellInner() {
       settle("dailyReport", getLatestDailyReport),
       settle("atlas", getAtlasOverview),
       settle("managedSystems", getManagedSystemsOverview),
-      settle("ecosystem", getEcosystemSummary),
-      settle("ecosystemTopology", getEcosystemTopology),
-      settle("ecosystemTimeline", () => getEcosystemTimeline(50)),
-      settle("settlementGame", getSettlementAgencyGameSummary),
-      settle("gameFinance", getGameFinanceSummary),
       settle("externalApprovals", () => getExternalApprovals(50)),
       operatorAccess ? settle("mcpRegistry", getMcpRegistry) : Promise.resolve({ key: "mcpRegistry", value: [], error: null }),
       operatorAccess ? settle("timeline", () => getRuntimeTimeline(100)) : Promise.resolve({ key: "timeline", value: [], error: null }),
@@ -247,8 +235,6 @@ function AppShellInner() {
   const page = {
     overview: <OverviewPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
     managed: <ManagedSystemsPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
-    ecosystem: <EcosystemPage data={data} onRefresh={refresh} />,
-    game: <SettlementGamePage data={data} onRefresh={refresh} />,
     approvals: <LedgerApprovalsPage data={data} onRefresh={refresh} />,
     agents: <AgentsPage data={data} onRefresh={refresh} />,
     workflows: <WorkflowsPage data={data} onRefresh={refresh} />,

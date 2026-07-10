@@ -31,6 +31,7 @@ class ManagedSystemsServiceTest {
         when(repository.atlasWorkLogs(20)).thenReturn(List.of());
         when(repository.latestEcosystemHealth("LOGITICS")).thenReturn(null);
         when(repository.latestEcosystemHealth("LEDGER")).thenReturn(null);
+        when(repository.latestEcosystemHealth("MARKET")).thenReturn(null);
         when(repository.latestDailyReport()).thenReturn(null);
         when(repository.recentAuditLogs(100)).thenReturn(List.of());
 
@@ -41,7 +42,7 @@ class ManagedSystemsServiceTest {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> systems = (List<Map<String, Object>>) overview.get("systems");
         assertThat(systems).extracting(system -> system.get("systemId"))
-                .containsExactly("archiveos", "archive-nexus", "archive-logitics", "atlas-platform", "archive-ledger", "deepstake-placeholder");
+                .containsExactly("archiveos", "archive-market", "archive-nexus", "archive-logitics", "atlas-platform", "archive-ledger", "deepstake-placeholder");
         assertThat(systems).anySatisfy(system -> {
             assertThat(system).containsEntry("systemId", "deepstake-placeholder");
             assertThat(system).containsEntry("status", "not_connected");
@@ -69,11 +70,24 @@ class ManagedSystemsServiceTest {
                 "base_url", "http://localhost:18080",
                 "status", "HEALTHY",
                 "checked_at", "2026-07-08T00:00:00Z"));
+        when(repository.latestEcosystemHealth("MARKET")).thenReturn(Map.of(
+                "service_type", "MARKET",
+                "service_name", "Archive-Market",
+                "base_url", "http://localhost:8094",
+                "status", "HEALTHY",
+                "summary", Map.of("cashBalance", "41000000", "bankruptcyRisk", "LOW", "highRiskOrders", 3),
+                "checked_at", "2026-07-08T00:00:00Z"));
         ManagedSystemsService service = new ManagedSystemsService(repository, baseApprovalRepository());
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> systems = (List<Map<String, Object>>) service.overview().get("systems");
 
+        assertThat(systems).anySatisfy(system -> {
+            assertThat(system).containsEntry("systemId", "archive-market");
+            assertThat(system).containsEntry("status", "normal");
+            assertThat(system).containsEntry("healthSource", "ecosystem_health_snapshot");
+            assertThat(system).containsKey("marketSummary");
+        });
         assertThat(systems).anySatisfy(system -> {
             assertThat(system).containsEntry("systemId", "archive-logitics");
             assertThat(system).containsEntry("name", "Archive-Logistics");
@@ -161,6 +175,7 @@ class ManagedSystemsServiceTest {
         when(repository.atlasWorkLogs(20)).thenReturn(List.of());
         when(repository.latestEcosystemHealth("LOGITICS")).thenReturn(null);
         when(repository.latestEcosystemHealth("LEDGER")).thenReturn(null);
+        when(repository.latestEcosystemHealth("MARKET")).thenReturn(null);
         when(repository.latestDailyReport()).thenReturn(null);
         when(repository.recentAuditLogs(100)).thenReturn(List.of());
         return repository;

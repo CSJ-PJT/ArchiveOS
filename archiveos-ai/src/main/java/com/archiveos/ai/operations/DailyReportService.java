@@ -132,7 +132,7 @@ public class DailyReportService {
         Map<String, Object> services = map(ecosystemSummary.get("services"));
         text.append("\n\nArchive Platform Ecosystem")
                 .append("\n• Status: ").append(ecosystemSummary.getOrDefault("status", "unknown"));
-        for (String key : List.of("nexus", "logitics", "ledger")) {
+        for (String key : List.of("market", "nexus", "logitics", "ledger")) {
             Map<String, Object> service = map(services.get(key));
             if (!service.isEmpty()) text.append("\n• ").append(service.getOrDefault("name", key)).append(": ")
                     .append(service.getOrDefault("status", "unknown"));

@@ -54,7 +54,7 @@ public class ManagedSystemsService {
     public List<Map<String, Object>> systems() {
         List<Map<String, Object>> tasks = repository.pmTasks();
         Map<String, Object> queue = repository.queueSummary();
-        return List.of(archiveOsSystem(queue), archiveNexusSystem(tasks), archiveLogiticsSystem(), atlasSystem(), archiveLedgerSystem(), deepStakePlaceholder());
+        return List.of(archiveOsSystem(queue), archiveMarketSystem(), archiveNexusSystem(tasks), archiveLogiticsSystem(), atlasSystem(), archiveLedgerSystem(), deepStakePlaceholder());
     }
 
     public Map<String, Object> system(String systemId) {
@@ -140,6 +140,35 @@ public class ManagedSystemsService {
                 string(latest, "updated_at", Instant.now().toString()), 1, status.equals("normal") ? 1 : 0,
                 status.equals("degraded") ? 1 : 0, 0, (int) pending, failed > 0 ? 1 : 0,
                 string(latest, "id"), null, null, null, "CSJ-PJT/Archive-Nexus", "nexus");
+    }
+
+    private Map<String, Object> archiveMarketSystem() {
+        Map<String, Object> health = repository.latestEcosystemHealth("MARKET");
+        Map<String, Object> summary = map(stringMap(health, "summary"));
+        String status = managedStatus(health, "not_connected");
+        String reason = managedReason(health, "Archive-Market has not been checked by the Ecosystem Control Tower yet.");
+        Map<String, Object> system = system("archive-market", "Archive-Market", "SYNTHETIC_COMMERCE_BACKEND", "development", "local", status,
+                reason, string(health, "checked_at", null), 1, "normal".equals(status) ? 1 : 0,
+                "degraded".equals(status) ? 1 : 0, "down_candidate".equals(status) ? 1 : 0,
+                highRiskOrders(summary), "normal".equals(status) ? 0 : 1, null, null, null,
+                string(health, "base_url", "http://localhost:8094"), "CSJ-PJT/Archive-Market", "archiveos");
+        system.put("role", "Demand / Order / Revenue Source");
+        system.put("baseUrlConfigured", string(health, "base_url", null) != null);
+        system.put("healthSource", health == null ? "not_checked" : "ecosystem_health_snapshot");
+        system.put("secrets", "hidden");
+        Map<String, Object> marketSummary = new LinkedHashMap<>();
+        marketSummary.put("orders", valueOr(summary.get("orders"), Map.of()));
+        marketSummary.put("totalRevenue", valueOr(summary.get("totalRevenue"), "0"));
+        marketSummary.put("totalCost", valueOr(summary.get("totalCost"), "0"));
+        marketSummary.put("profit", valueOr(summary.get("profit"), "0"));
+        marketSummary.put("cashBalance", valueOr(summary.get("cashBalance"), "0"));
+        marketSummary.put("bankruptcyRisk", valueOr(summary.get("bankruptcyRisk"), "UNKNOWN"));
+        marketSummary.put("returnRate", valueOr(summary.get("returnRate"), "0"));
+        marketSummary.put("claimRate", valueOr(summary.get("claimRate"), "0"));
+        marketSummary.put("highRiskOrders", valueOr(summary.get("highRiskOrders"), 0));
+        marketSummary.put("outbox", valueOr(summary.get("outbox"), Map.of()));
+        system.put("marketSummary", marketSummary);
+        return system;
     }
 
     private Map<String, Object> atlasSystem() {
@@ -419,6 +448,21 @@ public class ManagedSystemsService {
         if (path.contains("/atlas")) return "atlas-platform";
         if (path.contains("/tasks") || path.contains("/contracts")) return "archive-nexus";
         return "archiveos";
+    }
+
+    private Object stringMap(Map<String, Object> value, String key) {
+        if (value == null) return Map.of();
+        Object candidate = value.get(key);
+        return candidate == null ? Map.of() : candidate;
+    }
+
+    private int highRiskOrders(Map<String, Object> summary) {
+        Object value = summary.get("highRiskOrders");
+        return value instanceof Number number ? number.intValue() : 0;
+    }
+
+    private Object valueOr(Object value, Object fallback) {
+        return value == null ? fallback : value;
     }
 
     private boolean matchesSecurityRule(String key, Map<String, Object> log) {

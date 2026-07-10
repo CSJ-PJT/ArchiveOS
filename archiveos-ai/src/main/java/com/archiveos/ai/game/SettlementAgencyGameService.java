@@ -3,6 +3,7 @@ package com.archiveos.ai.game;
 import com.archiveos.ai.ecosystem.EcosystemProperties;
 import com.archiveos.ai.ecosystem.IntegrationResult;
 import com.archiveos.ai.integration.ledger.LedgerClient;
+import com.archiveos.ai.integration.market.MarketClient;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -18,11 +19,13 @@ import org.springframework.stereotype.Service;
 public class SettlementAgencyGameService {
     private static final BigDecimal ZERO = BigDecimal.ZERO;
     private final LedgerClient ledger;
+    private final MarketClient market;
     private final EcosystemProperties properties;
     private final GameFinanceRepository finance;
 
-    public SettlementAgencyGameService(LedgerClient ledger, EcosystemProperties properties, GameFinanceRepository finance) {
+    public SettlementAgencyGameService(LedgerClient ledger, MarketClient market, EcosystemProperties properties, GameFinanceRepository finance) {
         this.ledger = ledger;
+        this.market = market;
         this.properties = properties;
         this.finance = finance;
     }
@@ -40,7 +43,7 @@ public class SettlementAgencyGameService {
     }
 
     public Map<String, Object> simulate(Map<String, Object> input, boolean dryRun) {
-        Map<String, Object> request = merge(defaultPreset(), input == null ? Map.of() : input);
+        Map<String, Object> request = merge(merge(defaultPreset(), marketEconomyPreset()), input == null ? Map.of() : input);
         request.put("maxHop", clamp(intValue(request.get("maxHop"), 4), 1, 12));
         if (dryRun) request.put("dryRun", true);
 
@@ -72,6 +75,7 @@ public class SettlementAgencyGameService {
                 "infiniteLoopGuard", "Events with hop > maxHop are ignored and processed idempotency keys must not be replayed."
         ));
         if (ledgerError != null) response.put("ledgerSimulationError", ledgerError);
+        ensureMarketService(response);
         persistFinance(response);
         return response;
     }
@@ -93,6 +97,39 @@ public class SettlementAgencyGameService {
         return preset;
     }
 
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> marketEconomyPreset() {
+        if (market == null) return Map.of();
+        IntegrationResult result = market.marketEconomySummary();
+        if (!result.ok() || result.body().isEmpty()) {
+            Map<String, Object> unavailable = new LinkedHashMap<>();
+            unavailable.put("marketDataStatus", "UNAVAILABLE");
+            unavailable.put("marketDataError", result.errorMessage());
+            return unavailable;
+        }
+        Map<String, Object> body = result.body();
+        Map<String, Object> orders = body.get("orders") instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+        Map<String, Object> finance = body.get("finance") instanceof Map<?, ?> map ? (Map<String, Object>) map : body;
+        Map<String, Object> preset = new LinkedHashMap<>();
+        preset.put("marketDataStatus", "HEALTHY");
+        putIfPresent(preset, "marketSalesRevenue", firstNonNull(finance.get("totalRevenue"), finance.get("revenue"), body.get("totalRevenue")));
+        putIfPresent(preset, "marketRefundCost", firstNonNull(finance.get("refundCost"), body.get("refundCost")));
+        putIfPresent(preset, "marketClaimCost", firstNonNull(finance.get("claimCost"), body.get("claimCost")));
+        putIfPresent(preset, "marketHighRiskOrders", firstNonNull(orders.get("highRiskOrders"), body.get("highRiskOrders")));
+        return preset;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void ensureMarketService(Map<String, Object> response) {
+        Object servicesValue = response.get("services");
+        if (!(servicesValue instanceof Map<?, ?> rawServices)) return;
+        Map<String, Object> services = (Map<String, Object>) rawServices;
+        if (services.containsKey("market")) return;
+        services.put("market", economics("Archive-Market", bd("40000000"), bd("26000000"), bd("9520000"),
+                "Synthetic commerce revenue minus refund, claim, production request, and Ledger settlement fees."));
+        response.put("marketDataStatus", "FALLBACK_SYNTHETIC");
+    }
+
     private Map<String, Object> simulateLocally(Map<String, Object> r) {
         String run = stringValue(r.get("simulationRunId"), "SIM-RUN-" + UUID.randomUUID());
         int day = Math.max(1, intValue(r.get("day"), 1));
@@ -101,6 +138,11 @@ public class SettlementAgencyGameService {
         String correlation = stringValue(r.get("correlationId"), UUID.randomUUID().toString());
         int maxHop = clamp(intValue(r.get("maxHop"), 4), 1, 12);
 
+        BigDecimal marketRevenue = money(r.get("marketSalesRevenue"));
+        BigDecimal marketCost = money(r.get("marketRefundCost"))
+                .add(money(r.get("marketClaimCost")))
+                .add(money(r.get("marketProductionRequestCost")))
+                .add(money(r.get("marketLedgerSettlementFee")));
         BigDecimal nexusRevenue = money(r.get("nexusProductionRevenue"));
         BigDecimal nexusCost = money(r.get("nexusMaterialCost"))
                 .add(money(r.get("nexusMaintenanceCost")))
@@ -126,6 +168,8 @@ public class SettlementAgencyGameService {
                 .add(money(r.get("ledgerInfraFixedCost")));
 
         Map<String, Object> services = new LinkedHashMap<>();
+        services.put("market", economics("Archive-Market", money(r.get("marketInitialCash")), marketRevenue, marketCost,
+                "Synthetic commerce revenue minus refund, claim, production request, and Ledger settlement fees."));
         services.put("nexus", economics("Archive-Nexus", money(r.get("nexusInitialCash")), nexusRevenue, nexusCost,
                 "Production revenue minus material, maintenance, quality loss, and Logistics fees."));
         services.put("logistics", economics("Archive-Logistics", money(r.get("logisticsInitialCash")), logisticsRevenue, logisticsCost,
@@ -182,6 +226,18 @@ public class SettlementAgencyGameService {
 
     private void persistTrades(String run, String cycle, String tick, int day, String correlation, Map<String, Object> response) {
         String prefix = run + ":" + tick + ":";
+        finance.insertTrade(prefix + "market-commerce-revenue", run, cycle, tick, day, correlation,
+                "synthetic-customer", "archive-market", "MARKET_SYNTHETIC_ORDER_REVENUE",
+                money(nested(response, "services", "market", "revenue")), "Archive-Market receives synthetic order, payment, and revenue events.",
+                Map.of("flow", "Market demand and revenue source", "syntheticData", true));
+        finance.insertTrade(prefix + "market-production-request", run, cycle, tick, day, correlation,
+                "archive-market", "archive-nexus", "MARKET_PRODUCTION_REQUEST_EXPORT",
+                money(nested(response, "services", "market", "cost")), "Archive-Market requests Nexus production and shipment handling for synthetic orders.",
+                Map.of("flow", "Market to Nexus production request", "syntheticData", true));
+        finance.insertTrade(prefix + "market-ledger-settlement-event", run, cycle, tick, day, correlation,
+                "archive-market", "archive-ledger", "MARKET_SALES_REFUND_CLAIM_SETTLEMENT_EXPORT",
+                money(nested(response, "services", "market", "revenue")), "Archive-Market sends synthetic sales, refund, return, and claim settlement events to Ledger.",
+                Map.of("flow", "Market to Ledger commerce settlement", "syntheticData", true));
         finance.insertTrade(prefix + "nexus-manufacturing-export", run, cycle, tick, day, correlation,
                 "archive-nexus", "synthetic-market", "MANUFACTURING_OUTPUT_EXPORT",
                 money(nested(response, "services", "nexus", "revenue")), "Nexus exports synthetic manufacturing output revenue.",
@@ -202,6 +258,7 @@ public class SettlementAgencyGameService {
 
     private String systemId(String key) {
         return switch (key) {
+            case "market" -> "archive-market";
             case "nexus" -> "archive-nexus";
             case "logistics", "logitics" -> "archive-logitics";
             case "ledger" -> "archive-ledger";
@@ -239,15 +296,18 @@ public class SettlementAgencyGameService {
     private List<Map<String, Object>> gameEvents(String run, String cycle, String tick, int day, String correlation, int maxHop,
                                                 Map<String, Object> r, BigDecimal ledgerRevenue, BigDecimal ledgerCost) {
         List<Map<String, Object>> events = new ArrayList<>();
-        addEvent(events, "GAME_NEXUS_PRODUCTION_PROFIT", "Archive-Nexus", "ArchiveOS", run, cycle, tick, day, correlation, 1, maxHop,
+        addEvent(events, "MARKET_SYNTHETIC_ORDER_REVENUE", "Archive-Market", "ArchiveOS", run, cycle, tick, day, correlation, 1, maxHop,
+                Map.of("salesRevenue", money(r.get("marketSalesRevenue")), "refundCost", money(r.get("marketRefundCost")),
+                        "claimCost", money(r.get("marketClaimCost")), "highRiskOrders", intValue(r.get("marketHighRiskOrders"), 0)));
+        addEvent(events, "GAME_NEXUS_PRODUCTION_PROFIT", "Archive-Nexus", "ArchiveOS", run, cycle, tick, day, correlation, 2, maxHop,
                 Map.of("productionRevenue", money(r.get("nexusProductionRevenue")), "materialCost", money(r.get("nexusMaterialCost"))));
-        addEvent(events, "GAME_LOGISTICS_DAILY_SETTLEMENT_FEE", "Archive-Logistics", "Archive-Nexus", run, cycle, tick, day, correlation, 2, maxHop,
+        addEvent(events, "GAME_LOGISTICS_DAILY_SETTLEMENT_FEE", "Archive-Logistics", "Archive-Nexus", run, cycle, tick, day, correlation, 3, maxHop,
                 Map.of("shipmentCount", intValue(r.get("shipmentCount"), 0), "logisticsServiceFee", money(r.get("logisticsServiceFee")),
                         "dailySettlementFee", money(r.get("logisticsDailySettlementFee"))));
-        addEvent(events, "GAME_LEDGER_SETTLEMENT_AGENCY_REVENUE", "Archive-Ledger", "ArchiveOS", run, cycle, tick, day, correlation, 3, maxHop,
+        addEvent(events, "GAME_LEDGER_SETTLEMENT_AGENCY_REVENUE", "Archive-Ledger", "ArchiveOS", run, cycle, tick, day, correlation, 4, maxHop,
                 Map.of("ledgerRevenue", ledgerRevenue, "ledgerCost", ledgerCost, "transactionCount", intValue(r.get("transactionCount"), 0),
                         "mismatchCount", intValue(r.get("mismatchCount"), 0)));
-        addEvent(events, "GAME_ARCHIVEOS_BANKRUPTCY_RISK_REVIEW", "ArchiveOS", "Archive Platform", run, cycle, tick, day, correlation, 4, maxHop,
+        addEvent(events, "GAME_ARCHIVEOS_BANKRUPTCY_RISK_REVIEW", "ArchiveOS", "Archive Platform", run, cycle, tick, day, correlation, 5, maxHop,
                 Map.of("safeMode", properties.getIntegration().isSafeMode(), "agentMode", "PROPOSAL_ONLY"));
         return events.stream().filter(event -> intValue(event.get("hop"), 0) <= intValue(event.get("maxHop"), maxHop)).toList();
     }
@@ -320,7 +380,14 @@ public class SettlementAgencyGameService {
         preset.put("tickId", "TICK-001");
         preset.put("day", 1);
         preset.put("correlationId", "CORR-DEMO-001");
-        preset.put("maxHop", 4);
+        preset.put("maxHop", 5);
+        preset.put("marketInitialCash", bd("40000000"));
+        preset.put("marketSalesRevenue", bd("26000000"));
+        preset.put("marketRefundCost", bd("1200000"));
+        preset.put("marketClaimCost", bd("700000"));
+        preset.put("marketProductionRequestCost", bd("7200000"));
+        preset.put("marketLedgerSettlementFee", bd("420000"));
+        preset.put("marketHighRiskOrders", 6);
         preset.put("nexusInitialCash", bd("50000000"));
         preset.put("logisticsInitialCash", bd("30000000"));
         preset.put("ledgerInitialCash", bd("25000000"));
@@ -360,6 +427,15 @@ public class SettlementAgencyGameService {
             if (value != null) out.put(key, value);
         });
         return out;
+    }
+
+    private void putIfPresent(Map<String, Object> target, String key, Object value) {
+        if (value != null) target.put(key, value);
+    }
+
+    private Object firstNonNull(Object... values) {
+        for (Object value : values) if (value != null) return value;
+        return null;
     }
 
     private String risk(BigDecimal cashAfter, BigDecimal burn) {
