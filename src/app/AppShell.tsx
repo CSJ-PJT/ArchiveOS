@@ -285,7 +285,10 @@ function AppShellInner() {
 function LanguageSelector({ value, onChange }: { value: Locale; onChange: (value: Locale) => void }) {
   return (
     <label className="language-selector" title="Display language">
-      <span aria-hidden="true">🌐</span>
+      <svg className="language-globe" aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9M12 3C9.6 5.5 8.4 8.5 8.4 12s1.2 6.5 3.6 9" />
+      </svg>
       <select value={value} aria-label="Display language" onChange={(event) => onChange(event.target.value as Locale)}>
         {i18nLanguageOptions.map((option) => <option key={option.code} value={option.code}>{t(option.labelKey, value)}</option>)}
       </select>
