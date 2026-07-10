@@ -19,6 +19,13 @@ export const navigationItems: NavigationItem[] = [
     icon: "overview",
   },
   {
+    id: "liveflow",
+    label: "실시간 관제",
+    shortLabel: "관제",
+    description: "주문, 제조, 물류, 정산, 승인 흐름을 실시간으로 확인합니다",
+    icon: "workflow",
+  },
+  {
     id: "agents",
     label: "에이전트",
     shortLabel: "에이전트",
@@ -31,13 +38,6 @@ export const navigationItems: NavigationItem[] = [
     shortLabel: "에코",
     description: "Market, Nexus, Logistics, Ledger, ArchiveOS 연결 상태를 봅니다",
     icon: "activity",
-  },
-  {
-    id: "liveflow",
-    label: "실시간 흐름",
-    shortLabel: "흐름",
-    description: "실제 런타임 이벤트 기반 운영 흐름을 추적합니다",
-    icon: "workflow",
   },
   {
     id: "workforce",
@@ -55,8 +55,8 @@ export const navigationItems: NavigationItem[] = [
   },
   {
     id: "managed",
-    label: "관리 시스템",
-    shortLabel: "관제",
+    label: "시스템 관리",
+    shortLabel: "시스템",
     description: "외부 시스템과 PM Inbox를 관리합니다",
     icon: "activity",
   },
