@@ -118,7 +118,7 @@ public class EcosystemService {
     }
 
     private Map<String, Object> currentOrCheck(String traceId) {
-        if (repository.recentHealth(4).size() >= 4) {
+        if (List.of("MARKET", "NEXUS", "LOGITICS", "LEDGER").stream().allMatch(this::hasSnapshot)) {
             Map<String, Object> services = new LinkedHashMap<>();
             services.put("market", fromSnapshot("MARKET"));
             services.put("nexus", fromSnapshot("NEXUS"));
@@ -187,6 +187,10 @@ public class EcosystemService {
     }
 
     private Map<String, Object> latest(String type) { return repository.latestHealth(type); }
+    private boolean hasSnapshot(String type) {
+        Map<String, Object> snapshot = repository.latestHealth(type);
+        return snapshot != null && snapshot.get("status") != null;
+    }
     private Map<String, Object> disabled(EcosystemProperties.ServiceConfig config) { return serviceMap(config, "DISABLED", null, Map.of(), "Service is disabled."); }
     private Map<String, Object> serviceMap(EcosystemProperties.ServiceConfig config, String status, Object checkedAt, Map<String, Object> summary, String error) {
         Map<String, Object> value = new LinkedHashMap<>();
