@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/brand/archiveos-lockup.svg" width="820" alt="ArchiveOS" />
+</p>
+
 # ArchiveOS
 
 > 제조, 물류, 정산, 커머스 서비스를 통합 관제하는 Spring Boot 기반 AI/AX Control Tower
@@ -25,13 +29,52 @@ ArchiveOS는 외부 도메인 서비스를 직접 소유하지 않습니다. 각
 
 | 서비스 | 역할 | 기본 URL |
 | --- | --- | --- |
-| Archive-Market | synthetic demand, order, payment, revenue, return, claim event source | `http://localhost:8094` |
-| Archive-Nexus | manufacturing, production, shipment, maintenance, quality event outbox | `http://localhost:8080` |
-| Archive-Logistics | route, ETA, logistics cost, delay, shipment event backend | `http://localhost:8092` |
-| Archive-Ledger | transaction, ledger, settlement, reconciliation, approval callback backend | `http://localhost:18080` |
-| ArchiveOS | Control Tower, approval, evidence, audit, operational monitoring | `http://localhost:5173` |
+| Archive-Market | synthetic 수요, 주문, 결제, 매출, 반품, 클레임 이벤트 소스 | `http://localhost:8094` |
+| Archive-Nexus | 제조, 생산, 출하, 정비, 품질 이벤트 Outbox | `http://localhost:8080` |
+| Archive-Logistics | 배송 경로, ETA, 물류비, 지연, 출하 이벤트 처리 | `http://localhost:8092` |
+| Archive-Ledger | 거래, 원장, 정산, 대사, 승인 callback 처리 | `http://localhost:18080` |
+| ArchiveOS | Control Tower, 승인, 정책 근거, 감사, 운영 관제 | `http://localhost:5173` |
 
 외부 표시명은 `Archive-Logistics`를 사용합니다. 기존 이벤트/설정 호환성 때문에 일부 내부 key, source, API path에는 `logitics` 또는 `Archive-Logitics` 표기가 남을 수 있습니다.
+
+## Ecosystem Flow
+
+```mermaid
+flowchart LR
+  Market[Archive-Market<br/>수요 / 주문 / 매출 / 반품 / 클레임]
+  Nexus[Archive-Nexus<br/>제조 / 생산 / 출하 / 품질]
+  Logistics[Archive-Logistics<br/>배송 / 경로 / ETA / 물류비]
+  Ledger[Archive-Ledger<br/>거래 / 원장 / 정산 / 대사]
+  OS[ArchiveOS<br/>Control Tower]
+  Flow[Live Flow<br/>Operational Twin]
+  Workforce[Operational Workforce<br/>Capacity / Backlog / Productivity]
+  Approval[Approval Gateway<br/>Policy Evidence / Callback Outbox]
+
+  Market -->|생산 / 출하 요청| Nexus
+  Market -->|매출 / 환불 / 클레임 정산 이벤트| Ledger
+  Nexus -->|물류 이벤트| Logistics
+  Nexus -->|비용성 이벤트| Ledger
+  Logistics -->|물류비 확정 이벤트| Ledger
+  Logistics -->|일정산 / 제조비용 정산 callback| Nexus
+  Ledger -->|승인 요청 / 정산 상태| OS
+  OS -->|승인 / 반려 callback| Ledger
+
+  Market -->|summary APIs| OS
+  Nexus -->|summary APIs| OS
+  Logistics -->|summary APIs| OS
+  Ledger -->|summary APIs| OS
+  OS --> Flow
+  OS --> Workforce
+  OS --> Approval
+```
+
+## Archive Project Architecture
+
+<p align="center">
+  <img src="docs/diagrams/01-ecosystem-architecture.png" width="920" alt="Archive Project Architecture" />
+</p>
+
+이 이미지는 Archive-Market, Archive-Nexus, Archive-Logistics, Archive-Ledger, ArchiveOS가 로컬 Docker/DB/API 경계 안에서 어떻게 연결되는지 보여주는 전체 구조도입니다. 고해상도 원본과 추가 시퀀스/컴포넌트 다이어그램은 [`docs/diagrams`](docs/diagrams)에 있습니다.
 
 ## 주요 API
 
