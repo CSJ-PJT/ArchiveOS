@@ -8,6 +8,9 @@ import {
   getDashboardData,
   getEndpointHealth,
   getExternalApprovals,
+  getEcosystemSummary,
+  getEcosystemTopology,
+  getEcosystemTimeline,
   getHistorianStatus,
   getKnowledgeOverview,
   getLatestArchitectureReview,
@@ -24,6 +27,8 @@ import {
   getRecentRuntimeEvents,
   getRuntimeVersion,
   getSecurityStatus,
+  getSettlementAgencyGameSummary,
+  getGameFinanceSummary,
   getKpiOverview,
   getMcpRegistry,
   getRuntimeTimeline,
@@ -70,6 +75,8 @@ import { AtlasPage } from "../pages/AtlasPage";
 import { McpRegistryPage } from "../pages/McpRegistryPage";
 import { ManagedSystemsPage } from "../pages/ManagedSystemsPage";
 import { LedgerApprovalsPage } from "../pages/LedgerApprovalsPage";
+import { EcosystemPage } from "../pages/EcosystemPage";
+import { SettlementGamePage } from "../pages/SettlementGamePage";
 import { Icon } from "../components/shared/Icon";
 import { Sidebar } from "../components/shared/Sidebar";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -205,6 +212,11 @@ function AppShellInner() {
       settle("atlas", getAtlasOverview),
       settle("managedSystems", getManagedSystemsOverview),
       settle("externalApprovals", () => getExternalApprovals(50)),
+      settle("ecosystem", getEcosystemSummary),
+      settle("ecosystemTopology", getEcosystemTopology),
+      settle("ecosystemTimeline", () => getEcosystemTimeline(50)),
+      settle("settlementGame", getSettlementAgencyGameSummary),
+      settle("gameFinance", getGameFinanceSummary),
       operatorAccess ? settle("mcpRegistry", getMcpRegistry) : Promise.resolve({ key: "mcpRegistry", value: [], error: null }),
       operatorAccess ? settle("timeline", () => getRuntimeTimeline(100)) : Promise.resolve({ key: "timeline", value: [], error: null }),
     ]))];
@@ -234,6 +246,8 @@ function AppShellInner() {
 
   const page = {
     overview: <OverviewPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
+    ecosystem: <EcosystemPage data={data} onRefresh={refresh} />,
+    finance: <SettlementGamePage data={data} onRefresh={refresh} />,
     managed: <ManagedSystemsPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
     approvals: <LedgerApprovalsPage data={data} onRefresh={refresh} />,
     agents: <AgentsPage data={data} onRefresh={refresh} />,

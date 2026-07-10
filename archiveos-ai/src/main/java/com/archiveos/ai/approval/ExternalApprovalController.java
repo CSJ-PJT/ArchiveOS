@@ -26,6 +26,11 @@ public class ExternalApprovalController {
         return ResponseEntity.status(HttpStatus.CREATED).body(envelope(service.request(body)));
     }
 
+    @PostMapping("/api/integrations/market/events/review")
+    public ResponseEntity<Map<String, Object>> marketReviewEvent(@RequestBody(required = false) JsonNode body) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(envelope(service.marketReviewEvent(body)));
+    }
+
     @GetMapping("/api/approvals/external")
     public Map<String, Object> list(@RequestParam(defaultValue = "50") int limit,
                                     @RequestParam(required = false) String status,

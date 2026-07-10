@@ -58,12 +58,12 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
       setMessage(`${stress ? "Stress" : "Default"} dry-run complete - ${result.status} - ${result.bankruptcyRisk}`);
       await onRefresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Settlement simulation failed.");
+      setMessage(error instanceof Error ? error.message : "Ecosystem finance simulation failed.");
     }
   }
 
   if (!snapshot) {
-    return <div className="empty-state">Settlement game simulation is unavailable. Check archiveos-ai game endpoints.</div>;
+    return <div className="empty-state">Ecosystem finance control is unavailable. Check archiveos-ai settlement endpoints.</div>;
   }
 
   const services = Object.entries(snapshot.services || {});
@@ -74,8 +74,8 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
     <div className="page-stack">
       <header className="page-heading">
         <div>
-          <span className="eyebrow">GAME / SIMULATION - Synthetic Data only</span>
-          <h2>ArchiveOS - Ecosystem Survival Mode</h2>
+          <span className="eyebrow">ECOSYSTEM FINANCE - Synthetic Data only</span>
+          <h2>ArchiveOS - Ecosystem Finance Control</h2>
           <p>
             Monitors the synthetic settlement loop where Nexus manufactures, Logistics fulfills delivery, Ledger performs
             daily settlement, Logistics receives settlement, and Logistics charges Nexus for manufacturing-linked service cost.
@@ -157,7 +157,7 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
           </div>
         </SectionCard>
 
-        <SectionCard title="Game Guard Rails" eyebrow="No infinite loop / no direct write" className="span-5">
+        <SectionCard title="Finance Guard Rails" eyebrow="No infinite loop / no direct write" className="span-5">
           <div className="event-list compact">
             <article className="event-row">
               <span>metadata</span>
@@ -199,7 +199,7 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
           </div>
         </SectionCard>
 
-        <SectionCard title="Synthetic Game Events" eyebrow="simulationRunId / tickId / maxHop" className="span-5">
+        <SectionCard title="Synthetic Settlement Events" eyebrow="simulationRunId / tickId / maxHop" className="span-5">
           <div className="event-list compact">
             {events.map((event) => (
               <article className="event-row" key={event.eventId}>
