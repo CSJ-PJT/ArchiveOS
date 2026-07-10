@@ -29,6 +29,9 @@ import {
   getSecurityStatus,
   getSettlementAgencyGameSummary,
   getGameFinanceSummary,
+  getLiveFlowSummary,
+  getLiveFlowTopology,
+  getLiveFlowRecentEvents,
   getKpiOverview,
   getMcpRegistry,
   getRuntimeTimeline,
@@ -44,6 +47,9 @@ import {
   type EcosystemTopology,
   type EcosystemTimeline,
   type GameFinanceSummary,
+  type LiveFlowSummary,
+  type LiveFlowTopology,
+  type LiveFlowEvent,
   type HistorianStatus,
   type KnowledgeOverview,
   type KpiOverview,
@@ -77,6 +83,7 @@ import { ManagedSystemsPage } from "../pages/ManagedSystemsPage";
 import { LedgerApprovalsPage } from "../pages/LedgerApprovalsPage";
 import { EcosystemPage } from "../pages/EcosystemPage";
 import { SettlementGamePage } from "../pages/SettlementGamePage";
+import { LiveFlowPage } from "../pages/LiveFlowPage";
 import { Icon } from "../components/shared/Icon";
 import { Sidebar } from "../components/shared/Sidebar";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -115,6 +122,9 @@ export type AppData = {
   ecosystemTimeline: EcosystemTimeline | null;
   settlementGame: SettlementAgencyGameSummary | null;
   gameFinance: GameFinanceSummary | null;
+  liveFlow: LiveFlowSummary | null;
+  liveFlowTopology: LiveFlowTopology | null;
+  liveFlowEvents: LiveFlowEvent[];
   mcpRegistry: McpRegistryEntry[];
   timeline: RuntimeTimelineEntry[];
 };
@@ -152,6 +162,9 @@ const emptyData: AppData = {
   ecosystemTimeline: null,
   settlementGame: null,
   gameFinance: null,
+  liveFlow: null,
+  liveFlowTopology: null,
+  liveFlowEvents: [],
   mcpRegistry: [],
   timeline: [],
 };
@@ -217,6 +230,9 @@ function AppShellInner() {
       settle("ecosystemTimeline", () => getEcosystemTimeline(50)),
       settle("settlementGame", getSettlementAgencyGameSummary),
       settle("gameFinance", getGameFinanceSummary),
+      settle("liveFlow", getLiveFlowSummary),
+      settle("liveFlowTopology", getLiveFlowTopology),
+      settle("liveFlowEvents", () => getLiveFlowRecentEvents(100)),
       operatorAccess ? settle("mcpRegistry", getMcpRegistry) : Promise.resolve({ key: "mcpRegistry", value: [], error: null }),
       operatorAccess ? settle("timeline", () => getRuntimeTimeline(100)) : Promise.resolve({ key: "timeline", value: [], error: null }),
     ]))];
@@ -247,6 +263,7 @@ function AppShellInner() {
   const page = {
     overview: <OverviewPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
     ecosystem: <EcosystemPage data={data} onRefresh={refresh} />,
+    liveflow: <LiveFlowPage data={data} onRefresh={refresh} />,
     finance: <SettlementGamePage data={data} onRefresh={refresh} />,
     managed: <ManagedSystemsPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
     approvals: <LedgerApprovalsPage data={data} onRefresh={refresh} />,

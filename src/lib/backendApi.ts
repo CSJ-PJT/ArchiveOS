@@ -259,6 +259,54 @@ export type EcosystemDryRun = {
   steps: Array<{ order: number; service: string; action: string; mode: string }>;
 };
 
+export type LiveFlowEvent = {
+  id: number | string;
+  event_id: string;
+  correlation_id: string | null;
+  source_system_id: string;
+  source_service_id: string | null;
+  domain: string;
+  event_type: string;
+  entity_type: string;
+  entity_id: string;
+  from_node: string;
+  to_node: string;
+  status: string;
+  severity: string;
+  display_label: string;
+  amount_bucket: string | null;
+  occurred_at: string;
+  received_at: string;
+  metadata: Record<string, unknown>;
+};
+
+export type LiveFlowSummary = {
+  active_flows?: number;
+  recent_events?: number;
+  pending_approvals?: number;
+  delayed_shipments?: number;
+  failed_callbacks?: number;
+  degraded_systems?: number;
+  latest_event_at?: string | null;
+  mode: "LIVE" | "REPLAY" | "DEMO" | string;
+  dataPolicy: string;
+  warning: string;
+  recent: LiveFlowEvent[];
+  traceId?: string;
+  collected?: number;
+};
+
+export type LiveFlowTopology = {
+  nodes: Array<{ id: string; label: string; type: string; x: number; y: number }>;
+  lanes: string[];
+  edges: Array<{ from: string; to: string; label: string }>;
+};
+
+export type LiveFlowReplay = {
+  mode: "REPLAY" | string;
+  data: LiveFlowEvent[];
+};
+
 export type SettlementGameServiceEconomics = {
   service: string;
   cashBefore: number | string;
@@ -611,6 +659,41 @@ export async function getEcosystemSurvivalSummary() {
 
 export async function simulateEcosystemSurvival(input: Record<string, unknown> = {}, dryRun = true) {
   return simulateSettlementAgencyGame(input, dryRun);
+}
+
+export async function getLiveFlowSummary() {
+  const response = await request<ApiEnvelope<LiveFlowSummary>>("/api/live-flow/summary");
+  return response.data;
+}
+
+export async function getLiveFlowTopology() {
+  const response = await request<ApiEnvelope<LiveFlowTopology>>("/api/live-flow/topology");
+  return response.data;
+}
+
+export async function getLiveFlowRecentEvents(limit = 100) {
+  const response = await request<ApiEnvelope<{ data: LiveFlowEvent[] }>>(`/api/live-flow/events/recent?limit=${limit}`);
+  return response.data.data;
+}
+
+export async function getLiveFlowReplay(limit = 200) {
+  const response = await request<ApiEnvelope<LiveFlowReplay>>(`/api/live-flow/replay?limit=${limit}`);
+  return response.data;
+}
+
+export async function refreshLiveFlow() {
+  const response = await request<ApiEnvelope<LiveFlowSummary>>("/api/live-flow/refresh", { method: "POST" });
+  return response.data;
+}
+
+export async function getLiveFlowCorrelation(correlationId: string) {
+  const response = await request<ApiEnvelope<{ correlationId: string; data: LiveFlowEvent[] }>>(`/api/live-flow/correlation/${encodeURIComponent(correlationId)}`);
+  return response.data;
+}
+
+export async function getLiveFlowEntity(entityId: string) {
+  const response = await request<ApiEnvelope<{ entityId: string; data: LiveFlowEvent[] }>>(`/api/live-flow/entity/${encodeURIComponent(entityId)}`);
+  return response.data;
 }
 
 export async function getAtlasServices() {

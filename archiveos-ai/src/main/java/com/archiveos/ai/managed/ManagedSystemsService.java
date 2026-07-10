@@ -1,6 +1,7 @@
 package com.archiveos.ai.managed;
 
 import com.archiveos.ai.approval.ExternalApprovalRepository;
+import com.archiveos.ai.liveflow.LiveFlowRepository;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -8,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +19,7 @@ public class ManagedSystemsService {
     private static final List<String> SEVERITY_ORDER = List.of("critical", "high", "medium", "low", "info");
     private final ManagedSystemsRepository repository;
     private final ExternalApprovalRepository approvals;
+    private LiveFlowRepository liveFlowRepository;
     @Value("${archiveos.ledger.base-url:}")
     private String ledgerBaseUrl;
     @Value("${archiveos.ledger.callback-token:}")
@@ -27,6 +30,11 @@ public class ManagedSystemsService {
     public ManagedSystemsService(ManagedSystemsRepository repository, ExternalApprovalRepository approvals) {
         this.repository = repository;
         this.approvals = approvals;
+    }
+
+    @Autowired(required = false)
+    void setLiveFlowRepository(LiveFlowRepository liveFlowRepository) {
+        this.liveFlowRepository = liveFlowRepository;
     }
 
     public Map<String, Object> overview() {
@@ -89,6 +97,7 @@ public class ManagedSystemsService {
         addIfNotNull(items, dailyReportItem());
         items.addAll(ledgerApprovalItems());
         items.addAll(ledgerCallbackFailedItems());
+        items.addAll(liveFlowItems());
         items.addAll(workLogFailureItems());
         addIfNotNull(items, securityBlockedItem("public_cud_blocked", "medium", "Public CUD blocked repeatedly",
                 "Public session attempted protected write operations more than once.", "Review public access and confirm this is expected."));
@@ -377,6 +386,43 @@ public class ManagedSystemsService {
                         string(request, "updated_at", Instant.now().toString()), null, string(request, "approval_request_id"),
                         null, null, null))
                 .toList();
+    }
+
+    private List<Map<String, Object>> liveFlowItems() {
+        if (liveFlowRepository == null) return List.of();
+        Map<String, Object> summary;
+        try {
+            summary = liveFlowRepository.summary();
+        } catch (Exception ignored) {
+            return List.of();
+        }
+        List<Map<String, Object>> rows = new ArrayList<>();
+        int failedCallbacks = integer(summary.get("failed_callbacks"));
+        int pendingApprovals = integer(summary.get("pending_approvals"));
+        int delayedShipments = integer(summary.get("delayed_shipments"));
+        int degradedSystems = integer(summary.get("degraded_systems"));
+        String latest = String.valueOf(summary.getOrDefault("latest_event_at", Instant.now().toString()));
+        if (failedCallbacks > 0) rows.add(inboxItem("live-flow-callback-failed", "high", "archiveos", "live_flow",
+                "Live Flow detected callback failures",
+                "Live Flow has " + failedCallbacks + " callback failure events.",
+                "Open Live Flow, inspect the callback chain, and retry only after checking Ledger availability.",
+                latest, null, null, null, null, null));
+        if (pendingApprovals > 0) rows.add(inboxItem("live-flow-approval-required", "high", "archiveos", "live_flow",
+                "Live Flow detected pending approvals",
+                "Live Flow has " + pendingApprovals + " approval-required events.",
+                "Open Ledger Approval Queue and clear high-risk pending approvals.",
+                latest, null, null, null, null, null));
+        if (delayedShipments > 0) rows.add(inboxItem("live-flow-delayed-shipments", "medium", "archive-logistics", "live_flow",
+                "Live Flow detected delayed shipments",
+                "Live Flow has " + delayedShipments + " delayed logistics events.",
+                "Open Live Flow and inspect affected logistics correlations.",
+                latest, null, null, null, null, null));
+        if (degradedSystems > 0) rows.add(inboxItem("live-flow-degraded-systems", "high", "archiveos", "live_flow",
+                "Live Flow detected degraded systems",
+                "Live Flow has " + degradedSystems + " degraded or unavailable source systems.",
+                "Run a read-only ecosystem refresh and check the affected service health.",
+                latest, null, null, null, null, null));
+        return rows;
     }
 
     private Map<String, Object> securityBlockedItem(String key, String severity, String title, String summary, String action) {
