@@ -12,6 +12,24 @@ All contracts use synthetic portfolio data only. Do not send real card numbers, 
   - `POST /api/outbox/events/publish`
 - ArchiveOS returns `DRY_RUN` or `SAFE_MODE_BLOCKED` unless `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=true`.
 
+## Market
+
+- Repository: `https://github.com/CSJ-PJT/Archive-Market`
+- Role: synthetic customer demand, order, payment, revenue, return, and claim event source.
+- Read:
+  - `GET /actuator/health`
+  - `GET /api/operations/summary`
+  - `GET /api/market-economy/summary`
+  - `GET /api/outbox/summary`
+  - `GET /api/orders`
+  - `GET /api/claims`
+  - `GET /api/returns`
+- ArchiveOS config:
+  - `ARCHIVE_ECOSYSTEM_SERVICES_MARKET_BASE_URL=http://localhost:8094`
+  - Docker host example: `http://host.docker.internal:8094`
+
+Archive-Market must not receive real customer, payment, address, or finance data. All contract examples are Synthetic Data / Demo Data.
+
 ## Logistics
 
 - Read:

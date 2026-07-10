@@ -2,6 +2,7 @@ package com.archiveos.ai.ecosystem;
 
 import com.archiveos.ai.integration.ledger.LedgerClient;
 import com.archiveos.ai.integration.logitics.LogiticsClient;
+import com.archiveos.ai.integration.market.MarketClient;
 import com.archiveos.ai.integration.nexus.NexusClient;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -17,14 +18,16 @@ public class EcosystemService {
     private final EcosystemProperties properties;
     private final EcosystemRepository repository;
     private final NexusClient nexus;
+    private final MarketClient market;
     private final LogiticsClient logitics;
     private final LedgerClient ledger;
 
     public EcosystemService(EcosystemProperties properties, EcosystemRepository repository,
-                            NexusClient nexus, LogiticsClient logitics, LedgerClient ledger) {
+                            NexusClient nexus, MarketClient market, LogiticsClient logitics, LedgerClient ledger) {
         this.properties = properties;
         this.repository = repository;
         this.nexus = nexus;
+        this.market = market;
         this.logitics = logitics;
         this.ledger = ledger;
     }
@@ -32,6 +35,7 @@ public class EcosystemService {
     public Map<String, Object> services() {
         String traceId = traceId();
         return Map.of("traceId", traceId, "services", List.of(
+                service("MARKET", market.config(), latest("MARKET")),
                 service("NEXUS", nexus.config(), latest("NEXUS")),
                 service("LOGITICS", logitics.config(), latest("LOGITICS")),
                 service("LEDGER", ledger.config(), latest("LEDGER"))));
@@ -59,12 +63,17 @@ public class EcosystemService {
     public Map<String, Object> topology() {
         return Map.of(
                 "nodes", List.of(
+                        node("archive-market", "Archive-Market", "MARKET", latestStatus("MARKET")),
                         node("archive-nexus", "Archive-Nexus", "DOMAIN", latestStatus("NEXUS")),
                         node("archive-logitics", "Archive-Logistics", "LOGISTICS", latestStatus("LOGITICS")),
                         node("archive-ledger", "Archive-Ledger", "FINANCE", latestStatus("LEDGER")),
                         node("archive-os", "ArchiveOS", "CONTROL_TOWER", "HEALTHY")),
                 "edges", List.of(
+                        edge("archive-market", "archive-nexus", "production / shipment request"),
+                        edge("archive-market", "archive-ledger", "sales / payment / refund event"),
+                        edge("archive-market", "archive-os", "market economy summary"),
                         edge("archive-nexus", "archive-logitics", "shipment event"),
+                        edge("archive-nexus", "archive-ledger", "direct cost event"),
                         edge("archive-logitics", "archive-ledger", "logistics cost event"),
                         edge("archive-ledger", "archive-os", "approval request"),
                         edge("archive-os", "archive-ledger", "approval callback")));
@@ -82,10 +91,11 @@ public class EcosystemService {
                 "allowExternalWrite", properties.getIntegration().isAllowExternalWrite(),
                 "status", "DRY_RUN",
                 "steps", List.of(
-                        step(1, "Archive-Nexus", "Generate synthetic shipment/domain event", "dry-run only"),
-                        step(2, "Archive-Logistics", "Calculate route, ETA, delay, and logistics cost", "dry-run only"),
-                        step(3, "Archive-Ledger", "Create synthetic transaction and mark high-risk items APPROVAL_REQUIRED", "dry-run only"),
-                        step(4, "ArchiveOS", "Generate policy evidence, present approval queue, audit decision", "dry-run only"),
+                        step(1, "Archive-Market", "Generate synthetic demand, order, payment, revenue, return, and claim events", "dry-run only"),
+                        step(2, "Archive-Nexus", "Produce inventory and route shipment/cost events", "dry-run only"),
+                        step(3, "Archive-Logistics", "Calculate route, ETA, delay, and logistics cost", "dry-run only"),
+                        step(4, "Archive-Ledger", "Create synthetic transaction and mark high-risk items APPROVAL_REQUIRED", "dry-run only"),
+                        step(5, "ArchiveOS", "Generate policy evidence, present approval queue, audit decision", "dry-run only"),
                         step(5, "ArchiveOS → Ledger", "Send approval callback through callback outbox", "blocked unless allow-external-write=true")));
     }
 
@@ -100,6 +110,7 @@ public class EcosystemService {
 
     private Map<String, Object> checkAll(String traceId) {
         Map<String, Object> services = new LinkedHashMap<>();
+        services.put("market", checkMarket());
         services.put("nexus", check("NEXUS", nexus.config(), nexus.health(), nexus.outboxSummary()));
         services.put("logitics", check("LOGITICS", logitics.config(), logitics.health(), logitics.operationsSummary()));
         services.put("ledger", check("LEDGER", ledger.config(), ledger.health(), ledger.operationsSummary()));
@@ -107,14 +118,39 @@ public class EcosystemService {
     }
 
     private Map<String, Object> currentOrCheck(String traceId) {
-        if (repository.recentHealth(3).size() >= 3) {
+        if (repository.recentHealth(4).size() >= 4) {
             Map<String, Object> services = new LinkedHashMap<>();
+            services.put("market", fromSnapshot("MARKET"));
             services.put("nexus", fromSnapshot("NEXUS"));
             services.put("logitics", fromSnapshot("LOGITICS"));
             services.put("ledger", fromSnapshot("LEDGER"));
             return services;
         }
         return checkAll(traceId);
+    }
+
+    private Map<String, Object> checkMarket() {
+        EcosystemProperties.ServiceConfig config = market.config();
+        if (config == null || !config.isEnabled()) return disabled(config);
+        IntegrationResult health = market.health();
+        IntegrationResult operations = market.operationsSummary();
+        IntegrationResult economy = market.marketEconomySummary();
+        IntegrationResult outbox = market.outboxSummary();
+        EcosystemServiceStatus status = aggregateServiceStatus(List.of(health, operations, economy, outbox));
+        Map<String, Object> body = normalizeMarketSummary(operations, economy, outbox);
+        body.put("health", health.body());
+        Map<String, Object> capabilities = new LinkedHashMap<>();
+        capabilities.put("operations", capability(operations));
+        capabilities.put("marketEconomy", capability(economy));
+        capabilities.put("outbox", capability(outbox));
+        capabilities.put("orders", config.getOrdersPath());
+        capabilities.put("claims", config.getClaimsPath());
+        capabilities.put("returns", config.getReturnsPath());
+        body.put("capabilities", capabilities);
+        String error = firstError(health, operations, economy, outbox);
+        Map<String, Object> snapshot = repository.recordHealth("MARKET", config.getName(), config.getBaseUrl(), status.name(),
+                firstHttpStatus(economy, operations, outbox, health), body, error);
+        return serviceMap(config, status.name(), snapshot.get("checked_at"), body, error);
     }
 
     private Map<String, Object> check(String type, EcosystemProperties.ServiceConfig config, IntegrationResult health, IntegrationResult summary) {
@@ -168,6 +204,106 @@ public class EcosystemService {
         boolean degraded = services.values().stream().map(this::status).anyMatch(status -> List.of("DEGRADED", "UNKNOWN").contains(status));
         return unavailable || degraded ? "DEGRADED" : "HEALTHY";
     }
+
+    private EcosystemServiceStatus aggregateServiceStatus(List<IntegrationResult> results) {
+        if (results.stream().anyMatch(result -> result.status() == EcosystemServiceStatus.UNAVAILABLE)) return EcosystemServiceStatus.UNAVAILABLE;
+        if (results.stream().anyMatch(result -> result.status() != EcosystemServiceStatus.HEALTHY)) return EcosystemServiceStatus.DEGRADED;
+        return EcosystemServiceStatus.HEALTHY;
+    }
+
+    private Map<String, Object> normalizeMarketSummary(IntegrationResult operations, IntegrationResult economy, IntegrationResult outbox) {
+        Map<String, Object> source = !economy.body().isEmpty() ? economy.body() : operations.body();
+        Map<String, Object> orders = firstMap(source, "orders", "orderSummary", "order_summary");
+        Map<String, Object> risk = firstMap(source, "risk", "bankruptcy", "bankruptcyRisk");
+        Map<String, Object> finance = firstMap(source, "finance", "economy", "cash");
+        Map<String, Object> outboxBody = outbox.body();
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("orders", Map.of(
+                "total", number(source, orders, "total", "totalOrders", "orderCount"),
+                "confirmed", number(source, orders, "confirmed", "confirmedOrders"),
+                "cancelled", number(source, orders, "cancelled", "cancelledOrders"),
+                "returned", number(source, orders, "returned", "returnedOrders", "returnCount"),
+                "claimed", number(source, orders, "claimed", "claimedOrders", "claimCount")));
+        value.put("totalRevenue", decimal(source, finance, "totalRevenue", "revenue", "revenueAmount"));
+        value.put("totalCost", decimal(source, finance, "totalCost", "cost", "costAmount"));
+        value.put("profit", decimal(source, finance, "profit", "profitAmount"));
+        value.put("cashBalance", decimal(source, finance, "cashBalance", "cash", "balance"));
+        value.put("burnRate", decimal(source, finance, "burnRate", "burn_rate"));
+        value.put("bankruptcyRisk", stringValue(firstNonNull(source.get("bankruptcyRisk"), risk.get("level"), risk.get("status")), "UNKNOWN"));
+        value.put("returnRate", decimal(source, orders, "returnRate", "return_rate"));
+        value.put("claimRate", decimal(source, orders, "claimRate", "claim_rate"));
+        value.put("highRiskOrders", number(source, orders, "highRiskOrders", "high_risk_orders"));
+        value.put("outbox", Map.of(
+                "pending", number(outboxBody, outboxBody, "pending", "pendingCount"),
+                "failed", number(outboxBody, outboxBody, "failed", "failedCount")));
+        value.put("syntheticData", true);
+        value.put("operations", operations.body());
+        value.put("marketEconomy", economy.body());
+        return value;
+    }
+
+    private Map<String, Object> firstMap(Map<String, Object> source, String... keys) {
+        for (String key : keys) {
+            Object value = source.get(key);
+            if (value instanceof Map<?, ?> map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> typed = (Map<String, Object>) map;
+                return typed;
+            }
+        }
+        return Map.of();
+    }
+
+    private long number(Map<String, Object> primary, Map<String, Object> secondary, String... keys) {
+        Object value = firstNonNull(primary, secondary, keys);
+        if (value instanceof Number number) return number.longValue();
+        try { return value == null ? 0 : Long.parseLong(String.valueOf(value)); }
+        catch (NumberFormatException ignored) { return 0; }
+    }
+
+    private String decimal(Map<String, Object> primary, Map<String, Object> secondary, String... keys) {
+        Object value = firstNonNull(primary, secondary, keys);
+        return value == null ? "0" : String.valueOf(value);
+    }
+
+    private Object firstNonNull(Map<String, Object> primary, Map<String, Object> secondary, String... keys) {
+        for (String key : keys) {
+            Object value = primary.get(key);
+            if (value != null) return value;
+            value = secondary.get(key);
+            if (value != null) return value;
+        }
+        return null;
+    }
+
+    private Object firstNonNull(Object... values) {
+        for (Object value : values) if (value != null) return value;
+        return null;
+    }
+
+    private String stringValue(Object value, String fallback) {
+        String text = value == null ? "" : String.valueOf(value).trim();
+        return text.isBlank() ? fallback : text;
+    }
+
+    private Map<String, Object> capability(IntegrationResult result) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("status", result.status().name());
+        value.put("httpStatus", result.httpStatus());
+        value.put("errorMessage", result.errorMessage());
+        return value;
+    }
+
+    private Integer firstHttpStatus(IntegrationResult... results) {
+        for (IntegrationResult result : results) if (result.httpStatus() != null) return result.httpStatus();
+        return null;
+    }
+
+    private String firstError(IntegrationResult... results) {
+        for (IntegrationResult result : results) if (result.errorMessage() != null && !result.errorMessage().isBlank()) return result.errorMessage();
+        return null;
+    }
+
     @SuppressWarnings("unchecked") private Map<String, Object> map(Object value) { return value instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of(); }
     private String status(Object value) { return String.valueOf(map(value).getOrDefault("status", "UNKNOWN")); }
     private String string(Object value) { return value == null ? null : String.valueOf(value); }

@@ -128,7 +128,7 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "PM Inbox Acknowledge", method: "POST", path: "/api/pm-inbox/:id/acknowledge", service: "runtime", description: "Admin acknowledgement for a PM inbox item." },
   { name: "PM Inbox Resolve", method: "POST", path: "/api/pm-inbox/:id/resolve", service: "runtime", description: "Admin resolution for a PM inbox item." },
   { name: "Ecosystem Services", method: "GET", path: "/api/ecosystem/services", service: "runtime", description: "Archive Platform external service registry." },
-  { name: "Ecosystem Summary", method: "GET", path: "/api/ecosystem/summary", service: "runtime", description: "Nexus, Logistics, Ledger integrated operations status." },
+  { name: "Ecosystem Summary", method: "GET", path: "/api/ecosystem/summary", service: "runtime", description: "Market, Nexus, Logistics, Ledger integrated operations status." },
   { name: "Ecosystem Topology", method: "GET", path: "/api/ecosystem/topology", service: "runtime", description: "Control Tower topology nodes and edges." },
   { name: "Ecosystem Timeline", method: "GET", path: "/api/ecosystem/timeline", service: "runtime", description: "Cross-service timeline events." },
   { name: "Refresh Ecosystem", method: "POST", path: "/api/ecosystem/refresh", service: "runtime", description: "Read-only external service health refresh." },
@@ -145,6 +145,12 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Nexus Outbox", method: "GET", path: "/api/integrations/nexus/outbox", service: "runtime", description: "Archive-Nexus outbox summary proxy." },
   { name: "Nexus Generate", method: "POST", path: "/api/integrations/nexus/outbox/generate", service: "runtime", description: "Safe-mode guarded Nexus event generation." },
   { name: "Nexus Publish", method: "POST", path: "/api/integrations/nexus/outbox/publish", service: "runtime", description: "Safe-mode guarded Nexus outbox publish." },
+  { name: "Market Summary", method: "GET", path: "/api/integrations/market/summary", service: "runtime", description: "Archive-Market operations summary proxy." },
+  { name: "Market Economy", method: "GET", path: "/api/integrations/market/economy", service: "runtime", description: "Archive-Market synthetic economy summary proxy." },
+  { name: "Market Outbox", method: "GET", path: "/api/integrations/market/outbox", service: "runtime", description: "Archive-Market outbox summary proxy." },
+  { name: "Market Orders", method: "GET", path: "/api/integrations/market/orders", service: "runtime", description: "Archive-Market synthetic order list proxy." },
+  { name: "Market Claims", method: "GET", path: "/api/integrations/market/claims", service: "runtime", description: "Archive-Market synthetic claim list proxy." },
+  { name: "Market Returns", method: "GET", path: "/api/integrations/market/returns", service: "runtime", description: "Archive-Market synthetic return list proxy." },
   { name: "Logistics Summary", method: "GET", path: "/api/integrations/logitics/summary", service: "runtime", description: "Archive-Logistics operations summary proxy." },
   { name: "Logistics Outbox", method: "GET", path: "/api/integrations/logitics/outbox", service: "runtime", description: "Archive-Logistics outbox summary proxy." },
   { name: "Logistics Publish", method: "POST", path: "/api/integrations/logitics/outbox/publish", service: "runtime", description: "Safe-mode guarded Logistics outbox publish." },
@@ -822,6 +828,30 @@ app.post("/api/integrations/nexus/outbox/generate", async (request, response) =>
 
 app.post("/api/integrations/nexus/outbox/publish", async (request, response) => {
   await relayArchiveOsAi(response, "/api/integrations/nexus/outbox/publish", { method: "POST" }, undefined, request);
+});
+
+app.get("/api/integrations/market/summary", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/market/summary", undefined, undefined, request);
+});
+
+app.get("/api/integrations/market/economy", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/market/economy", undefined, undefined, request);
+});
+
+app.get("/api/integrations/market/outbox", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/market/outbox", undefined, undefined, request);
+});
+
+app.get("/api/integrations/market/orders", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/market/orders", undefined, undefined, request);
+});
+
+app.get("/api/integrations/market/claims", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/market/claims", undefined, undefined, request);
+});
+
+app.get("/api/integrations/market/returns", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/market/returns", undefined, undefined, request);
 });
 
 app.get("/api/integrations/logitics/summary", async (request, response) => {

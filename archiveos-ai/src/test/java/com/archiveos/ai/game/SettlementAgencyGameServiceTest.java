@@ -9,6 +9,7 @@ import com.archiveos.ai.ecosystem.EcosystemProperties;
 import com.archiveos.ai.ecosystem.EcosystemServiceStatus;
 import com.archiveos.ai.ecosystem.IntegrationResult;
 import com.archiveos.ai.integration.ledger.LedgerClient;
+import com.archiveos.ai.integration.market.MarketClient;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,9 +20,10 @@ class SettlementAgencyGameServiceTest {
     @Test
     void fallbackSimulationKeepsArchiveOsAliveWhenLedgerGameIsUnavailable() {
         LedgerClient ledger = Mockito.mock(LedgerClient.class);
+        MarketClient market = market();
         GameFinanceRepository finance = Mockito.mock(GameFinanceRepository.class);
         when(ledger.settlementGameSimulate(Mockito.anyMap())).thenReturn(unavailable());
-        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, properties(), finance);
+        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, market, properties(), finance);
 
         Map<String, Object> result = service.simulate(Map.of(), true);
 
@@ -30,6 +32,9 @@ class SettlementAgencyGameServiceTest {
                 .containsEntry("agentMode", "PROPOSAL_ONLY");
         assertThat(result.get("status")).isIn("RUNNING", "ATTENTION", "BANKRUPTCY_RISK");
         assertThat(result).containsKeys("ecosystemCashBalance", "bankruptcyRisk", "services", "events", "proposals");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> services = (Map<String, Object>) result.get("services");
+        assertThat(services).containsKey("market");
         verify(finance, atLeastOnce()).upsertSnapshot(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyInt(), Mockito.anyString(), Mockito.anyString(), Mockito.anyMap());
         verify(finance, atLeastOnce()).insertTrade(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyInt(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.any(), Mockito.anyString(), Mockito.anyMap());
     }
@@ -38,7 +43,7 @@ class SettlementAgencyGameServiceTest {
     void gameEventsCarrySimulationMetadataAndRespectMaxHop() {
         LedgerClient ledger = Mockito.mock(LedgerClient.class);
         when(ledger.settlementGameSimulate(Mockito.anyMap())).thenReturn(unavailable());
-        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, properties(), Mockito.mock(GameFinanceRepository.class));
+        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, market(), properties(), Mockito.mock(GameFinanceRepository.class));
 
         Map<String, Object> result = service.simulate(Map.of("maxHop", 2), true);
 
@@ -56,12 +61,18 @@ class SettlementAgencyGameServiceTest {
     void stressScenarioCanSurfaceBankruptcyRiskWithAgentProposals() {
         LedgerClient ledger = Mockito.mock(LedgerClient.class);
         when(ledger.settlementGameSimulate(Mockito.anyMap())).thenReturn(unavailable());
-        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, properties(), Mockito.mock(GameFinanceRepository.class));
+        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, market(), properties(), Mockito.mock(GameFinanceRepository.class));
 
         Map<String, Object> stress = new LinkedHashMap<>();
         stress.put("nexusInitialCash", 1_200_000);
         stress.put("logisticsInitialCash", 800_000);
         stress.put("ledgerInitialCash", 900_000);
+        stress.put("marketInitialCash", 600_000);
+        stress.put("marketSalesRevenue", 1_000_000);
+        stress.put("marketRefundCost", 2_400_000);
+        stress.put("marketClaimCost", 1_500_000);
+        stress.put("marketProductionRequestCost", 900_000);
+        stress.put("marketLedgerSettlementFee", 300_000);
         stress.put("nexusProductionRevenue", 2_200_000);
         stress.put("nexusMaterialCost", 3_600_000);
         stress.put("nexusMaintenanceCost", 2_400_000);
@@ -93,7 +104,7 @@ class SettlementAgencyGameServiceTest {
         body.put("proposals", List.of());
         when(ledger.settlementGameSimulate(Mockito.anyMap()))
                 .thenReturn(new IntegrationResult(EcosystemServiceStatus.HEALTHY, 200, body, null, 10));
-        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, properties(), Mockito.mock(GameFinanceRepository.class));
+        SettlementAgencyGameService service = new SettlementAgencyGameService(ledger, market(), properties(), Mockito.mock(GameFinanceRepository.class));
 
         Map<String, Object> result = service.simulate(Map.of(), true);
 
@@ -106,6 +117,12 @@ class SettlementAgencyGameServiceTest {
 
     private IntegrationResult unavailable() {
         return new IntegrationResult(EcosystemServiceStatus.UNAVAILABLE, null, Map.of(), "Connection refused", 1);
+    }
+
+    private MarketClient market() {
+        MarketClient market = Mockito.mock(MarketClient.class);
+        when(market.marketEconomySummary()).thenReturn(unavailable());
+        return market;
     }
 
     private EcosystemProperties properties() {
