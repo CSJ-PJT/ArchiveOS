@@ -30,7 +30,7 @@ export function MetricCard({
       <strong title={String(value)}>{value}</strong>
       {description ? <p>{description}</p> : null}
       <div className="metric-tile-footer">
-        <small>{updatedAt ? `Updated ${updatedAt}` : hint || "Current state"}</small>
+        <small>{updatedAt ? `갱신 ${updatedAt}` : hint || "현재 상태"}</small>
         <StatusBadge status={status}>{status}</StatusBadge>
       </div>
       {onClick && actionLabel ? <span className="metric-action">{actionLabel} →</span> : null}

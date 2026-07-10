@@ -26,35 +26,35 @@ function statusTone(service: WorkforceServiceSummary) {
 
 export function WorkforcePage({ data }: { data: AppData }) {
   const workforce = data.workforce;
-  if (!workforce) return <div className="empty-state">Operational Workforce overview is unavailable. Check archiveos-ai workforce endpoints.</div>;
+  if (!workforce) return <div className="empty-state">작업 역량 현황을 불러오지 못했습니다. archiveos-ai workforce API 상태를 확인하세요.</div>;
 
   const summary = workforce.summary;
   return (
     <div className="page-stack workforce-page">
       <header className="page-heading">
         <div>
-          <span className="eyebrow">Operational Workforce - Synthetic Data only</span>
-          <h2>Operational Workforce Overview</h2>
+          <span className="eyebrow">작업 역량 관제 - Synthetic Data 전용</span>
+          <h2>작업 역량 현황</h2>
           <p>
-            Reads Market, Nexus, Logistics, and Ledger workforce/capacity/productivity/cashflow summaries.
-            No real employee, payroll, or personal data is used.
+            Market, Nexus, Logistics, Ledger의 작업 인원, 처리 역량, 생산성, 현금흐름 요약을 읽어 병목을 확인합니다.
+            실제 직원, 급여, 개인정보는 사용하지 않습니다.
           </p>
         </div>
       </header>
 
-      <p className="small-note">{workforce.dataPolicy} Generated {formatTimeAgo(workforce.generatedAt)}.</p>
+      <p className="small-note">{workforce.dataPolicy} 생성 시각: {formatTimeAgo(workforce.generatedAt)}.</p>
 
       <section className="kpi-command-grid">
-        <MetricCard label="Total headcount" value={summary.totalHeadcount} status="healthy" description="Synthetic workforce only" />
-        <MetricCard label="Average productivity" value={percent(summary.averageProductivity)} status={Number(summary.averageProductivity) >= 80 ? "healthy" : "warning"} description="Cross-service score" />
-        <MetricCard label="Largest bottleneck" value={summary.largestBottleneck} status={summary.totalBacklog > 0 ? "warning" : "healthy"} description={summary.largestBottleneckService} />
-        <MetricCard label="Total backlog" value={summary.totalBacklog} status={summary.totalBacklog > 0 ? "blocked" : "healthy"} description="Open synthetic work queue" />
-        <MetricCard label="Payroll burn" value={money(summary.payrollBurn)} status={Number(summary.payrollBurn) > 0 ? "working" : "idle"} description="Synthetic cost summary" />
-        <MetricCard label="Recommended action" value={summary.recommendedAction} status={summary.totalBacklog > 0 ? "warning" : "healthy"} description="Recommendation-only" />
+        <MetricCard label="총 인원" value={summary.totalHeadcount} status="healthy" description="Synthetic workforce 기준" />
+        <MetricCard label="평균 생산성" value={percent(summary.averageProductivity)} status={Number(summary.averageProductivity) >= 80 ? "healthy" : "warning"} description="서비스 통합 점수" />
+        <MetricCard label="가장 큰 병목" value={summary.largestBottleneck} status={summary.totalBacklog > 0 ? "warning" : "healthy"} description={summary.largestBottleneckService} />
+        <MetricCard label="전체 적체" value={summary.totalBacklog} status={summary.totalBacklog > 0 ? "blocked" : "healthy"} description="처리 대기 중인 synthetic 작업" />
+        <MetricCard label="인건비성 비용" value={money(summary.payrollBurn)} status={Number(summary.payrollBurn) > 0 ? "working" : "idle"} description="Synthetic cost 요약" />
+        <MetricCard label="권장 조치" value={summary.recommendedAction} status={summary.totalBacklog > 0 ? "warning" : "healthy"} description="제안 전용" />
       </section>
 
       <section className="overview-layout">
-        <SectionCard title="Service Workforce Board" eyebrow="capacity / backlog / productivity" className="span-7">
+        <SectionCard title="서비스별 작업 역량" eyebrow="처리 역량 / 적체 / 생산성" className="span-7">
           <div className="history-table">
             {workforce.services.map((service) => (
               <article className="history-row" key={service.serviceId}>
@@ -62,23 +62,23 @@ export function WorkforcePage({ data }: { data: AppData }) {
                   <strong>{service.serviceName}</strong>
                   <StatusBadge status={statusTone(service)}>{service.status}</StatusBadge>
                   <span>{service.bottleneckRole}</span>
-                  <p>{service.backlog} backlog · {service.usedCapacity}/{service.effectiveCapacity} capacity · productivity {percent(service.productivityScore)}</p>
+                  <p>적체 {service.backlog}건 · 처리량 {service.usedCapacity}/{service.effectiveCapacity} · 생산성 {percent(service.productivityScore)}</p>
                 </summary>
                 <div className="detail-grid">
-                  <span>Headcount<strong>{service.headcount}</strong></span>
-                  <span>Effective capacity<strong>{String(service.effectiveCapacity)}</strong></span>
-                  <span>Used capacity<strong>{String(service.usedCapacity)}</strong></span>
-                  <span>Backlog<strong>{service.backlog}</strong></span>
-                  <span>Payroll cost<strong>{money(service.payrollCost)}</strong></span>
-                  <span>Productivity<strong>{percent(service.productivityScore)}</strong></span>
+                  <span>인원<strong>{service.headcount}</strong></span>
+                  <span>유효 처리 역량<strong>{String(service.effectiveCapacity)}</strong></span>
+                  <span>사용한 처리 역량<strong>{String(service.usedCapacity)}</strong></span>
+                  <span>적체<strong>{service.backlog}</strong></span>
+                  <span>인건비성 비용<strong>{money(service.payrollCost)}</strong></span>
+                  <span>생산성<strong>{percent(service.productivityScore)}</strong></span>
                 </div>
-                <details><summary>source status</summary><pre>{stringifyMeta(service.source)}</pre></details>
+                <details><summary>수집 상태</summary><pre>{stringifyMeta(service.source)}</pre></details>
               </article>
             ))}
           </div>
         </SectionCard>
 
-        <SectionCard title="AI Agent Recommendations" eyebrow="proposal only / safe-mode" className="span-5">
+        <SectionCard title="에이전트 제안" eyebrow="제안 전용 / safe-mode 유지" className="span-5">
           <div className="event-list compact">
             {workforce.recommendations.map((item) => (
               <article className="event-row" key={item.serviceId}>
