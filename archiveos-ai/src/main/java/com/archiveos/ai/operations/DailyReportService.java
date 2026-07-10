@@ -2,6 +2,7 @@ package com.archiveos.ai.operations;
 
 import com.archiveos.ai.atlas.AtlasService;
 import com.archiveos.ai.ecosystem.EcosystemService;
+import com.archiveos.ai.liveflow.LiveFlowService;
 import com.archiveos.ai.managed.ManagedSystemsService;
 import com.archiveos.ai.notification.NotificationResult;
 import com.archiveos.ai.notification.NotificationService;
@@ -25,6 +26,7 @@ public class DailyReportService {
     private AtlasService atlasService;
     private ManagedSystemsService managedSystems;
     private EcosystemService ecosystemService;
+    private LiveFlowService liveFlowService;
 
     public DailyReportService(
             OperationsRepository repository,
@@ -54,6 +56,11 @@ public class DailyReportService {
         this.ecosystemService = ecosystemService;
     }
 
+    @Autowired(required = false)
+    void setLiveFlowService(LiveFlowService liveFlowService) {
+        this.liveFlowService = liveFlowService;
+    }
+
     public Map<String, Object> run(LocalDate today) {
         LocalDate localToday = today == null ? LocalDate.now(SEOUL) : today;
         LocalDate targetDate = localToday.minusDays(1);
@@ -62,7 +69,8 @@ public class DailyReportService {
         Map<String, Object> managedSummary = managedSystemsSummary();
         Map<String, Object> atlasSummary = atlasSummary();
         Map<String, Object> ecosystemSummary = ecosystemSummary();
-        String reportText = message(targetDate, nightlySummary, businessDay.businessDay() ? null : businessDay.reason(), managedSummary, atlasSummary, ecosystemSummary);
+        Map<String, Object> liveFlowSummary = liveFlowSummary();
+        String reportText = message(targetDate, nightlySummary, businessDay.businessDay() ? null : businessDay.reason(), managedSummary, atlasSummary, ecosystemSummary, liveFlowSummary);
         List<NotificationResult> results = businessDay.businessDay() ? notifications.send(reportText) : List.of();
         boolean anyConfigured = results.stream().anyMatch(NotificationResult::configured);
         boolean anySent = results.stream().anyMatch(NotificationResult::sent);
@@ -84,6 +92,7 @@ public class DailyReportService {
         metadata.put("managed_systems", managedSummary);
         metadata.put("atlas", atlasSummary);
         metadata.put("ecosystem", ecosystemSummary);
+        metadata.put("live_flow", liveFlowSummary);
         metadata.put("archiveos_public_url_configured", publicUrl != null && !publicUrl.isBlank());
         String summary = switch (batchStatus) {
             case "sent" -> "일일 운영 보고 전송 완료: " + targetDate;
@@ -100,7 +109,7 @@ public class DailyReportService {
         return nightly.buildSummary(targetDate);
     }
 
-    private String message(LocalDate targetDate, Map<String, Object> summary, String skippedReason, Map<String, Object> managedSummary, Map<String, Object> atlasSummary, Map<String, Object> ecosystemSummary) {
+    private String message(LocalDate targetDate, Map<String, Object> summary, String skippedReason, Map<String, Object> managedSummary, Map<String, Object> atlasSummary, Map<String, Object> ecosystemSummary, Map<String, Object> liveFlowSummary) {
         Map<String, Object> queue = map(summary.get("queue")); Map<String, Object> operators = map(summary.get("operators"));
         @SuppressWarnings("unchecked") List<String> warnings = summary.get("warnings") instanceof List<?> list ? (List<String>) list : List.of();
         String status = switch (String.valueOf(summary.get("operationStatus"))) { case "problem" -> "🔴 문제"; case "warning" -> "🟡 주의"; default -> "🟢 정상"; };
@@ -117,6 +126,7 @@ public class DailyReportService {
         text.append("\n\nDecisions / Commands\n• Decisions: ").append(count(summary, "decisions")).append("\n• Commands: ").append(count(summary, "commands"));
         appendManagedSystemsSummary(text, managedSummary);
         appendEcosystemSummary(text, ecosystemSummary);
+        appendLiveFlowSummary(text, liveFlowSummary);
         appendLedgerSummary(text, managedSummary);
         text.append("\n\nAtlas Platform")
                 .append("\n• Status: ").append(atlasSummary.getOrDefault("status", "unknown"))
@@ -137,6 +147,17 @@ public class DailyReportService {
             if (!service.isEmpty()) text.append("\n• ").append(service.getOrDefault("name", key)).append(": ")
                     .append(service.getOrDefault("status", "unknown"));
         }
+    }
+
+    private void appendLiveFlowSummary(StringBuilder text, Map<String, Object> liveFlowSummary) {
+        text.append("\n\nLive Flow Summary")
+                .append("\nâ€¢ Active flows: ").append(liveFlowSummary.getOrDefault("active_flows", 0))
+                .append("\nâ€¢ Recent events: ").append(liveFlowSummary.getOrDefault("recent_events", 0))
+                .append("\nâ€¢ Pending approvals: ").append(liveFlowSummary.getOrDefault("pending_approvals", 0))
+                .append("\nâ€¢ Delayed shipments: ").append(liveFlowSummary.getOrDefault("delayed_shipments", 0))
+                .append("\nâ€¢ Failed callbacks: ").append(liveFlowSummary.getOrDefault("failed_callbacks", 0))
+                .append("\nâ€¢ Degraded systems: ").append(liveFlowSummary.getOrDefault("degraded_systems", 0))
+                .append("\nâ€¢ Latest event: ").append(liveFlowSummary.getOrDefault("latest_event_at", "no data"));
     }
 
     private void appendManagedSystemsSummary(StringBuilder text, Map<String, Object> managedSummary) {
@@ -240,6 +261,21 @@ public class DailyReportService {
             return value;
         } catch (Exception error) {
             return Map.of("available", false, "status", "unknown", "services", Map.of(), "reason", "Ecosystem summary failed: " + error.getClass().getSimpleName());
+        }
+    }
+
+    private Map<String, Object> liveFlowSummary() {
+        if (liveFlowService == null) return Map.of("available", false, "active_flows", 0, "recent_events", 0,
+                "pending_approvals", 0, "delayed_shipments", 0, "failed_callbacks", 0, "degraded_systems", 0);
+        try {
+            Map<String, Object> summary = liveFlowService.summary();
+            Map<String, Object> value = new LinkedHashMap<>(summary);
+            value.put("available", true);
+            return value;
+        } catch (Exception error) {
+            return Map.of("available", false, "active_flows", 0, "recent_events", 0,
+                    "pending_approvals", 0, "delayed_shipments", 0, "failed_callbacks", 0,
+                    "degraded_systems", 0, "reason", "Live Flow summary failed: " + error.getClass().getSimpleName());
         }
     }
 

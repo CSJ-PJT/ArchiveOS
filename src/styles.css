@@ -1500,6 +1500,51 @@ dt { color: var(--color-text-subtle); font-size: 0.7rem; } dd { margin: 0; font-
 .compact-ledger-list > div { display: grid; gap: 0.15rem; border-bottom: 1px solid var(--color-border); padding: 0.4rem 0; }
 .compact-ledger-list > div:last-child { border-bottom: 0; }
 
+.live-flow-canvas { position: relative; min-height: 30rem; overflow: hidden; border: 1px solid var(--color-border); border-radius: 0.7rem; background:
+  radial-gradient(circle at 18% 24%, color-mix(in srgb, var(--color-primary) 13%, transparent), transparent 28%),
+  radial-gradient(circle at 82% 36%, color-mix(in srgb, var(--color-success) 10%, transparent), transparent 30%),
+  var(--color-surface-muted); }
+.live-flow-canvas svg { display: block; width: 100%; min-height: 30rem; }
+.flow-edge { stroke: color-mix(in srgb, var(--color-border-strong) 70%, transparent); stroke-width: 0.42; stroke-dasharray: 1.4 1.2; }
+.flow-edge-label { fill: var(--color-text-subtle); font-size: 2px; text-anchor: middle; }
+.flow-node circle { fill: var(--color-surface-elevated); stroke: var(--color-border-strong); stroke-width: 0.75; }
+.flow-node-source circle { stroke: var(--color-info); }
+.flow-node-flow circle { stroke: var(--color-primary); }
+.flow-node-factory circle { stroke: var(--color-warning); }
+.flow-node-financial circle { stroke: var(--color-success); }
+.flow-node-control circle { stroke: var(--color-danger); }
+.flow-node-batch circle { stroke: var(--color-text-muted); }
+.flow-node text { fill: var(--color-text); font-size: 2.5px; font-weight: 700; text-anchor: middle; }
+.flow-token { cursor: pointer; filter: drop-shadow(0 0 5px currentColor); transition: opacity 120ms ease, transform 120ms ease; animation: flowPulse 1.8s ease-in-out infinite; }
+.flow-token circle { fill: currentColor; stroke: var(--color-surface); stroke-width: 0.5; }
+.flow-token.selected circle { r: 3.2; stroke: var(--color-primary-contrast); stroke-width: 0.8; }
+.token-normal, .token-info { color: var(--color-info); }
+.token-warning { color: var(--color-warning); }
+.token-critical { color: var(--color-danger); }
+.live-flow-canvas.is-paused .flow-token { animation-play-state: paused; }
+@keyframes flowPulse { 0%, 100% { opacity: 0.62; } 50% { opacity: 1; } }
+.event-detail-panel { display: grid; gap: 0.75rem; min-width: 0; }
+.event-detail-panel h3 { margin: 0; overflow-wrap: anywhere; }
+.operational-links { display: grid; gap: 0.45rem; border: 1px solid var(--color-border); border-radius: 0.55rem; background: var(--color-surface-muted); padding: 0.65rem; min-width: 0; }
+.operational-links h4 { margin: 0; color: var(--color-text); font-size: 0.78rem; }
+.detail-grid.compact { gap: 0.4rem; }
+.detail-grid.compact span { min-width: 0; }
+.flow-chain { display: grid; gap: 0.5rem; min-width: 0; }
+.chain-step { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 0.55rem; width: 100%; border: 1px solid var(--color-border); border-radius: 0.55rem; background: var(--color-surface-muted); padding: 0.65rem; color: inherit; text-align: left; cursor: pointer; }
+.chain-step:hover, .chain-step:focus-visible { border-color: var(--color-border-strong); background: var(--color-surface-elevated); }
+.chain-step strong, .chain-step small { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+.chain-step small { grid-column: 3 / 4; color: var(--color-text-muted); font-size: 0.72rem; }
+.chain-index { display: grid; width: 1.55rem; height: 1.55rem; place-items: center; border-radius: 999px; background: var(--color-surface-elevated); color: var(--color-text-muted); font-size: 0.72rem; font-weight: 700; }
+.event-detail-panel pre,
+.event-row p,
+.event-row strong,
+.operational-links strong,
+.history-row summary,
+.history-row span,
+.compact-ledger-list p { overflow-wrap: anywhere; word-break: break-word; }
+.replay-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem; color: var(--color-text-muted); }
+.replay-bar span { border: 1px solid var(--color-border); border-radius: 999px; padding: 0.35rem 0.55rem; font-size: 0.72rem; }
+
 @media (max-width: 1180px) {
   .kpi-command-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .agent-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

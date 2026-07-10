@@ -152,6 +152,13 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Market Claims", method: "GET", path: "/api/integrations/market/claims", service: "runtime", description: "Archive-Market synthetic claim list proxy." },
   { name: "Market Returns", method: "GET", path: "/api/integrations/market/returns", service: "runtime", description: "Archive-Market synthetic return list proxy." },
   { name: "Market Review Event Ingest", method: "POST", path: "/api/integrations/market/events/review", service: "runtime", description: "Consumes ORDER_REQUIRES_REVIEW, LOW_MARGIN_ORDER_DETECTED, HIGH_RISK_ORDER_DETECTED into approval queue." },
+  { name: "Live Flow Summary", method: "GET", path: "/api/live-flow/summary", service: "runtime", description: "Operational Twin summary from runtime flow events." },
+  { name: "Live Flow Topology", method: "GET", path: "/api/live-flow/topology", service: "runtime", description: "Operational Twin node and lane topology." },
+  { name: "Live Flow Recent Events", method: "GET", path: "/api/live-flow/events/recent", service: "runtime", description: "Recent normalized runtime flow events." },
+  { name: "Live Flow Replay", method: "GET", path: "/api/live-flow/replay", service: "runtime", description: "Replay normalized runtime flow events by time window." },
+  { name: "Live Flow Correlation", method: "GET", path: "/api/live-flow/correlation/:id", service: "runtime", description: "Trace one runtime correlation chain." },
+  { name: "Live Flow Entity", method: "GET", path: "/api/live-flow/entity/:id", service: "runtime", description: "Trace one entity through the flow." },
+  { name: "Live Flow Refresh", method: "POST", path: "/api/live-flow/refresh", service: "runtime", description: "Admin-only read-only collection from Archive services." },
   { name: "Logistics Summary", method: "GET", path: "/api/integrations/logitics/summary", service: "runtime", description: "Archive-Logistics operations summary proxy." },
   { name: "Logistics Outbox", method: "GET", path: "/api/integrations/logitics/outbox", service: "runtime", description: "Archive-Logistics outbox summary proxy." },
   { name: "Logistics Publish", method: "POST", path: "/api/integrations/logitics/outbox/publish", service: "runtime", description: "Safe-mode guarded Logistics outbox publish." },
@@ -857,6 +864,40 @@ app.get("/api/integrations/market/returns", async (request, response) => {
 
 app.post("/api/integrations/market/events/review", async (request, response) => {
   await relayArchiveOsAi(response, "/api/integrations/market/events/review", jsonProxyRequest("POST", request.body), undefined, request);
+});
+
+app.get("/api/live-flow/summary", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/live-flow/summary", undefined, undefined, request);
+});
+
+app.get("/api/live-flow/topology", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/live-flow/topology", undefined, undefined, request);
+});
+
+app.get("/api/live-flow/events/recent", async (request, response) => {
+  const limit = request.query.limit ? `?limit=${encodeURIComponent(String(request.query.limit))}` : "";
+  await relayArchiveOsAi(response, `/api/live-flow/events/recent${limit}`, undefined, undefined, request);
+});
+
+app.get("/api/live-flow/replay", async (request, response) => {
+  const params = new URLSearchParams();
+  for (const key of ["from", "to", "limit"]) {
+    if (request.query[key]) params.set(key, String(request.query[key]));
+  }
+  const query = params.toString();
+  await relayArchiveOsAi(response, `/api/live-flow/replay${query ? `?${query}` : ""}`, undefined, undefined, request);
+});
+
+app.get("/api/live-flow/correlation/:id", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/live-flow/correlation/${encodeURIComponent(request.params.id)}`, undefined, undefined, request);
+});
+
+app.get("/api/live-flow/entity/:id", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/live-flow/entity/${encodeURIComponent(request.params.id)}`, undefined, undefined, request);
+});
+
+app.post("/api/live-flow/refresh", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/live-flow/refresh", { method: "POST" }, undefined, request);
 });
 
 app.get("/api/integrations/logitics/summary", async (request, response) => {

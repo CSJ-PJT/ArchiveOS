@@ -1,6 +1,6 @@
 import type { IconName } from "../components/shared/Icon";
 
-export type AppRoute = "overview" | "ecosystem" | "finance" | "managed" | "approvals" | "agents" | "workflows" | "knowledge" | "history" | "batch" | "rpa" | "atlas" | "mcp" | "settings";
+export type AppRoute = "overview" | "ecosystem" | "liveflow" | "finance" | "managed" | "approvals" | "agents" | "workflows" | "knowledge" | "history" | "batch" | "rpa" | "atlas" | "mcp" | "settings";
 
 export type NavigationItem = {
   id: AppRoute;
@@ -31,6 +31,13 @@ export const navigationItems: NavigationItem[] = [
     shortLabel: "Eco",
     description: "Market, Nexus, Logistics, Ledger, and ArchiveOS topology",
     icon: "activity",
+  },
+  {
+    id: "liveflow",
+    label: "Live Flow",
+    shortLabel: "Flow",
+    description: "Operational Twin from real runtime flow events",
+    icon: "workflow",
   },
   {
     id: "finance",
