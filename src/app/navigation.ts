@@ -1,6 +1,6 @@
 import type { IconName } from "../components/shared/Icon";
 
-export type AppRoute = "overview" | "managed" | "approvals" | "agents" | "workflows" | "knowledge" | "history" | "batch" | "rpa" | "atlas" | "mcp" | "settings";
+export type AppRoute = "overview" | "ecosystem" | "finance" | "managed" | "approvals" | "agents" | "workflows" | "knowledge" | "history" | "batch" | "rpa" | "atlas" | "mcp" | "settings";
 
 export type NavigationItem = {
   id: AppRoute;
@@ -24,6 +24,20 @@ export const navigationItems: NavigationItem[] = [
     shortLabel: "Agents",
     description: "Agent availability and current responsibility",
     icon: "agents",
+  },
+  {
+    id: "ecosystem",
+    label: "Ecosystem",
+    shortLabel: "Eco",
+    description: "Market, Nexus, Logistics, Ledger, and ArchiveOS topology",
+    icon: "activity",
+  },
+  {
+    id: "finance",
+    label: "Ecosystem Finance",
+    shortLabel: "Finance",
+    description: "Synthetic settlement economy, cash, exports, and imports",
+    icon: "health",
   },
   {
     id: "managed",

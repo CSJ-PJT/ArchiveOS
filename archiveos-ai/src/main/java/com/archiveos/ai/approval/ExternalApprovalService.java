@@ -11,6 +11,8 @@ import com.archiveos.ai.obsidian.ObsidianRagService;
 import com.archiveos.ai.obsidian.RagAnswer;
 import com.archiveos.ai.policy.PolicyEvidenceService;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -33,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ExternalApprovalService {
     private static final BigDecimal HIGH_AMOUNT_THRESHOLD = BigDecimal.valueOf(3_000_000);
+    private static final List<String> MARKET_REVIEW_EVENTS = List.of("ORDER_REQUIRES_REVIEW", "LOW_MARGIN_ORDER_DETECTED", "HIGH_RISK_ORDER_DETECTED");
     private final ExternalApprovalRepository repository;
     private final AuditLogService audit;
     private final NotificationService notifications;
@@ -129,6 +132,57 @@ public class ExternalApprovalService {
         return response(repository.detail(string(created.get("approval_request_id"))), false);
     }
 
+    @Transactional
+    public Map<String, Object> marketReviewEvent(JsonNode body) {
+        requireObject(body);
+        String eventType = requiredText(body, "eventType").toUpperCase(Locale.ROOT);
+        if (!MARKET_REVIEW_EVENTS.contains(eventType)) {
+            throw new ExternalApprovalValidationException("Unsupported Archive-Market review eventType: " + eventType);
+        }
+        String eventId = optionalText(body, "eventId", "MKT-EVT-" + UUID.randomUUID());
+        String orderId = optionalText(body, "orderId", textFromMetadata(metadata(body.get("metadata")), "orderId"));
+        if (orderId == null || orderId.isBlank()) orderId = eventId;
+        String correlationId = optionalText(body, "correlationId", "market-" + eventId);
+        String currency = optionalText(body, "currency", "KRW").toUpperCase(Locale.ROOT);
+        BigDecimal amount = firstAmount(body, "amount", "orderAmount", "totalAmount", "revenueAmount", "marginLoss", "expectedLoss");
+        String severity = optionalText(body, "severity", severityForMarketEvent(eventType));
+
+        ObjectNode approval = JsonNodeFactory.instance.objectNode();
+        approval.put("source", "Archive-Market");
+        approval.put("sourceService", "Archive-Market");
+        approval.put("targetSystemId", "archive-market");
+        approval.put("correlationId", correlationId);
+        approval.put("transactionId", "MKT-" + orderId);
+        approval.put("amount", amount);
+        approval.put("currency", currency);
+        approval.put("reason", reasonForMarketEvent(eventType, orderId));
+        approval.put("policyQuestion", policyQuestionForMarketEvent(eventType));
+        approval.put("eventId", eventId);
+        ObjectNode metadata = JsonNodeFactory.instance.objectNode();
+        metadata.put("eventType", eventType);
+        metadata.put("eventId", eventId);
+        metadata.put("orderId", orderId);
+        metadata.put("severity", severity);
+        metadata.put("syntheticData", true);
+        metadata.put("sourceSystem", "Archive-Market");
+        copyMetadata(body.get("metadata"), metadata);
+        approval.set("metadata", metadata);
+        ObjectNode callback = JsonNodeFactory.instance.objectNode();
+        callback.put("targetSystemId", "archive-market");
+        callback.put("callbackPath", "/api/approvals/callback");
+        approval.set("callback", callback);
+
+        Map<String, Object> result = request(approval);
+        audit.recordEvent("market_review_event_consumed", "external_approval", string(result.get("approvalRequestId")), correlationId,
+                Map.of("source", "Archive-Market", "eventType", eventType, "orderId", orderId));
+        if (ecosystem != null) {
+            ecosystem.recordTimeline(null, correlationId, "Archive-Market", eventType,
+                    "market_order", orderId, "Archive-Market review event consumed by ArchiveOS",
+                    Map.of("approvalRequestId", result.get("approvalRequestId"), "severity", severity, "syntheticData", true));
+        }
+        return result;
+    }
+
     public List<Map<String, Object>> list(int limit) {
         return repository.list(limit).stream().map(request -> {
             Map<String, Object> value = new LinkedHashMap<>(request);
@@ -180,7 +234,7 @@ public class ExternalApprovalService {
                     "external_approval", approvalRequestId, "External approval " + normalized,
                     Map.of("decision", normalized, "transactionId", request.get("transaction_id")));
         }
-        if ("REJECTED".equals(normalized)) notifications.send("⛔ Ledger approval rejected: " + approvalRequestId);
+        if ("REJECTED".equals(normalized)) notifications.send("Approval rejected: " + approvalRequestId + " (" + request.get("source_service") + ")");
         return detail(approvalRequestId);
     }
 
@@ -233,6 +287,16 @@ public class ExternalApprovalService {
     private void callback(String approvalRequestId, String decision, String actor, String comment) {
         Map<String, Object> request = repository.find(approvalRequestId);
         String correlationId = string(request.get("correlation_id"));
+        String targetSystemId = string(request.get("target_system_id"));
+        if (targetSystemId == null || targetSystemId.isBlank()) targetSystemId = string(request.get("callback_target"));
+        if (targetSystemId != null && !targetSystemId.isBlank() && !"archive-ledger".equalsIgnoreCase(targetSystemId)) {
+            repository.insertCallback(approvalRequestId, targetSystemId, null, "CALLBACK_SKIPPED", 0,
+                    "Callback is not configured for " + targetSystemId + ".", false);
+            repository.updateCallbackState(approvalRequestId, "CALLBACK_SKIPPED", 0, "Callback is not configured for " + targetSystemId + ".");
+            audit.recordEvent("external_approval_callback_skipped", "external_approval", approvalRequestId, correlationId,
+                    Map.of("targetSystemId", targetSystemId, "reason", "callback_not_configured"));
+            return;
+        }
         Map<String, Object> body = Map.of(
                 "approvalRequestId", approvalRequestId,
                 "transactionId", request.get("transaction_id"),
@@ -300,7 +364,7 @@ public class ExternalApprovalService {
 
     private void notifyRequested(Map<String, Object> request) {
         String priority = priority(request);
-        notifications.send("🧾 Ledger approval required (" + priority + "): " + request.get("transaction_id") + " " + request.get("amount") + " " + request.get("currency"));
+        notifications.send("Approval required (" + priority + ", " + request.get("source_service") + "): " + request.get("transaction_id") + " " + request.get("amount") + " " + request.get("currency"));
     }
 
     private String priority(Map<String, Object> request) {
@@ -314,8 +378,8 @@ public class ExternalApprovalService {
 
     private void validateSynthetic(Map<String, Object> values) {
         String source = string(values.get("source")).toLowerCase(Locale.ROOT);
-        if (!source.contains("ledger") && !source.contains("logitics") && !source.contains("logistics") && !source.contains("nexus")) {
-            throw new ExternalApprovalValidationException("source must identify Archive-Ledger, Archive-Logistics, or Archive-Nexus.");
+        if (!source.contains("ledger") && !source.contains("logitics") && !source.contains("logistics") && !source.contains("nexus") && !source.contains("market")) {
+            throw new ExternalApprovalValidationException("source must identify Archive-Market, Archive-Ledger, Archive-Logistics, or Archive-Nexus.");
         }
         Map<String, Object> metadata = map(values.get("metadata"));
         List<String> forbidden = List.of("cardNumber", "accountNumber", "residentRegistrationNumber", "phoneNumber", "ssn", "rrn");
@@ -353,6 +417,21 @@ public class ExternalApprovalService {
         return node.decimalValue();
     }
 
+    private BigDecimal firstAmount(JsonNode body, String... names) {
+        for (String name : names) {
+            JsonNode value = body.get(name);
+            if (value != null && value.isNumber()) return value.decimalValue();
+        }
+        JsonNode metadata = body.get("metadata");
+        if (metadata != null && metadata.isObject()) {
+            for (String name : names) {
+                JsonNode value = metadata.get(name);
+                if (value != null && value.isNumber()) return value.decimalValue();
+            }
+        }
+        return BigDecimal.ZERO;
+    }
+
     private Map<String, Object> metadata(JsonNode node) {
         if (node == null || node.isNull()) return Map.of();
         if (!node.isObject()) throw new ExternalApprovalValidationException("metadata must be an object.");
@@ -388,5 +467,33 @@ public class ExternalApprovalService {
     private String textFromMetadata(Object metadata, String key) {
         Object value = map(metadata).get(key);
         return value == null ? null : String.valueOf(value);
+    }
+
+    private void copyMetadata(JsonNode source, ObjectNode target) {
+        if (source == null || !source.isObject()) return;
+        source.fields().forEachRemaining(entry -> {
+            if (!target.has(entry.getKey())) target.set(entry.getKey(), entry.getValue());
+        });
+    }
+
+    private String severityForMarketEvent(String eventType) {
+        return "HIGH_RISK_ORDER_DETECTED".equals(eventType) ? "HIGH" : "LOW_MARGIN_ORDER_DETECTED".equals(eventType) ? "HIGH" : "MEDIUM";
+    }
+
+    private String reasonForMarketEvent(String eventType, String orderId) {
+        return switch (eventType) {
+            case "ORDER_REQUIRES_REVIEW" -> "Archive-Market order " + orderId + " requires PM review before downstream production or settlement.";
+            case "LOW_MARGIN_ORDER_DETECTED" -> "Archive-Market order " + orderId + " has low synthetic margin and requires profitability review.";
+            case "HIGH_RISK_ORDER_DETECTED" -> "Archive-Market order " + orderId + " is classified as high risk and requires manual approval.";
+            default -> "Archive-Market order " + orderId + " requires review.";
+        };
+    }
+
+    private String policyQuestionForMarketEvent(String eventType) {
+        return switch (eventType) {
+            case "LOW_MARGIN_ORDER_DETECTED" -> "Why does a low-margin synthetic commerce order require review?";
+            case "HIGH_RISK_ORDER_DETECTED" -> "Why does a high-risk synthetic commerce order require manual approval?";
+            default -> "Why does this Archive-Market synthetic order require PM review?";
+        };
     }
 }

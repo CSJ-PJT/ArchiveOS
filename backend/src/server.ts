@@ -151,6 +151,7 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Market Orders", method: "GET", path: "/api/integrations/market/orders", service: "runtime", description: "Archive-Market synthetic order list proxy." },
   { name: "Market Claims", method: "GET", path: "/api/integrations/market/claims", service: "runtime", description: "Archive-Market synthetic claim list proxy." },
   { name: "Market Returns", method: "GET", path: "/api/integrations/market/returns", service: "runtime", description: "Archive-Market synthetic return list proxy." },
+  { name: "Market Review Event Ingest", method: "POST", path: "/api/integrations/market/events/review", service: "runtime", description: "Consumes ORDER_REQUIRES_REVIEW, LOW_MARGIN_ORDER_DETECTED, HIGH_RISK_ORDER_DETECTED into approval queue." },
   { name: "Logistics Summary", method: "GET", path: "/api/integrations/logitics/summary", service: "runtime", description: "Archive-Logistics operations summary proxy." },
   { name: "Logistics Outbox", method: "GET", path: "/api/integrations/logitics/outbox", service: "runtime", description: "Archive-Logistics outbox summary proxy." },
   { name: "Logistics Publish", method: "POST", path: "/api/integrations/logitics/outbox/publish", service: "runtime", description: "Safe-mode guarded Logistics outbox publish." },
@@ -251,7 +252,7 @@ app.post("/api/auth/logout", async (request, response) => {
 app.use("/api", async (request, response, next) => {
   const requestPath = normalizeApiPath(String(request.originalUrl ?? request.path));
   const adminRead = ["/api/security/status", "/api/runtime/public-access", "/api/audit/logs"].includes(requestPath);
-  const readOnlyPost = new Set(["/api/rag/ask", "/api/ecosystem/demo/dry-run", "/api/game/settlement-agency/simulate", "/api/game/survival/simulate"]);
+  const readOnlyPost = new Set(["/api/rag/ask", "/api/ecosystem/demo/dry-run", "/api/game/settlement-agency/simulate", "/api/game/survival/simulate", "/api/integrations/market/events/review"]);
   if (request.method === "POST" && readOnlyPost.has(requestPath)) {
     next();
     return;
@@ -852,6 +853,10 @@ app.get("/api/integrations/market/claims", async (request, response) => {
 
 app.get("/api/integrations/market/returns", async (request, response) => {
   await relayArchiveOsAi(response, "/api/integrations/market/returns", undefined, undefined, request);
+});
+
+app.post("/api/integrations/market/events/review", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/market/events/review", jsonProxyRequest("POST", request.body), undefined, request);
 });
 
 app.get("/api/integrations/logitics/summary", async (request, response) => {

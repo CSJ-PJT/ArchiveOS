@@ -45,7 +45,7 @@ export function EcosystemPage({ data, onRefresh }: { data: AppData; onRefresh: (
       <div>
         <span className="eyebrow">Archive Platform Control Tower</span>
         <h2>Ecosystem Overview</h2>
-        <p>Nexus → Logistics → Ledger → ArchiveOS 흐름을 health, approval, callback, policy evidence 기준으로 관제합니다.</p>
+        <p>Market → Nexus → Logistics → Ledger → ArchiveOS 흐름을 health, approval, callback, policy evidence 기준으로 관제합니다.</p>
       </div>
       <div className="inline-actions">
         <button className="button button-secondary" type="button" onClick={() => void dryRunScenario()}>Demo dry-run</button>
@@ -81,7 +81,7 @@ export function EcosystemPage({ data, onRefresh }: { data: AppData; onRefresh: (
         </div>
       </SectionCard>
 
-      <SectionCard title="Topology" eyebrow="Nexus → Logistics → Ledger → ArchiveOS" className="span-5">
+      <SectionCard title="Topology" eyebrow="Market → Nexus → Logistics → Ledger → ArchiveOS" className="span-5">
         <div className="queue-bars">
           {(topology?.nodes || []).map((node) => <div className="history-row" key={node.id}>
             <summary><strong>{node.label}</strong><StatusBadge status={node.status}>{node.status}</StatusBadge><span>{node.type}</span></summary>

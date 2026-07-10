@@ -11,7 +11,7 @@ const overviewViewModel = readFileSync("src/lib/viewModels/overview.ts", "utf-8"
 const ledgerApprovals = readFileSync("src/pages/LedgerApprovalsPage.tsx", "utf-8");
 const ecosystemPage = readFileSync("src/pages/EcosystemPage.tsx", "utf-8");
 
-for (const label of ["Overview", "Agents", "Managed Systems", "Workflows", "Ledger Approvals", "Knowledge", "History", "Batch", "RPA", "Settings"]) {
+for (const label of ["Overview", "Agents", "Ecosystem", "Ecosystem Finance", "Managed Systems", "Workflows", "Ledger Approvals", "Knowledge", "History", "Batch", "RPA", "Settings"]) {
   if (!navigation.includes(label)) {
     throw new Error(`Missing final navigation label: ${label}`);
   }
@@ -67,7 +67,7 @@ for (const approvalContract of ["getExternalApprovals", "decideExternalApproval"
   }
 }
 
-for (const ecosystemContract of ["getEcosystemSummary", "getEcosystemTopology", "runEcosystemDryRun", "Ecosystem Overview", "Nexus → Logistics → Ledger → ArchiveOS", "Callback Outbox"]) {
+for (const ecosystemContract of ["getEcosystemSummary", "getEcosystemTopology", "runEcosystemDryRun", "Ecosystem Overview", "Market → Nexus → Logistics → Ledger → ArchiveOS", "Callback Outbox"]) {
   if (!backendApi.includes(ecosystemContract) && !appShell.includes(ecosystemContract) && !ecosystemPage.includes(ecosystemContract) && !ledgerApprovals.includes(ecosystemContract)) {
     throw new Error(`Ecosystem Control Tower contract missing: ${ecosystemContract}`);
   }

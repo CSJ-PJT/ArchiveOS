@@ -49,7 +49,7 @@ class ExternalApprovalServiceTest {
         verify(repository).insertEvidence(any(), eq("RULE_FALLBACK"), any(), any(), any(), any());
         verify(audit).recordEvent(eq("external_approval_requested"), eq("external_approval"), any(), eq("ledger-1"), any());
         verify(audit).recordEvent(eq("external_approval_fallback_evidence_used"), eq("external_approval"), any(), eq("ledger-1"), any());
-        verify(notifications).send(org.mockito.ArgumentMatchers.contains("Ledger approval required"));
+        verify(notifications).send(org.mockito.ArgumentMatchers.contains("Approval required"));
     }
 
     @Test void duplicateCorrelationDoesNotCreateNewApproval() throws Exception {
@@ -84,6 +84,61 @@ class ExternalApprovalServiceTest {
     @Test void criticalSeverityIsCalculatedForHighRiskRequests() {
         ExternalApprovalService service = new ExternalApprovalService(Mockito.mock(ExternalApprovalRepository.class), audit(), Mockito.mock(NotificationService.class), HttpClient.newHttpClient(), "", "", false);
         assertThat(service.configStatus()).containsEntry("baseUrlConfigured", false).containsEntry("callbackTokenConfigured", false);
+    }
+
+    @Test void marketReviewEventCreatesPendingApproval() throws Exception {
+        ExternalApprovalRepository repository = Mockito.mock(ExternalApprovalRepository.class);
+        ExternalApprovalService service = new ExternalApprovalService(repository, audit(), Mockito.mock(NotificationService.class), HttpClient.newHttpClient(), "", "", false);
+        when(repository.findDuplicate("market-evt-1", "MKT-ORD-1")).thenReturn(null);
+        when(repository.createRequest(any())).thenAnswer(invocation -> {
+            Map<String, Object> values = invocation.getArgument(0);
+            return Map.of(
+                    "approval_request_id", values.get("approval_request_id"),
+                    "status", "PENDING",
+                    "correlation_id", "market-evt-1",
+                    "transaction_id", "MKT-ORD-1",
+                    "amount", java.math.BigDecimal.valueOf(4_800_000),
+                    "currency", "KRW",
+                    "metadata", Map.of("severity", "HIGH", "eventType", "HIGH_RISK_ORDER_DETECTED"));
+        });
+        when(repository.detail(any())).thenAnswer(invocation -> Map.of(
+                "approval_request_id", invocation.getArgument(0),
+                "status", "PENDING",
+                "correlation_id", "market-evt-1"));
+
+        Map<String, Object> result = service.marketReviewEvent(json.readTree("""
+                {
+                  "eventType": "HIGH_RISK_ORDER_DETECTED",
+                  "eventId": "evt-1",
+                  "orderId": "ORD-1",
+                  "correlationId": "market-evt-1",
+                  "amount": 4800000,
+                  "currency": "KRW",
+                  "metadata": { "syntheticData": true }
+                }
+                """));
+
+        assertThat(result).containsEntry("ok", true).containsEntry("status", "PENDING");
+        verify(repository).createRequest(org.mockito.ArgumentMatchers.argThat(values ->
+                "Archive-Market".equals(values.get("source"))
+                        && "archive-market".equals(values.get("target_system_id"))
+                        && "evt-1".equals(values.get("event_id"))));
+    }
+
+    @Test void nonLedgerApprovalSkipsCallback() throws Exception {
+        ExternalApprovalRepository repository = Mockito.mock(ExternalApprovalRepository.class);
+        ExternalApprovalService service = new ExternalApprovalService(repository, audit(), Mockito.mock(NotificationService.class), HttpClient.newHttpClient(), "http://127.0.0.1:59999", "", true);
+        Map<String, Object> marketRequest = request("APR-MARKET-1");
+        marketRequest.put("target_system_id", "archive-market");
+        marketRequest.put("source_service", "Archive-Market");
+        when(repository.detail("APR-MARKET-1")).thenReturn(marketRequest);
+        when(repository.find("APR-MARKET-1")).thenReturn(marketRequest);
+        when(repository.insertDecision(eq("APR-MARKET-1"), eq("APPROVED"), any(), any())).thenReturn(Map.of("decision", "APPROVED"));
+
+        service.decide("APR-MARKET-1", "APPROVED", json.readTree("{\"comment\":\"market review complete\"}"));
+
+        verify(repository).insertCallback(eq("APR-MARKET-1"), eq("archive-market"), eq(null), eq("CALLBACK_SKIPPED"), eq(0), org.mockito.ArgumentMatchers.contains("archive-market"), eq(false));
+        verify(repository).updateCallbackState(eq("APR-MARKET-1"), eq("CALLBACK_SKIPPED"), eq(0), org.mockito.ArgumentMatchers.contains("archive-market"));
     }
 
     @Test void highAmountApprovalIsListedAsHighPriority() {
