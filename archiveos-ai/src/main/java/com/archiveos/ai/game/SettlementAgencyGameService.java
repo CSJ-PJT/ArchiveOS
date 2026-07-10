@@ -75,7 +75,7 @@ public class SettlementAgencyGameService {
                 "infiniteLoopGuard", "Events with hop > maxHop are ignored and processed idempotency keys must not be replayed."
         ));
         if (ledgerError != null) response.put("ledgerSimulationError", ledgerError);
-        ensureMarketService(response);
+        ensureMarketService(response, request);
         persistFinance(response);
         return response;
     }
@@ -107,9 +107,10 @@ public class SettlementAgencyGameService {
             unavailable.put("marketDataError", result.errorMessage());
             return unavailable;
         }
-        Map<String, Object> body = result.body();
+        Map<String, Object> body = responseData(result.body());
         Map<String, Object> orders = body.get("orders") instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
-        Map<String, Object> finance = body.get("finance") instanceof Map<?, ?> map ? (Map<String, Object>) map : body;
+        Map<String, Object> finance = body.get("economy") instanceof Map<?, ?> map ? (Map<String, Object>) map
+                : body.get("finance") instanceof Map<?, ?> map ? (Map<String, Object>) map : body;
         Map<String, Object> preset = new LinkedHashMap<>();
         preset.put("marketDataStatus", "HEALTHY");
         putIfPresent(preset, "marketSalesRevenue", firstNonNull(finance.get("totalRevenue"), finance.get("revenue"), body.get("totalRevenue")));
@@ -120,14 +121,25 @@ public class SettlementAgencyGameService {
     }
 
     @SuppressWarnings("unchecked")
-    private void ensureMarketService(Map<String, Object> response) {
+    private Map<String, Object> responseData(Map<String, Object> response) {
+        Object data = response.get("data");
+        return data instanceof Map<?, ?> map ? (Map<String, Object>) map : response;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void ensureMarketService(Map<String, Object> response, Map<String, Object> request) {
         Object servicesValue = response.get("services");
         if (!(servicesValue instanceof Map<?, ?> rawServices)) return;
         Map<String, Object> services = (Map<String, Object>) rawServices;
         if (services.containsKey("market")) return;
-        services.put("market", economics("Archive-Market", bd("40000000"), bd("26000000"), bd("9520000"),
+        BigDecimal revenue = money(request.get("marketSalesRevenue"));
+        BigDecimal cost = money(request.get("marketRefundCost"))
+                .add(money(request.get("marketClaimCost")))
+                .add(money(request.get("marketProductionRequestCost")))
+                .add(money(request.get("marketLedgerSettlementFee")));
+        services.put("market", economics("Archive-Market", money(request.get("marketInitialCash")), revenue, cost,
                 "Synthetic commerce revenue minus refund, claim, production request, and Ledger settlement fees."));
-        response.put("marketDataStatus", "FALLBACK_SYNTHETIC");
+        response.put("marketDataStatus", "HEALTHY");
     }
 
     private Map<String, Object> simulateLocally(Map<String, Object> r) {

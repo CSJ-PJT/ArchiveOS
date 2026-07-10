@@ -4,6 +4,7 @@ import com.archiveos.ai.integration.ledger.LedgerClient;
 import com.archiveos.ai.integration.logitics.LogiticsClient;
 import com.archiveos.ai.integration.market.MarketClient;
 import com.archiveos.ai.integration.nexus.NexusClient;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class EcosystemService {
+    private static final Duration SNAPSHOT_TTL = Duration.ofSeconds(60);
+
     private final EcosystemProperties properties;
     private final EcosystemRepository repository;
     private final NexusClient nexus;
@@ -61,12 +64,13 @@ public class EcosystemService {
     }
 
     public Map<String, Object> topology() {
+        Map<String, Object> services = currentOrCheck(traceId());
         return Map.of(
                 "nodes", List.of(
-                        node("archive-market", "Archive-Market", "MARKET", latestStatus("MARKET")),
-                        node("archive-nexus", "Archive-Nexus", "DOMAIN", latestStatus("NEXUS")),
-                        node("archive-logitics", "Archive-Logistics", "LOGISTICS", latestStatus("LOGITICS")),
-                        node("archive-ledger", "Archive-Ledger", "FINANCE", latestStatus("LEDGER")),
+                        node("archive-market", "Archive-Market", "MARKET", serviceStatus(services, "market")),
+                        node("archive-nexus", "Archive-Nexus", "DOMAIN", serviceStatus(services, "nexus")),
+                        node("archive-logitics", "Archive-Logistics", "LOGISTICS", serviceStatus(services, "logitics")),
+                        node("archive-ledger", "Archive-Ledger", "FINANCE", serviceStatus(services, "ledger")),
                         node("archive-os", "ArchiveOS", "CONTROL_TOWER", "HEALTHY")),
                 "edges", List.of(
                         edge("archive-market", "archive-nexus", "production / shipment request"),
@@ -118,7 +122,7 @@ public class EcosystemService {
     }
 
     private Map<String, Object> currentOrCheck(String traceId) {
-        if (List.of("MARKET", "NEXUS", "LOGITICS", "LEDGER").stream().allMatch(this::hasSnapshot)) {
+        if (List.of("MARKET", "NEXUS", "LOGITICS", "LEDGER").stream().allMatch(this::hasFreshSnapshot)) {
             Map<String, Object> services = new LinkedHashMap<>();
             services.put("market", fromSnapshot("MARKET"));
             services.put("nexus", fromSnapshot("NEXUS"));
@@ -187,9 +191,23 @@ public class EcosystemService {
     }
 
     private Map<String, Object> latest(String type) { return repository.latestHealth(type); }
-    private boolean hasSnapshot(String type) {
+    private boolean hasFreshSnapshot(String type) {
         Map<String, Object> snapshot = repository.latestHealth(type);
-        return snapshot != null && snapshot.get("status") != null;
+        return snapshot != null && snapshot.get("status") != null && !isStale(snapshot.get("checked_at"));
+    }
+    private boolean isStale(Object checkedAt) {
+        if (checkedAt == null) return true;
+        try {
+            return Instant.parse(String.valueOf(checkedAt)).isBefore(Instant.now().minus(SNAPSHOT_TTL));
+        } catch (RuntimeException error) {
+            return true;
+        }
+    }
+    private String serviceStatus(Map<String, Object> services, String key) {
+        Object value = services.get(key);
+        if (!(value instanceof Map<?, ?> service)) return "UNKNOWN";
+        Object status = service.get("status");
+        return status == null ? "UNKNOWN" : String.valueOf(status);
     }
     private Map<String, Object> disabled(EcosystemProperties.ServiceConfig config) { return serviceMap(config, "DISABLED", null, Map.of(), "Service is disabled."); }
     private Map<String, Object> serviceMap(EcosystemProperties.ServiceConfig config, String status, Object checkedAt, Map<String, Object> summary, String error) {
@@ -216,11 +234,13 @@ public class EcosystemService {
     }
 
     private Map<String, Object> normalizeMarketSummary(IntegrationResult operations, IntegrationResult economy, IntegrationResult outbox) {
-        Map<String, Object> source = !economy.body().isEmpty() ? economy.body() : operations.body();
+        Map<String, Object> operationsData = responseData(operations.body());
+        Map<String, Object> economyData = responseData(economy.body());
+        Map<String, Object> source = !economyData.isEmpty() ? economyData : operationsData;
         Map<String, Object> orders = firstMap(source, "orders", "orderSummary", "order_summary");
         Map<String, Object> risk = firstMap(source, "risk", "bankruptcy", "bankruptcyRisk");
         Map<String, Object> finance = firstMap(source, "finance", "economy", "cash");
-        Map<String, Object> outboxBody = outbox.body();
+        Map<String, Object> outboxBody = responseData(outbox.body());
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("orders", Map.of(
                 "total", number(source, orders, "total", "totalOrders", "orderCount"),
@@ -233,17 +253,22 @@ public class EcosystemService {
         value.put("profit", decimal(source, finance, "profit", "profitAmount"));
         value.put("cashBalance", decimal(source, finance, "cashBalance", "cash", "balance"));
         value.put("burnRate", decimal(source, finance, "burnRate", "burn_rate"));
-        value.put("bankruptcyRisk", stringValue(firstNonNull(source.get("bankruptcyRisk"), risk.get("level"), risk.get("status")), "UNKNOWN"));
-        value.put("returnRate", decimal(source, orders, "returnRate", "return_rate"));
-        value.put("claimRate", decimal(source, orders, "claimRate", "claim_rate"));
-        value.put("highRiskOrders", number(source, orders, "highRiskOrders", "high_risk_orders"));
+        value.put("bankruptcyRisk", stringValue(firstNonNull(source.get("bankruptcyRisk"), finance.get("bankruptcyRisk"), risk.get("bankruptcyRisk"), risk.get("level"), risk.get("status")), "UNKNOWN"));
+        value.put("returnRate", decimal(source, risk, "returnRate", "return_rate"));
+        value.put("claimRate", decimal(source, risk, "claimRate", "claim_rate"));
+        value.put("highRiskOrders", number(source, risk, "highRiskOrders", "high_risk_orders"));
         value.put("outbox", Map.of(
                 "pending", number(outboxBody, outboxBody, "pending", "pendingCount"),
                 "failed", number(outboxBody, outboxBody, "failed", "failedCount")));
         value.put("syntheticData", true);
-        value.put("operations", operations.body());
-        value.put("marketEconomy", economy.body());
+        value.put("operations", operationsData);
+        value.put("marketEconomy", economyData);
         return value;
+    }
+
+    private Map<String, Object> responseData(Map<String, Object> response) {
+        Map<String, Object> data = firstMap(response, "data");
+        return data.isEmpty() ? response : data;
     }
 
     private Map<String, Object> firstMap(Map<String, Object> source, String... keys) {
