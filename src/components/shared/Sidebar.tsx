@@ -39,10 +39,10 @@ export function Sidebar({
         </div>
         <div>
           <strong>ArchiveOS</strong>
-          <span>Operations Console</span>
+          <span>운영 콘솔</span>
         </div>
       </div>
-      <nav className="sidebar-nav" aria-label="ArchiveOS sections">
+      <nav className="sidebar-nav" aria-label="ArchiveOS 메뉴">
         {navigationItems.filter((item) => item.id !== "mcp" || role !== "PUBLIC").map((item) => (
           <button
             className={`sidebar-link ${route === item.id ? "active" : ""}`}
@@ -59,8 +59,8 @@ export function Sidebar({
         ))}
       </nav>
       <div className="sidebar-footer">
-        <span>Platform status</span>
-        <StatusBadge status={health}>{loading ? "Initializing" : health}</StatusBadge>
+        <span>플랫폼 상태</span>
+        <StatusBadge status={health}>{loading ? "초기화 중" : health}</StatusBadge>
         <small>
           {displayedBranch} · {displayedCommit}
         </small>

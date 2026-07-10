@@ -12,7 +12,7 @@ const ledgerApprovals = readFileSync("src/pages/LedgerApprovalsPage.tsx", "utf-8
 const ecosystemPage = readFileSync("src/pages/EcosystemPage.tsx", "utf-8");
 const liveFlowPage = readFileSync("src/pages/LiveFlowPage.tsx", "utf-8");
 
-for (const label of ["Overview", "Agents", "Ecosystem", "Live Flow", "Workforce", "Ecosystem Finance", "Managed Systems", "Workflows", "Ledger Approvals", "Knowledge", "History", "Batch", "RPA", "Settings"]) {
+for (const label of ["운영 개요", "에이전트", "에코시스템", "실시간 흐름", "작업 역량", "재무 흐름", "관리 시스템", "작업 흐름", "Ledger 승인", "운영 지식", "이력", "배치", "RPA", "설정"]) {
   if (!navigation.includes(label)) {
     throw new Error(`Missing final navigation label: ${label}`);
   }
@@ -52,7 +52,7 @@ if (!appShell.includes("<OverviewPage") || !appShell.includes("<AgentsPage") || 
   throw new Error("AppShell is not composing the new page structure.");
 }
 
-for (const contract of ["sidebar-nav", "aria-current", "System Health", "Active Agents", "Critical Alerts", "Runtime Flow", "Attention Required"]) {
+for (const contract of ["sidebar-nav", "aria-current", "시스템 상태", "활성 에이전트", "중요 알림", "실행 흐름", "확인 필요"]) {
   if (!appShell.includes(contract) && !overview.includes(contract) && !sidebar.includes(contract)) {
     throw new Error(`Operator console contract missing: ${contract}`);
   }
@@ -68,19 +68,19 @@ for (const approvalContract of ["getExternalApprovals", "decideExternalApproval"
   }
 }
 
-for (const ecosystemContract of ["getEcosystemSummary", "getEcosystemTopology", "runEcosystemDryRun", "Ecosystem Overview", "Market → Nexus → Logistics → Ledger → ArchiveOS", "Callback Outbox"]) {
+for (const ecosystemContract of ["getEcosystemSummary", "getEcosystemTopology", "runEcosystemDryRun", "에코시스템 현황", "Market → Nexus → Logistics → Ledger → ArchiveOS", "Callback Outbox"]) {
   if (!backendApi.includes(ecosystemContract) && !appShell.includes(ecosystemContract) && !ecosystemPage.includes(ecosystemContract) && !ledgerApprovals.includes(ecosystemContract)) {
     throw new Error(`Ecosystem Control Tower contract missing: ${ecosystemContract}`);
   }
 }
 
-for (const liveFlowContract of ["getLiveFlowSummary", "refreshLiveFlow", "Live Flow / Operational Twin", "Synthetic Runtime Events", "No real customer, payment, account, or financial data"]) {
+for (const liveFlowContract of ["getLiveFlowSummary", "refreshLiveFlow", "실시간 흐름", "합성 런타임 이벤트", "실제 고객, 결제, 계좌, 금융 데이터는 사용하지 않습니다"]) {
   if (!backendApi.includes(liveFlowContract) && !appShell.includes(liveFlowContract) && !liveFlowPage.includes(liveFlowContract)) {
     throw new Error(`Live Flow contract missing: ${liveFlowContract}`);
   }
 }
 
-for (const workforceContract of ["getWorkforceOverview", "Operational Workforce", "AI Agent Recommendations", "Synthetic workforce"]) {
+for (const workforceContract of ["getWorkforceOverview", "작업 역량 현황", "에이전트 제안", "Synthetic workforce"]) {
   if (!backendApi.includes(workforceContract) && !appShell.includes(workforceContract) && !readFileSync("src/pages/WorkforcePage.tsx", "utf-8").includes(workforceContract)) {
     throw new Error(`Workforce contract missing: ${workforceContract}`);
   }

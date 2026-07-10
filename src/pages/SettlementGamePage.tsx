@@ -55,15 +55,15 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
         : {};
       const result = await simulateSettlementAgencyGame(payload, true);
       setGame(result);
-      setMessage(`${stress ? "Stress" : "Default"} dry-run complete - ${result.status} - ${result.bankruptcyRisk}`);
+      setMessage(`${stress ? "스트레스" : "기본"} dry-run 완료 - ${result.status} - ${result.bankruptcyRisk}`);
       await onRefresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Ecosystem finance simulation failed.");
+      setMessage(error instanceof Error ? error.message : "에코시스템 재무 흐름 확인에 실패했습니다.");
     }
   }
 
   if (!snapshot) {
-    return <div className="empty-state">Ecosystem finance control is unavailable. Check archiveos-ai settlement endpoints.</div>;
+    return <div className="empty-state">에코시스템 재무 흐름을 불러오지 못했습니다. archiveos-ai 정산 API 상태를 확인하세요.</div>;
   }
 
   const services = Object.entries(snapshot.services || {});
@@ -74,45 +74,44 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
     <div className="page-stack">
       <header className="page-heading">
         <div>
-          <span className="eyebrow">ECOSYSTEM FINANCE - Synthetic Data only</span>
-          <h2>ArchiveOS - Ecosystem Finance Control</h2>
+          <span className="eyebrow">에코시스템 재무 - Synthetic Data 전용</span>
+          <h2>에코시스템 재무 흐름</h2>
           <p>
-            Monitors the synthetic settlement loop where Nexus manufactures, Logistics fulfills delivery, Ledger performs
-            daily settlement, Logistics receives settlement, and Logistics charges Nexus for manufacturing-linked service cost.
-            All intervention remains gated by safe-mode and approval.
+            Nexus의 제조, Logistics의 배송과 일정산 수신, Ledger의 정산·대사, Logistics의 제조 연계 비용 청구 흐름을 관제합니다.
+            모든 실행성 조치는 safe-mode와 승인 절차를 기준으로 통제합니다.
           </p>
         </div>
         <div className="inline-actions">
-          <button className="button button-secondary" type="button" onClick={() => void runDrySimulation(false)}>Default dry-run</button>
-          <button className="button button-primary" type="button" onClick={() => void runDrySimulation(true)}>Bankruptcy stress</button>
+          <button className="button button-secondary" type="button" onClick={() => void runDrySimulation(false)}>기본 dry-run</button>
+          <button className="button button-primary" type="button" onClick={() => void runDrySimulation(true)}>위험 상황 확인</button>
         </div>
       </header>
 
       {message ? <p className="small-note">{message}</p> : null}
       <p className="small-note">
-        Source: {snapshot.simulationSource} - Namespace: {snapshot.gameNamespace} - Safe-mode: {String(snapshot.safeMode)} - External write: {String(snapshot.allowExternalWrite)}
-        {snapshot.ledgerSimulationError ? ` - Ledger fallback reason: ${snapshot.ledgerSimulationError}` : ""}
+        소스: {snapshot.simulationSource} - 네임스페이스: {snapshot.gameNamespace} - Safe-mode: {String(snapshot.safeMode)} - 외부 write: {String(snapshot.allowExternalWrite)}
+        {snapshot.ledgerSimulationError ? ` - Ledger 대체 처리 사유: ${snapshot.ledgerSimulationError}` : ""}
       </p>
 
       <section className="kpi-command-grid">
-        <MetricCard label="Ecosystem cash" value={money(snapshot.ecosystemCashBalance)} status={riskStatus(snapshot.bankruptcyRisk)} description={`Run ${snapshot.simulationRunId}`} />
-        <MetricCard label="Daily profit" value={money(snapshot.ecosystemDailyProfit)} status={Number(snapshot.ecosystemDailyProfit) >= 0 ? "healthy" : "warning"} description={`Cycle ${snapshot.settlementCycleId}`} />
-        <MetricCard label="Bankruptcy risk" value={snapshot.bankruptcyRisk} status={riskStatus(snapshot.bankruptcyRisk)} description={snapshot.writePolicy} />
-        <MetricCard label="Agent proposals" value={proposals.length} status={proposals.length ? "waiting" : "healthy"} description="Proposal-only, approval required" />
+        <MetricCard label="전체 보유자금" value={money(snapshot.ecosystemCashBalance)} status={riskStatus(snapshot.bankruptcyRisk)} description={`Run ${snapshot.simulationRunId}`} />
+        <MetricCard label="일일 손익" value={money(snapshot.ecosystemDailyProfit)} status={Number(snapshot.ecosystemDailyProfit) >= 0 ? "healthy" : "warning"} description={`Cycle ${snapshot.settlementCycleId}`} />
+        <MetricCard label="재무 위험" value={snapshot.bankruptcyRisk} status={riskStatus(snapshot.bankruptcyRisk)} description={snapshot.writePolicy} />
+        <MetricCard label="에이전트 제안" value={proposals.length} status={proposals.length ? "waiting" : "healthy"} description="제안 전용, 승인 필요" />
       </section>
 
       <section className="overview-layout">
-        <SectionCard title="Settlement Operating Flow" eyebrow="Nexus -> Logistics -> Ledger -> Logistics -> Nexus" className="span-12">
+        <SectionCard title="정산 운영 흐름" eyebrow="Nexus -> Logistics -> Ledger -> Logistics -> Nexus" className="span-12">
           <div className="command-flow settlement-flow">
-            <FlowStage index={1} title="Nexus manufactures" status="working" summary="production revenue, material cost, maintenance cost" />
-            <FlowStage index={2} title="Logistics fulfills" status="working" summary="route, ETA, delivery cost, delay risk" />
-            <FlowStage index={3} title="Ledger settles daily" status="waiting" summary="ledger entries, settlement, reconciliation" />
-            <FlowStage index={4} title="Logistics receives" status="healthy" summary="settlement agency result and service fee" />
-            <FlowStage index={5} title="Nexus is charged" status="warning" summary="manufacturing-linked logistics settlement cost" terminal />
+            <FlowStage index={1} title="Nexus 제조" status="working" summary="생산 매출, 원자재 비용, 정비 비용" />
+            <FlowStage index={2} title="Logistics 배송 처리" status="working" summary="경로, ETA, 배송비, 지연 위험" />
+            <FlowStage index={3} title="Ledger 일일 정산" status="waiting" summary="원장, 정산, 대사" />
+            <FlowStage index={4} title="Logistics 정산 수신" status="healthy" summary="정산 결과와 서비스 수수료" />
+            <FlowStage index={5} title="Nexus 비용 반영" status="warning" summary="제조 연계 물류 정산 비용" terminal />
           </div>
         </SectionCard>
 
-        <SectionCard title="Service P&L Board" eyebrow="Cash balance / burn rate / bankruptcy risk" className="span-7">
+        <SectionCard title="서비스별 손익" eyebrow="보유자금 / 비용 소진 / 재무 위험" className="span-7">
           <div className="history-table">
             {services.map(([key, service]) => (
               <article className="history-row" key={key}>
@@ -122,62 +121,62 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
                   <span>{service.explanation}</span>
                 </summary>
                 <div className="detail-grid">
-                  <span>Cash before<strong>{money(service.cashBefore)}</strong></span>
-                  <span>Revenue<strong>{money(service.revenue)}</strong></span>
-                  <span>Cost<strong>{money(service.cost)}</strong></span>
-                  <span>Profit<strong>{money(service.profit)}</strong></span>
-                  <span>Cash after<strong>{money(service.cashAfter)}</strong></span>
-                  <span>Burn rate<strong>{money(service.burnRate)}</strong></span>
+                  <span>이전 보유자금<strong>{money(service.cashBefore)}</strong></span>
+                  <span>수익<strong>{money(service.revenue)}</strong></span>
+                  <span>비용<strong>{money(service.cost)}</strong></span>
+                  <span>손익<strong>{money(service.profit)}</strong></span>
+                  <span>현재 보유자금<strong>{money(service.cashAfter)}</strong></span>
+                  <span>비용 소진<strong>{money(service.burnRate)}</strong></span>
                 </div>
               </article>
             ))}
           </div>
         </SectionCard>
 
-        <SectionCard title="Persisted System Finance" eyebrow="DB-backed cash / exports / imports" className="span-5">
+        <SectionCard title="저장된 시스템 재무" eyebrow="DB 기준 보유자금 / 수출 / 수입" className="span-5">
           <div className="history-table">
             {Object.entries(persistedFinance?.systems || {}).map(([systemId, finance]) => (
               <article className="history-row" key={systemId}>
                 <summary>
                   <strong>{finance.service_name}</strong>
                   <StatusBadge status={riskStatus(finance.bankruptcy_risk)}>{finance.bankruptcy_risk}</StatusBadge>
-                  <span>Cash {money(finance.cash_balance)}</span>
+                  <span>보유자금 {money(finance.cash_balance)}</span>
                 </summary>
                 <div className="detail-grid">
-                  <span>Revenue<strong>{money(finance.revenue_amount)}</strong></span>
-                  <span>Cost<strong>{money(finance.cost_amount)}</strong></span>
-                  <span>Profit<strong>{money(finance.profit_amount)}</strong></span>
+                  <span>수익<strong>{money(finance.revenue_amount)}</strong></span>
+                  <span>비용<strong>{money(finance.cost_amount)}</strong></span>
+                  <span>손익<strong>{money(finance.profit_amount)}</strong></span>
                   <span>Tick<strong>{finance.tick_id}</strong></span>
                 </div>
-                <TradeList title="Exports" trades={finance.exports || []} />
-                <TradeList title="Imports" trades={finance.imports || []} />
+                <TradeList title="수출" trades={finance.exports || []} />
+                <TradeList title="수입" trades={finance.imports || []} />
               </article>
             ))}
-            {!Object.keys(persistedFinance?.systems || {}).length ? <div className="empty-state">Run a dry simulation to persist system finance snapshots and trade ledger rows.</div> : null}
+            {!Object.keys(persistedFinance?.systems || {}).length ? <div className="empty-state">Dry-run을 실행하면 시스템 재무 스냅샷과 거래 원장이 저장됩니다.</div> : null}
           </div>
         </SectionCard>
 
-        <SectionCard title="Finance Guard Rails" eyebrow="No infinite loop / no direct write" className="span-5">
+        <SectionCard title="재무 안전장치" eyebrow="무한 루프 방지 / 직접 write 차단" className="span-5">
           <div className="event-list compact">
             <article className="event-row">
-              <span>metadata</span>
+              <span>메타데이터</span>
               <strong>{snapshot.simulationRunId} / {snapshot.tickId}</strong>
-              <p>Each event includes simulationRunId, settlementCycleId, tickId, day, correlationId, hop, and maxHop.</p>
+              <p>각 이벤트에는 simulationRunId, settlementCycleId, tickId, day, correlationId, hop, maxHop이 포함됩니다.</p>
             </article>
             <article className="event-row">
-              <span>idempotency</span>
+              <span>중복 방지</span>
               <strong>{String(snapshot.processedEventGuard?.infiniteLoopGuard ?? "processed event guard enabled")}</strong>
-              <details><summary>guard detail</summary><pre>{stringifyMeta(snapshot.processedEventGuard)}</pre></details>
+              <details><summary>guard 상세</summary><pre>{stringifyMeta(snapshot.processedEventGuard)}</pre></details>
             </article>
             <article className="event-row">
-              <span>agent mode</span>
+              <span>에이전트 모드</span>
               <strong>{snapshot.agentMode}</strong>
-              <p>Each project agent makes proposals only. PM/Admin approval is required before any real write.</p>
+              <p>각 프로젝트 에이전트는 제안만 생성합니다. 실제 write 전에는 PM/Admin 승인이 필요합니다.</p>
             </article>
           </div>
         </SectionCard>
 
-        <SectionCard title="Service Agent Proposals" eyebrow="PM decision candidates" className="span-7">
+        <SectionCard title="서비스 에이전트 제안" eyebrow="PM 결정 후보" className="span-7">
           <div className="history-table">
             {proposals.map((proposal) => (
               <article className="history-row" key={proposal.proposalId}>
@@ -187,19 +186,19 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
                   <span>{proposal.summary}</span>
                 </summary>
                 <div className="detail-grid">
-                  <span>Target<strong>{proposal.targetService}</strong></span>
-                  <span>Expected cash impact<strong>{money(proposal.expectedCashImpact)}</strong></span>
-                  <span>Confidence<strong>{Math.round((proposal.confidence || 0) * 100)}%</strong></span>
+                  <span>대상<strong>{proposal.targetService}</strong></span>
+                  <span>예상 현금 영향<strong>{money(proposal.expectedCashImpact)}</strong></span>
+                  <span>신뢰도<strong>{Math.round((proposal.confidence || 0) * 100)}%</strong></span>
                   <span>Safe-mode<strong>{String(proposal.safeModeRequired)}</strong></span>
                 </div>
-                <details><summary>evidence</summary><pre>{stringifyMeta(proposal.evidence)}</pre></details>
+                <details><summary>근거</summary><pre>{stringifyMeta(proposal.evidence)}</pre></details>
               </article>
             ))}
-            {!proposals.length ? <div className="empty-state">No bankruptcy prevention proposal is required for this tick.</div> : null}
+            {!proposals.length ? <div className="empty-state">이번 tick에는 추가 재무 개입 제안이 필요하지 않습니다.</div> : null}
           </div>
         </SectionCard>
 
-        <SectionCard title="Synthetic Settlement Events" eyebrow="simulationRunId / tickId / maxHop" className="span-5">
+        <SectionCard title="Synthetic 정산 이벤트" eyebrow="simulationRunId / tickId / maxHop" className="span-5">
           <div className="event-list compact">
             {events.map((event) => (
               <article className="event-row" key={event.eventId}>
@@ -216,7 +215,7 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
 
       <p className="small-note">
         Last tick created {snapshot.createdAt ? formatTimeAgo(snapshot.createdAt) : "unknown"}.
-        All values are Synthetic Data / Demo Data and must not be treated as real finance, user, map, shipment, or delivery data.
+        모든 값은 Synthetic Data / Demo Data이며 실제 금융, 사용자, 지도, 출하, 배송 데이터로 취급하면 안 됩니다.
       </p>
     </div>
   );
