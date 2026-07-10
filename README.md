@@ -62,6 +62,17 @@ C:\Users\dan18\Desktop\Task\산출물
 - Approval 결정, callback, evidence, audit 이벤트는 추적 가능하게 남긴다.
 - Secret, webhook, token, private key는 UI/API/docs에 노출하지 않는다.
 
+## Internationalization
+
+ArchiveOS UI supports four display languages through the globe menu in the top-right corner.
+
+- Supported languages: 한국어, English, 日本語, 简体中文
+- Locale storage: `localStorage["archive.locale"]`
+- Fallback: unsupported locale values fall back to `ko`
+- Scope: user-facing UI labels, buttons, empty states, help text, and display-only status labels
+- Contract rule: API paths, event types, enum values, repository names, service names, trace IDs, correlation IDs, commands, file paths, and ports remain untranslated
+- Compatibility note: internal keys such as `logitics` may remain where existing API/event contracts require them
+
 ## Quick Start
 
 ```powershell
