@@ -80,20 +80,7 @@ import { SettlementGamePage } from "../pages/SettlementGamePage";
 import { Icon } from "../components/shared/Icon";
 import { Sidebar } from "../components/shared/Sidebar";
 import { ThemeProvider } from "../theme/ThemeProvider";
-
-const languageOptions = [
-  { code: "ko", label: "한국어" },
-  { code: "en", label: "English" },
-  { code: "ja", label: "日本語" },
-  { code: "zh", label: "中文" },
-] as const;
-
-type LanguageCode = (typeof languageOptions)[number]["code"];
-
-function readLanguage(): LanguageCode {
-  const saved = window.localStorage.getItem("archiveos-language");
-  return languageOptions.some((item) => item.code === saved) ? (saved as LanguageCode) : "ko";
-}
+import { applyLocale, languageOptions as i18nLanguageOptions, readStoredLocale, t, type Locale } from "../i18n";
 
 export type AppData = {
   loading: boolean;
@@ -181,13 +168,19 @@ function AppShellInner() {
   const [route, setRoute] = useState<AppRoute>("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [data, setData] = useState<AppData>(emptyData);
-  const [language, setLanguage] = useState<LanguageCode>(() => readLanguage());
+  const [language, setLanguage] = useState<Locale>(() => readStoredLocale());
 
   useEffect(() => {
-    window.localStorage.setItem("archiveos-language", language);
-    document.documentElement.lang = language;
-    document.documentElement.dataset.language = language;
+    applyLocale(language);
+    const observer = new MutationObserver(() => window.requestAnimationFrame(() => applyLocale(language)));
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
   }, [language]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => applyLocale(language), 0);
+    return () => window.clearTimeout(timer);
+  }, [data, language, route]);
 
   const refresh = useCallback(async () => {
     setData((current) => ({ ...current, loading: true }));
@@ -289,12 +282,12 @@ function AppShellInner() {
   );
 }
 
-function LanguageSelector({ value, onChange }: { value: LanguageCode; onChange: (value: LanguageCode) => void }) {
+function LanguageSelector({ value, onChange }: { value: Locale; onChange: (value: Locale) => void }) {
   return (
     <label className="language-selector" title="Display language">
       <span aria-hidden="true">🌐</span>
-      <select value={value} aria-label="Display language" onChange={(event) => onChange(event.target.value as LanguageCode)}>
-        {languageOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+      <select value={value} aria-label="Display language" onChange={(event) => onChange(event.target.value as Locale)}>
+        {i18nLanguageOptions.map((option) => <option key={option.code} value={option.code}>{t(option.labelKey, value)}</option>)}
       </select>
     </label>
   );
