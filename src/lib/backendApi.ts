@@ -740,8 +740,8 @@ export async function getLiveFlowEntity(entityId: string) {
 }
 
 export async function getWorkforceOverview() {
-  const response = await request<ApiEnvelope<WorkforceOverview>>("/api/workforce/overview");
-  return response.data;
+  const response = await request<ApiEnvelope<WorkforceOverview> | WorkforceOverview>("/api/workforce/overview");
+  return "data" in response ? response.data : response;
 }
 
 export async function getWorkforceBottlenecks() {

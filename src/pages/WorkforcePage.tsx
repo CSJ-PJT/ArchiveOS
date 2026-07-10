@@ -1,8 +1,9 @@
+import { useEffect, useState } from "react";
 import type { AppData } from "../app/AppShell";
 import { MetricCard } from "../components/shared/MetricCard";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import type { WorkforceServiceSummary } from "../lib/backendApi";
+import { getWorkforceOverview, type WorkforceOverview, type WorkforceServiceSummary } from "../lib/backendApi";
 import { formatTimeAgo, stringifyMeta } from "./pageUtils";
 
 function money(value: number | string | null | undefined) {
@@ -25,8 +26,42 @@ function statusTone(service: WorkforceServiceSummary) {
 }
 
 export function WorkforcePage({ data }: { data: AppData }) {
-  const workforce = data.workforce;
-  if (!workforce) return <div className="empty-state">작업 역량 현황을 불러오지 못했습니다. archiveos-ai workforce API 상태를 확인하세요.</div>;
+  const [fallbackWorkforce, setFallbackWorkforce] = useState<WorkforceOverview | null>(null);
+  const [fallbackError, setFallbackError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (data.workforce) {
+      setFallbackWorkforce(null);
+      setFallbackError(null);
+      return;
+    }
+
+    let cancelled = false;
+    getWorkforceOverview()
+      .then((overview) => {
+        if (!cancelled) {
+          setFallbackWorkforce(overview);
+          setFallbackError(null);
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) setFallbackError(error.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data.workforce]);
+
+  const workforce = data.workforce ?? fallbackWorkforce;
+  if (!workforce) {
+    return (
+      <div className="empty-state">
+        작업 역량 현황을 불러오지 못했습니다. archiveos-ai workforce API 상태를 확인하세요.
+        {fallbackError ? <span className="small-note">{fallbackError}</span> : null}
+      </div>
+    );
+  }
 
   const summary = workforce.summary;
   return (
