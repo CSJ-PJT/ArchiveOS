@@ -81,6 +81,20 @@ import { Icon } from "../components/shared/Icon";
 import { Sidebar } from "../components/shared/Sidebar";
 import { ThemeProvider } from "../theme/ThemeProvider";
 
+const languageOptions = [
+  { code: "ko", label: "한국어" },
+  { code: "en", label: "English" },
+  { code: "ja", label: "日本語" },
+  { code: "zh", label: "中文" },
+] as const;
+
+type LanguageCode = (typeof languageOptions)[number]["code"];
+
+function readLanguage(): LanguageCode {
+  const saved = window.localStorage.getItem("archiveos-language");
+  return languageOptions.some((item) => item.code === saved) ? (saved as LanguageCode) : "ko";
+}
+
 export type AppData = {
   loading: boolean;
   refreshedAt: string | null;
@@ -167,6 +181,13 @@ function AppShellInner() {
   const [route, setRoute] = useState<AppRoute>("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [data, setData] = useState<AppData>(emptyData);
+  const [language, setLanguage] = useState<LanguageCode>(() => readLanguage());
+
+  useEffect(() => {
+    window.localStorage.setItem("archiveos-language", language);
+    document.documentElement.lang = language;
+    document.documentElement.dataset.language = language;
+  }, [language]);
 
   const refresh = useCallback(async () => {
     setData((current) => ({ ...current, loading: true }));
@@ -256,11 +277,26 @@ function AppShellInner() {
         <header className="topbar">
           <button className="mobile-menu-button" type="button" aria-label="Open navigation" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>☰</button>
           <div><span className="eyebrow">ArchiveOS Control Tower</span><h1>{navigationItems.find((item) => item.id === route)?.label}</h1></div>
-          <div className="topbar-status"><span className="last-sync">Updated {data.refreshedAt ? new Date(data.refreshedAt).toLocaleTimeString() : "waiting"}</span><button className="icon-button" type="button" onClick={refresh} aria-label="Refresh all operational data" title="Refresh"><Icon name="refresh" /></button></div>
+          <div className="topbar-status">
+            <LanguageSelector value={language} onChange={setLanguage} />
+            <span className="last-sync">Updated {data.refreshedAt ? new Date(data.refreshedAt).toLocaleTimeString() : "waiting"}</span>
+            <button className="icon-button" type="button" onClick={refresh} aria-label="Refresh all operational data" title="Refresh"><Icon name="refresh" /></button>
+          </div>
         </header>
         <main className="page-host" id="main-content">{page}</main>
       </div>
     </div>
+  );
+}
+
+function LanguageSelector({ value, onChange }: { value: LanguageCode; onChange: (value: LanguageCode) => void }) {
+  return (
+    <label className="language-selector" title="Display language">
+      <span aria-hidden="true">🌐</span>
+      <select value={value} aria-label="Display language" onChange={(event) => onChange(event.target.value as LanguageCode)}>
+        {languageOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+      </select>
+    </label>
   );
 }
 
