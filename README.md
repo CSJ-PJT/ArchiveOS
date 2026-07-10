@@ -309,6 +309,6 @@ docker compose config --quiet
 - i18n 언어 전환기와 UI 번역 구조 구현
 - safe-mode 기본 차단 유지
 
-## 포트폴리오 문구
+## 정리
 
 Archive Platform Ecosystem은 Archive-Market, Archive-Nexus, Archive-Logistics, Archive-Ledger, ArchiveOS를 연결해 외부 수요, 제조 이벤트 생성, 물류 경로와 비용 계산, 금융성 원장과 정산, 승인과 정책 근거, 장애 관제를 하나의 이벤트 드리븐 AX 백엔드 흐름으로 구현한 Java/Spring 기반 프로젝트입니다. 각 서비스는 Outbox, idempotency, retry, safe-mode, DEGRADED 상태 분리를 통해 외부 장애가 전체 런타임으로 전파되지 않도록 설계했습니다.
