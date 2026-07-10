@@ -12,7 +12,7 @@ const ledgerApprovals = readFileSync("src/pages/LedgerApprovalsPage.tsx", "utf-8
 const ecosystemPage = readFileSync("src/pages/EcosystemPage.tsx", "utf-8");
 const liveFlowPage = readFileSync("src/pages/LiveFlowPage.tsx", "utf-8");
 
-for (const label of ["운영 개요", "에이전트", "에코시스템", "실시간 흐름", "작업 역량", "재무 흐름", "관리 시스템", "작업 흐름", "Ledger 승인", "운영 지식", "이력", "배치", "RPA", "설정"]) {
+for (const label of ["운영 개요", "실시간 관제", "에이전트", "에코시스템", "작업 역량", "재무 흐름", "시스템 관리", "작업 흐름", "Ledger 승인", "운영 지식", "이력", "배치", "RPA", "설정"]) {
   if (!navigation.includes(label)) {
     throw new Error(`Missing final navigation label: ${label}`);
   }
@@ -74,7 +74,7 @@ for (const ecosystemContract of ["getEcosystemSummary", "getEcosystemTopology", 
   }
 }
 
-for (const liveFlowContract of ["getLiveFlowSummary", "refreshLiveFlow", "실시간 흐름", "합성 런타임 이벤트", "실제 고객, 결제, 계좌, 금융 데이터는 사용하지 않습니다"]) {
+for (const liveFlowContract of ["getLiveFlowSummary", "refreshLiveFlow", "실시간 관제", "합성 런타임 이벤트", "실제 고객, 결제, 계좌, 금융 데이터는 사용하지 않습니다"]) {
   if (!backendApi.includes(liveFlowContract) && !appShell.includes(liveFlowContract) && !liveFlowPage.includes(liveFlowContract)) {
     throw new Error(`Live Flow contract missing: ${liveFlowContract}`);
   }

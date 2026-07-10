@@ -6,7 +6,7 @@
 
 > 제조, 물류, 정산, 커머스 서비스를 통합 관제하는 Spring Boot 기반 AI/AX Control Tower
 
-ArchiveOS는 Archive Platform Ecosystem의 운영 관제 서비스입니다. Archive-Market, Archive-Nexus, Archive-Logistics, Archive-Ledger를 외부 운영 대상 시스템으로 등록하고, 상태 관제, Live Flow, workforce/capacity 관제, 승인 게이트웨이, 정책 근거, callback outbox, 감사 로그를 통합 관리합니다.
+ArchiveOS는 Archive Platform Ecosystem의 운영 관제 서비스입니다. Archive-Market, Archive-Nexus, Archive-Logistics, Archive-Ledger를 외부 운영 대상 시스템으로 등록하고, 상태 관제, 실시간 관제, workforce/capacity 관제, 승인 게이트웨이, 정책 근거, callback outbox, 감사 로그를 통합 관리합니다.
 
 ArchiveOS는 외부 도메인 서비스를 직접 소유하지 않습니다. 각 서비스는 자신의 도메인 데이터를 처리하고, ArchiveOS는 read-only 관제와 승인/감사/정책 근거/운영 제어를 담당합니다. 외부 서비스 장애는 `DEGRADED` 또는 `UNAVAILABLE`로 격리되며 ArchiveOS 런타임 장애로 전파되지 않도록 설계했습니다.
 
@@ -14,7 +14,7 @@ ArchiveOS는 외부 도메인 서비스를 직접 소유하지 않습니다. 각
 
 - External System Registry
 - Ecosystem Summary / Topology / Timeline
-- Live Flow / Operational Twin
+- 실시간 관제
 - Operational Workforce Overview
 - Ecosystem Finance Control
 - External Approval Gateway
@@ -46,7 +46,7 @@ flowchart LR
   Logistics[Archive-Logistics<br/>배송 / 경로 / ETA / 물류비]
   Ledger[Archive-Ledger<br/>거래 / 원장 / 정산 / 대사]
   OS[ArchiveOS<br/>Control Tower]
-  Flow[Live Flow<br/>Operational Twin]
+  Flow[실시간 관제<br/>Live Flow]
   Workforce[Operational Workforce<br/>Capacity / Backlog / Productivity]
   Approval[Approval Gateway<br/>Policy Evidence / Callback Outbox]
 
@@ -90,7 +90,7 @@ POST /api/ecosystem/demo/dry-run
 POST /api/ecosystem/demo/run
 ```
 
-### Live Flow / Operational Twin
+### 실시간 관제
 
 ```http
 GET  /api/live-flow/summary
@@ -102,7 +102,7 @@ GET  /api/live-flow/entity/{entityId}
 POST /api/live-flow/refresh
 ```
 
-Live Flow는 프론트에서 임의로 만든 fake animation이 아니라 Archive-Market, Archive-Nexus, Archive-Logistics, Archive-Ledger, ArchiveOS의 runtime event, outbox, approval, audit, health, callback 데이터를 수집해 정규화한 `Synthetic Runtime Events`를 기반으로 표시합니다.
+실시간 관제 화면은 프론트에서 임의로 만든 애니메이션이 아니라 Archive-Market, Archive-Nexus, Archive-Logistics, Archive-Ledger, ArchiveOS의 runtime event, outbox, approval, audit, health, callback 데이터를 수집해 정리한 합성 런타임 이벤트를 기반으로 표시합니다. 화면은 lane 기반 운영 관제 보드로 구성되어 주문, 제조, 물류, 정산, 승인, settlement 흐름을 한눈에 확인할 수 있습니다.
 
 ### Operational Workforce
 
@@ -216,7 +216,7 @@ ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_BASE_URL=http://localhost:18080
 
 - Overview: 전체 상태, PM Inbox, 주요 metric
 - Ecosystem: 서비스 상태, topology, timeline, dry-run
-- Live Flow: runtime event 기반 Operational Twin
+- 실시간 관제: runtime event 기반 lane형 운영 흐름 보드
 - Workforce: synthetic workforce, capacity, productivity, bottleneck 관제
 - Ecosystem Finance: settlement economy, cashflow, bankruptcy risk 관제
 - Ledger Approvals: external approval queue, evidence, callback status
@@ -259,7 +259,7 @@ Archive-Ledger
 
 ArchiveOS
   ├─ ecosystem summary / topology / timeline
-  ├─ live flow / operational twin
+  ├─ 실시간 관제 / live flow
   ├─ workforce / bottleneck / recommendation
   ├─ approval gateway / policy evidence
   ├─ callback outbox / retry
@@ -271,7 +271,7 @@ ArchiveOS
 - Architecture: [`docs/architecture.md`](docs/architecture.md)
 - Ecosystem Control Tower: [`docs/ecosystem-control-tower.md`](docs/ecosystem-control-tower.md)
 - Integration Contracts: [`docs/integration-contracts.md`](docs/integration-contracts.md)
-- Live Flow / Operational Twin: [`docs/live-flow-operational-twin.md`](docs/live-flow-operational-twin.md)
+- 실시간 관제: [`docs/live-flow-operational-twin.md`](docs/live-flow-operational-twin.md)
 - Approval Callback Flow: [`docs/approval-callback-flow.md`](docs/approval-callback-flow.md)
 - Policy Evidence: [`docs/policy-evidence.md`](docs/policy-evidence.md)
 - Smoke Test: [`docs/smoke-test.md`](docs/smoke-test.md)
@@ -302,7 +302,7 @@ docker compose config --quiet
 
 - Archive-Market / Archive-Nexus / Archive-Logistics / Archive-Ledger 관제 등록
 - Market, Nexus, Logistics, Ledger가 꺼져 있어도 ArchiveOS 런타임 유지
-- Live Flow / Operational Twin API와 화면 구현
+- 실시간 관제 API와 lane 기반 운영 관제 화면 구현
 - Operational Workforce API와 화면 구현
 - External Approval Gateway와 Callback Outbox 구현
 - Policy Evidence / Fallback Evidence 구조 구현

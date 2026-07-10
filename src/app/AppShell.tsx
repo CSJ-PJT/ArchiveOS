@@ -260,6 +260,11 @@ function AppShellInner() {
     return () => window.clearInterval(timer);
   }, [refresh]);
 
+  useEffect(() => {
+    document.body.classList.toggle("sidebar-open", sidebarOpen);
+    return () => document.body.classList.remove("sidebar-open");
+  }, [sidebarOpen]);
+
   const healthTone = useMemo(() => {
     if (data.loading) return "working";
     const failing = data.endpointHealth?.summary.failed ?? Object.keys(data.errors).length;
