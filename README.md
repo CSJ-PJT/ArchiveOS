@@ -1,355 +1,242 @@
-<p align="center">
-  <img src="docs/brand/archiveos-lockup.svg" width="820" alt="ArchiveOS" />
-</p>
-
 # ArchiveOS
 
-> **제조·물류·정산 서비스를 통합 관제하는 Spring Boot 기반 AI/AX Control Tower**
+> 제조, 물류, 정산, 커머스 서비스를 통합 관제하는 Spring Boot 기반 AI/AX Control Tower
 
-ArchiveOS는 Archive-Nexus, Archive-Logistics, Archive-Ledger를 외부 운영 대상 시스템으로 등록하고, 상태 관제, 승인, 정책 근거, callback outbox, 감사 로그를 통합 관리하는 Control Tower 서비스입니다.
+ArchiveOS는 Archive Platform Ecosystem의 운영 관제 서비스입니다. Archive-Market, Archive-Nexus, Archive-Logistics, Archive-Ledger를 외부 운영 대상 시스템으로 등록하고, 상태 관제, Live Flow, workforce/capacity 관제, 승인 게이트웨이, 정책 근거, callback outbox, 감사 로그를 통합 관리합니다.
 
-운영자는 ArchiveOS에서 각 서비스의 health, operations summary, topology, approval queue, callback 상태를 확인합니다. 외부 서비스 장애는 `DEGRADED` 또는 `UNAVAILABLE`로 격리되며 ArchiveOS 런타임 자체로 전파되지 않도록 설계했습니다.
+ArchiveOS는 외부 도메인 서비스를 직접 소유하지 않습니다. 각 서비스는 자신의 도메인 데이터를 처리하고, ArchiveOS는 read-only 관제와 승인/감사/정책 근거/운영 제어를 담당합니다. 외부 서비스 장애는 `DEGRADED` 또는 `UNAVAILABLE`로 격리되며 ArchiveOS 런타임 장애로 전파되지 않도록 설계했습니다.
 
-## Operating Role
+## 핵심 역할
 
 - External System Registry
-- Ecosystem Summary
-- Topology
+- Ecosystem Summary / Topology / Timeline
+- Live Flow / Operational Twin
+- Operational Workforce Overview
+- Ecosystem Finance Control
 - External Approval Gateway
 - Policy Evidence / Fallback Evidence
 - Approval Callback Outbox
 - Audit Log
-- Safe-mode
-- DEGRADED / UNAVAILABLE 상태 분리
+- PM Inbox / Daily Report / Slack state-change notification
+- Safe-mode 기반 외부 write 차단
+- `HEALTHY`, `DEGRADED`, `UNAVAILABLE`, `DISABLED`, `UNKNOWN` 상태 분리
 
-## Primary APIs
+## 연동 서비스
+
+| 서비스 | 역할 | 기본 URL |
+| --- | --- | --- |
+| Archive-Market | synthetic demand, order, payment, revenue, return, claim event source | `http://localhost:8094` |
+| Archive-Nexus | manufacturing, production, shipment, maintenance, quality event outbox | `http://localhost:8080` |
+| Archive-Logistics | route, ETA, logistics cost, delay, shipment event backend | `http://localhost:8092` |
+| Archive-Ledger | transaction, ledger, settlement, reconciliation, approval callback backend | `http://localhost:18080` |
+| ArchiveOS | Control Tower, approval, evidence, audit, operational monitoring | `http://localhost:5173` |
+
+외부 표시명은 `Archive-Logistics`를 사용합니다. 기존 이벤트/설정 호환성 때문에 일부 내부 key, source, API path에는 `logitics` 또는 `Archive-Logitics` 표기가 남을 수 있습니다.
+
+## 주요 API
+
+### Ecosystem
 
 ```http
-GET /api/ecosystem/summary
-GET /api/ecosystem/topology
+GET  /api/ecosystem/services
+GET  /api/ecosystem/summary
+GET  /api/ecosystem/topology
+GET  /api/ecosystem/timeline
+POST /api/ecosystem/refresh
+POST /api/ecosystem/demo/dry-run
+POST /api/ecosystem/demo/run
+```
+
+### Live Flow / Operational Twin
+
+```http
+GET  /api/live-flow/summary
+GET  /api/live-flow/topology
+GET  /api/live-flow/events/recent
+GET  /api/live-flow/replay
+GET  /api/live-flow/correlation/{correlationId}
+GET  /api/live-flow/entity/{entityId}
+POST /api/live-flow/refresh
+```
+
+Live Flow는 프론트에서 임의로 만든 fake animation이 아니라 Archive-Market, Archive-Nexus, Archive-Logistics, Archive-Ledger, ArchiveOS의 runtime event, outbox, approval, audit, health, callback 데이터를 수집해 정규화한 `Synthetic Runtime Events`를 기반으로 표시합니다.
+
+### Operational Workforce
+
+```http
+GET /api/workforce/overview
+GET /api/workforce/bottlenecks
+GET /api/workforce/recommendations
+GET /api/workforce/productivity-trend
+```
+
+Workforce 관제는 synthetic workforce/capacity/productivity/cashflow summary만 사용합니다. 실제 직원, 급여, 개인정보는 사용하지 않습니다.
+
+읽는 외부 API:
+
+```http
+Market    GET /api/market-workforce/summary
+Market    GET /api/market-cashflow/summary
+Market    GET /api/market-productivity/summary
+Nexus     GET /api/workforce/summary
+Nexus     GET /api/productivity/summary
+Nexus     GET /api/capacity/summary
+Logistics GET /api/workforce/summary
+Logistics GET /api/productivity/summary
+Logistics GET /api/capacity/summary
+Ledger    GET /api/workforce/summary
+Ledger    GET /api/productivity/summary
+Ledger    GET /api/capacity/summary
+```
+
+### Integrations
+
+```http
+GET /api/integrations/market/summary
+GET /api/integrations/nexus/outbox
+GET /api/integrations/logitics/summary
+GET /api/integrations/logitics/outbox
+GET /api/integrations/logitics/routes
+GET /api/integrations/ledger/summary
 GET /api/integrations/ledger/approval-required
-GET /api/approvals/external/summary
-GET /api/approvals/callbacks
 ```
 
-## Visual Documentation
+### External Approvals
 
-ArchiveOS stores operating diagrams, screenshot evidence, and wireframes under `docs/`.
-
-- Ecosystem diagrams: [`docs/diagrams`](docs/diagrams)
-- Screenshot guide and captured images: [`docs/screenshots`](docs/screenshots)
-- Wireframes / 화면설계도: [`docs/wireframes`](docs/wireframes)
-
-The diagrams describe the live Archive Platform operating model. Screenshots under `docs/screenshots` are actual captured UI/API evidence when the local services are available. Wireframes are explicitly marked as design artifacts and must not be presented as implemented screens.
-
-Local visual artifact copies are generated outside the repository under:
-
-```text
-C:\Users\dan18\Desktop\Task\산출물
+```http
+POST /api/approvals/external
+GET  /api/approvals/external
+GET  /api/approvals/external/summary
+GET  /api/approvals/external/{approvalRequestId}
+POST /api/approvals/external/{approvalRequestId}/approve
+POST /api/approvals/external/{approvalRequestId}/reject
+POST /api/approvals/external/{approvalRequestId}/hold
+GET  /api/approvals/callbacks
+POST /api/approvals/callbacks/{callbackId}/retry
 ```
 
-## Related Repositories
+ArchiveOS는 승인 요청, 정책 근거, PM/Admin 결정, 감사 로그, callback outbox 상태를 기록합니다. Ledger는 transaction, ledger, settlement, reconciliation의 source of truth입니다.
 
-- Archive-Nexus: https://github.com/CSJ-PJT/Archive-Nexus
-- Archive-Market: https://github.com/CSJ-PJT/Archive-Market
-- Archive-Logistics: https://github.com/CSJ-PJT/Archive-Logistics
-- Archive-Ledger: https://github.com/CSJ-PJT/Archive-Ledger
+## 운영 원칙
 
-## Operating Principles
+- 기본은 read-only 관제입니다.
+- 외부 write는 safe-mode와 admin 권한을 통과해야 합니다.
+- 기본 설정은 `ARCHIVE_INTEGRATION_SAFE_MODE=true`, `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=false`입니다.
+- 외부 서비스가 꺼져 있어도 ArchiveOS는 HTTP 200과 `DEGRADED`/`UNAVAILABLE` 상태를 반환해야 합니다.
+- 실제 고객, 결제, 주소, 계좌, 카드, 금융 데이터는 사용하지 않습니다.
+- 모든 business sample은 Synthetic Data / Demo Data입니다.
+- secret, token, webhook, private key는 UI/API/docs/log/audit metadata에 노출하지 않습니다.
 
-- Read-only 관제를 우선한다.
-- External write는 `ARCHIVE_INTEGRATION_SAFE_MODE=true`, `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=false` 기본값으로 차단한다.
-- Nexus, Logistics, Ledger 장애는 ArchiveOS API 종료로 전파하지 않는다.
-- Approval 결정, callback, evidence, audit 이벤트는 추적 가능하게 남긴다.
-- Secret, webhook, token, private key는 UI/API/docs에 노출하지 않는다.
-
-## Internationalization
-
-ArchiveOS UI supports four display languages through the globe menu in the top-right corner.
-
-- Supported languages: 한국어, English, 日本語, 简体中文
-- Locale storage: `localStorage["archive.locale"]`
-- Fallback: unsupported locale values fall back to `ko`
-- Scope: user-facing UI labels, buttons, empty states, help text, and display-only status labels
-- Contract rule: API paths, event types, enum values, repository names, service names, trace IDs, correlation IDs, commands, file paths, and ports remain untranslated
-- Compatibility note: internal keys such as `logitics` may remain where existing API/event contracts require them
-
-## Quick Start
+## 실행
 
 ```powershell
 docker compose up -d --build
+docker compose ps
 curl.exe http://localhost:5173/api/ecosystem/summary
 curl.exe http://localhost:5173/api/ecosystem/topology
+curl.exe http://localhost:5173/api/live-flow/summary
+curl.exe http://localhost:5173/api/workforce/overview
 ```
 
-## Smoke Script
-
-```powershell
-.\scripts\smoke-ecosystem.ps1
-.\scripts\smoke-ecosystem.ps1 -OsApiUrl "http://localhost:5173" -NexusUrl "http://localhost:8080" -LogisticsUrl "http://localhost:8092" -LedgerUrl "http://localhost:18080"
-```
-
-`-WriteSmoke`는 실제 외부 서비스 상태를 변경할 수 있으므로 운영 데모 전 safe-mode와 integration enabled 상태를 먼저 확인합니다.
-
-## Runbook
-
-1. `docker compose ps`로 ArchiveOS frontend, backend, archiveos-ai, postgres 상태를 확인한다.
-2. `GET /api/ecosystem/summary`로 외부 서비스 상태를 확인한다.
-3. `GET /api/ecosystem/topology`로 Nexus → Logistics → Ledger → ArchiveOS 흐름을 확인한다.
-4. `GET /api/approvals/external/summary`로 승인 대기 상태를 확인한다.
-5. `GET /api/approvals/callbacks`로 callback retry/failed 상태를 확인한다.
-6. 외부 write가 필요한 경우 `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=true`를 명시적으로 설정하고 승인된 smoke만 수행한다.
-
----
-
-## Archive Platform Ecosystem
-
-ArchiveOS can run as the control tower for the Archive Platform ecosystem:
-
-- **Archive-Nexus**: synthetic manufacturing, shipment, maintenance, and quality event outbox.
-- **Archive-Market**: synthetic customer demand, order, payment, revenue, return, and claim event backend.
-- **Archive-Logistics**: synthetic logistics route, ETA, delay, and cost event backend.
-- **Archive-Ledger**: synthetic transaction, ledger, settlement, reconciliation, and approval callback backend.
-- **ArchiveOS**: health aggregation, human approval gate, RAG/fallback policy evidence, audit log, Slack notification, callback outbox, and retry.
-
-Archive Platform Ecosystem은 Archive-Nexus, Archive-Logistics, Archive-Ledger, ArchiveOS를 연결해 제조 이벤트 생성, 물류 경로·비용 계산, 금융성 원장·정산·대사, 승인·정책 근거·장애 관제를 하나의 이벤트 드리븐 AX 백엔드 흐름으로 구현한 프로젝트입니다. 각 서비스는 Outbox, idempotency, retry, safe-mode, DEGRADED 상태 분리를 통해 외부 장애가 전체 런타임으로 전파되지 않도록 설계했습니다.
-
-ArchiveOS is intentionally loosely coupled. If Market, Nexus, Logistics, or Ledger is not running, ArchiveOS still starts and reports the external service as `UNAVAILABLE`, `UNKNOWN`, or `DEGRADED` through `/api/ecosystem/summary`.
-
-### Ecosystem environment variables
+ArchiveOS를 Docker Compose로 실행하고 외부 Archive 서비스가 host에서 실행 중이면 `host.docker.internal` 기반 URL을 사용합니다.
 
 ```env
-ARCHIVE_ECOSYSTEM_ENABLED=true
-ARCHIVE_ECOSYSTEM_REFRESH_TIMEOUT_MS=3000
+ARCHIVE_ECOSYSTEM_SERVICES_MARKET_BASE_URL=http://host.docker.internal:8094
+ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL=http://host.docker.internal:8080
+ARCHIVE_ECOSYSTEM_SERVICES_LOGITICS_BASE_URL=http://host.docker.internal:8092
+ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_BASE_URL=http://host.docker.internal:18080
+```
+
+로컬 bootRun 기준 기본값:
+
+```env
 ARCHIVE_ECOSYSTEM_SERVICES_MARKET_BASE_URL=http://localhost:8094
 ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL=http://localhost:8080
 ARCHIVE_ECOSYSTEM_SERVICES_LOGITICS_BASE_URL=http://localhost:8092
 ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_BASE_URL=http://localhost:18080
-ARCHIVE_INTEGRATION_SAFE_MODE=true
-ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=false
-ARCHIVE_INTEGRATION_CALLBACK_ENABLED=true
-ARCHIVE_INTEGRATION_CALLBACK_MAX_RETRY_COUNT=5
-ARCHIVE_INTEGRATION_CALLBACK_RETRY_DELAY_SECONDS=30
 ```
 
-When ArchiveOS runs in Docker Compose and external services run on the host, use:
-
-```env
-ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_BASE_URL=http://host.docker.internal:18080
-ARCHIVE_ECOSYSTEM_SERVICES_LOGITICS_BASE_URL=http://host.docker.internal:8092
-ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL=http://host.docker.internal:8080
-ARCHIVE_ECOSYSTEM_SERVICES_MARKET_BASE_URL=http://host.docker.internal:8094
-```
-
-### Ecosystem API
-
-```powershell
-curl.exe http://localhost:5173/api/ecosystem/services
-curl.exe http://localhost:5173/api/ecosystem/summary
-curl.exe http://localhost:5173/api/ecosystem/topology
-curl.exe -X POST http://localhost:5173/api/ecosystem/demo/dry-run
-```
-
-For authenticated admin users:
-
-```powershell
-curl.exe -X POST http://localhost:5173/api/ecosystem/refresh
-curl.exe -X POST http://localhost:5173/api/ecosystem/demo/run
-```
-
-External write actions (Nexus/Logistics/Ledger generation and publish, Ledger approval callback) are blocked in safe mode unless `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=true`.
-
-### 4-service smoke script
+## Smoke Test
 
 ```powershell
 .\scripts\smoke-ecosystem.ps1
-.\scripts\smoke-ecosystem.ps1 -WriteSmoke
 .\scripts\smoke-ecosystem.ps1 -OsApiUrl "http://localhost:5173" -NexusUrl "http://localhost:8080" -LogisticsUrl "http://localhost:8092" -LedgerUrl "http://localhost:18080"
 ```
 
-Defaults:
+기본 smoke는 read-only입니다. `-WriteSmoke`는 외부 서비스 상태를 변경할 수 있으므로 safe-mode, integration enabled, 테스트 데이터 상태를 확인한 뒤 사용합니다.
 
-```text
-Nexus URL    : http://localhost:8080
-Logistics URL: http://localhost:8092
-Ledger URL   : http://localhost:18080
-OS API URL   : http://localhost:5173
+```powershell
+.\scripts\smoke-ecosystem.ps1 -WriteSmoke
 ```
 
-Read-only mode is default. With `-WriteSmoke`, the script executes real write attempts for the four-service flow and prints blocked/failed reasons when safe mode or service availability prevents execution.
+## 화면
 
-### Ledger approval callback
+- Overview: 전체 상태, PM Inbox, 주요 metric
+- Ecosystem: 서비스 상태, topology, timeline, dry-run
+- Live Flow: runtime event 기반 Operational Twin
+- Workforce: synthetic workforce, capacity, productivity, bottleneck 관제
+- Ecosystem Finance: settlement economy, cashflow, bankruptcy risk 관제
+- Ledger Approvals: external approval queue, evidence, callback status
+- Agents: 서비스별 agent 상태와 추천
+- Workflows / RPA / Batch / Knowledge / Settings: 운영 자동화와 지식 기반 기능
 
-External approval requests are accepted through `/api/approvals/external`. ArchiveOS records policy evidence, PM/Admin decision, audit trail, and callback outbox state. Ledger remains responsible for transaction, ledger, settlement, and reconciliation state.
+## Internationalization
 
----
+ArchiveOS UI는 우측 상단 지구본 메뉴에서 표시 언어를 전환할 수 있습니다.
 
-## 현재 구현 상태
-
-| 영역 | 현재 상태 |
-| --- | --- |
-| Operator Console | Sidebar 기반 Overview, Agents, Workflows, Knowledge, History, Batch, RPA, Settings 화면 |
-| Compatibility Backend | Node/Express 기반 기존 API 호환과 Spring API 위임 |
-| AI Runtime | Spring Boot, Spring AI, ChatModel·EmbeddingModel, Spring Batch·RPA 기반 |
-| Knowledge & RAG | Obsidian Markdown 동기화, 청크 생성, 임베딩, pgvector 검색, 출처 추적 기반 |
-| Data Platform | PostgreSQL + pgvector 로컬 개발 환경 |
-| 산업 애플리케이션 | Archive-Nexus 연동을 위한 공통 런타임과 API 경계 구성 |
-
-현재 구현은 개발·검증 단계입니다. 운영 환경에서는 인증, 권한, 비밀정보 관리, 감사 로그와 배포 정책을 추가로 강화해야 합니다.
-
----
-
-## Vision
-
-> **AI가 일하고, 사람은 설계하고 결정한다.**
-
-ArchiveOS는 특정 산업에 종속되지 않는 공통 AI 실행 환경을 목표로 합니다. 제조, 물류, 지식 관리, 개발 운영과 문서 처리 애플리케이션이 동일한 런타임 위에서 동작할 수 있도록 플랫폼과 도메인 애플리케이션의 책임을 분리합니다.
-
----
-
-## Core Features
-
-### AI Agent Runtime
-
-- AI Agent 실행 및 생명주기 관리
-- LLM, Tool Calling, 실행 문맥과 메모리 관리
-- Agent 상태, 근거와 실행 이력 관측
-- Multi-Agent 협업 구조 확장 기반
-
-### Workflow & Batch
-
-- Spring Batch 기반 Job·Step 실행
-- 워크플로우 상태와 실행 이력
-- 재시도, 실패 원인과 승인 대기 상태
-- 운영 화면에서 Batch와 Workflow 진행 상황 확인
-
-### Intelligent RPA
-
-- AI 기반 작업 분류와 조치 추천
-- Human-in-the-Loop Approval Gate
-- 승인·반려 및 실행 이력 기록
-- 실패 복구와 재시도 확장 기반
-
-### Knowledge & RAG
-
-- Markdown 문서 수집과 동기화
-- 청크 생성과 임베딩 저장
-- PostgreSQL·pgvector 기반 벡터 검색
-- AI 응답의 근거와 출처 추적
-
-### Operations & Observability
-
-- 시스템 상태와 서비스 Health Check
-- Critical Alert와 최근 활동 표시
-- Agent, Batch, Workflow, RPA 실행 현황
-- Spring Boot 소유 Slack 알림과 외부 운영 도구 연동 기반
-
----
+- 지원 언어: 한국어, English, 日本語, 简体中文
+- 저장 위치: `localStorage["archive.locale"]`
+- fallback: 지원하지 않는 locale은 `ko`
+- 번역 대상: 사용자 노출 label, 버튼, empty state, help text, display-only status label
+- 번역 제외: API path, eventType, enum value, repository name, service name, traceId, correlationId, command, file path, port
 
 ## Architecture
 
 ```text
-React Operator Console
-  -> Node/Express Operations Backend
-       -> archiveos-ai (Spring Boot + Spring AI + Spring Batch)
-            -> PostgreSQL + pgvector
-            -> Obsidian Markdown Vault
-            -> ChatModel / EmbeddingModel
-```
+Archive-Market
+  ├─ demand / order / payment / revenue event
+  ├─ production request → Archive-Nexus
+  └─ sales / refund / claim event → Archive-Ledger
 
-```text
+Archive-Nexus
+  ├─ production / inventory / shipment event
+  ├─ logistics event → Archive-Logistics
+  └─ cost event → Archive-Ledger
+
+Archive-Logistics
+  ├─ route / ETA / logistics cost calculation
+  ├─ shipment status / delay / deviation event
+  └─ logistics cost event → Archive-Ledger
+
+Archive-Ledger
+  ├─ transaction normalization
+  ├─ double-entry ledger
+  ├─ settlement / reconciliation
+  └─ approval callback
+
 ArchiveOS
-├── AI Agent Runtime
-├── Spring AI
-├── Spring Batch
-├── Intelligent RPA
-├── Workflow Engine
-├── RAG Engine
-├── Scheduler / Event Bus
-├── Observability
-└── Project Runtime
-    ├── Archive-Nexus
-    └── Future Applications
+  ├─ ecosystem summary / topology / timeline
+  ├─ live flow / operational twin
+  ├─ workforce / bottleneck / recommendation
+  ├─ approval gateway / policy evidence
+  ├─ callback outbox / retry
+  └─ audit / safe-mode / degraded status
 ```
 
-Docker frontend의 Nginx는 `/api/*`와 `/health`를 Node backend로 전달하며, 브라우저는 `http://localhost:5173` 단일 origin으로 UI와 API를 사용합니다.
+## 문서
 
----
+- Architecture: [`docs/architecture.md`](docs/architecture.md)
+- Ecosystem Control Tower: [`docs/ecosystem-control-tower.md`](docs/ecosystem-control-tower.md)
+- Integration Contracts: [`docs/integration-contracts.md`](docs/integration-contracts.md)
+- Live Flow / Operational Twin: [`docs/live-flow-operational-twin.md`](docs/live-flow-operational-twin.md)
+- Approval Callback Flow: [`docs/approval-callback-flow.md`](docs/approval-callback-flow.md)
+- Policy Evidence: [`docs/policy-evidence.md`](docs/policy-evidence.md)
+- Smoke Test: [`docs/smoke-test.md`](docs/smoke-test.md)
+- Operations Runbook: [`docs/operations-runbook.md`](docs/operations-runbook.md)
+- Diagrams: [`docs/diagrams`](docs/diagrams)
+- Screenshots: [`docs/screenshots`](docs/screenshots)
 
-## Operator Console
-
-| 메뉴 | 운영 질문 |
-| --- | --- |
-| Overview | 지금 정상인가, 무엇을 먼저 확인해야 하는가? |
-| Agents | 어떤 Agent가 동작 중이고 근거는 무엇인가? |
-| Workflows | 작업이 어느 단계이며 사람의 판단이 필요한가? |
-| Knowledge | RAG와 운영 지식이 준비되어 있는가? |
-| History | 어떤 이벤트와 결정이 기록되었는가? |
-| Batch | 어떤 Job이 실행됐고 Step 결과는 무엇인가? |
-| RPA | 어떤 작업이 분류됐고 승인 상태는 무엇인가? |
-| Settings | 연결, 보안, 버전과 환경이 정상인가? |
-
-Overview는 `System Health → Critical Alerts → Active Agents → Pipeline → Approval → Knowledge → Recent Activity` 순서로 예외와 다음 행동을 우선 표시합니다.
-
----
-
-## Archive-Nexus
-
-Archive-Nexus는 ArchiveOS 위에서 동작하는 첫 번째 산업 애플리케이션입니다.
-
-- 가상 공장, 생산, 품질, 재고, 물류와 정비 데이터 생성
-- 제조 이상 감지와 원인 분석
-- AI 조치 추천과 승인 기반 RPA
-- ArchiveOS의 Batch, RAG, Agent, Approval과 Observability 활용
-
-ArchiveOS는 공통 AI 런타임을 담당하고, Archive-Nexus는 제조 도메인 로직을 담당합니다.
-
----
-
-## Tech Stack
-
-### Backend
-
-- Java 21
-- Spring Boot / Spring AI / Spring Batch
-- Node.js / Express
-- PostgreSQL / pgvector
-
-### Frontend
-
-- React
-- Vite
-- TypeScript
-
-### Infrastructure & Integration
-
-- Docker / Docker Compose
-- REST API / Webhook
-- Slack / GitHub
-- Kubernetes, Prometheus, Grafana, OpenTelemetry 확장 계획
-
----
-
-## 로컬 실행
-
-```powershell
-docker compose up --build -d
-docker compose ps
-```
-
-| 서비스 | 주소 |
-| --- | --- |
-| Operator Console | `http://localhost:5173` |
-| Node Backend | `http://localhost:4000` |
-| Spring AI Runtime (ArchiveOS API port) | `http://localhost:4100` |
-| Local API through frontend proxy | `http://localhost:5173` |
-| PostgreSQL / pgvector | `localhost:5432` |
-
-ArchiveOS is exposed as Operator Console on `http://localhost:5173` and read-only ecosystem control APIs are normally reachable through that origin.
-
----
-
-## 검증
+## 검증 명령
 
 ```powershell
 npm run test
@@ -361,80 +248,24 @@ npm run typecheck
 npm run build
 
 cd ../archiveos-ai
-.\gradlew.bat test --no-daemon
-.\gradlew.bat bootJar --no-daemon
+.\gradlew.bat test --no-daemon --console=plain
+.\gradlew.bat bootJar --no-daemon --console=plain
+
+cd ..
+docker compose config --quiet
 ```
 
----
+## 현재 상태
 
-## 안전 원칙
+- Archive-Market / Archive-Nexus / Archive-Logistics / Archive-Ledger 관제 등록
+- Market, Nexus, Logistics, Ledger가 꺼져 있어도 ArchiveOS 런타임 유지
+- Live Flow / Operational Twin API와 화면 구현
+- Operational Workforce API와 화면 구현
+- External Approval Gateway와 Callback Outbox 구현
+- Policy Evidence / Fallback Evidence 구조 구현
+- i18n 언어 전환기와 UI 번역 구조 구현
+- safe-mode 기본 차단 유지
 
-- UI는 관측과 의사결정 기록 중심으로 동작합니다.
-- secret, webhook, API key, DB password와 로컬 절대 경로를 frontend에 노출하지 않습니다.
-- RAG 실패 시 가짜 성공 대신 `degraded` 또는 `unavailable` 상태를 표시합니다.
-- 위험 작업은 Approval Gate 이전에 완료 상태로 처리하지 않습니다.
-- shell, MCP, Codex와 process control은 명시적으로 허용된 경계 안에서만 실행합니다.
+## 포트폴리오 문구
 
----
-
-## Roadmap
-
-- [x] Sidebar 기반 Operator Console
-- [x] Spring AI Runtime 기반
-- [x] Spring Batch와 RPA 운영 기반
-- [x] PostgreSQL·pgvector 기반 RAG
-- [x] Knowledge 동기화와 출처 추적 기반
-- [x] Spring Boot 기반 Slack 운영 알림
-- [ ] Archive-Nexus 실제 운영 연동 완성
-- [ ] Workflow Designer
-- [ ] MCP Tool Registry
-- [ ] Multi-Agent 협업 고도화
-- [ ] 사용자 인증과 역할 기반 권한
-- [ ] Kubernetes 배포
-- [ ] Plugin SDK
-- [ ] Multi-LLM 지원
-
----
-
-## Brand
-
-> **Operate knowledge. Drive decisions.**
-
-공식 로고는 검은 배경, 기하학적 흰색 `A`, 청록색 결정 노드로 구성됩니다. README, Sidebar와 favicon은 동일한 마크를 사용합니다.
-
-브랜드 자산과 사용 규칙은 [`docs/brand`](docs/brand)를 참고하세요.
-
----
-
-## 운영 문서
-
-- [Operator Experience UI Architecture](docs/ui/operator-experience.md)
-- [Spring AI Engine Architecture](docs/architecture/spring-ai-engine.md)
-- [Spring Batch 운영 구조](docs/architecture/spring-batch.md)
-- [RPA 승인 흐름](docs/architecture/rpa-approval-flow.md)
-- [RAG 점검 흐름](docs/architecture/rag-health-check-flow.md)
-- [Developer Guide](docs/operations/developer-guide.md)
-- [AX 구현 상태](docs/AX_IMPLEMENTATION_STATUS.md)
-- [전체 아키텍처](docs/ARCHITECTURE_FULL.md)
-
----
-
-## Visual Operations Package
-
-ArchiveOS keeps the ecosystem visual documentation in the repository as operating evidence for local and demo operations.
-
-- [Diagrams](docs/diagrams)
-- [Screenshots](docs/screenshots)
-- [Wireframes](docs/wireframes)
-
-Local presentation copies can be produced under:
-
-`C:\Users\dan18\Desktop\Task\산출물`
-
-External display naming uses `Archive-Logistics`. Internal compatibility keys can remain `logitics` or `LOGITICS` where existing APIs, database values, or environment variables require them.
-
----
-
-## License
-
-라이선스 정책은 프로젝트 운영 방침에 따라 추후 정의합니다.
+Archive Platform Ecosystem은 Archive-Market, Archive-Nexus, Archive-Logistics, Archive-Ledger, ArchiveOS를 연결해 외부 수요, 제조 이벤트 생성, 물류 경로와 비용 계산, 금융성 원장과 정산, 승인과 정책 근거, 장애 관제를 하나의 이벤트 드리븐 AX 백엔드 흐름으로 구현한 Java/Spring 기반 프로젝트입니다. 각 서비스는 Outbox, idempotency, retry, safe-mode, DEGRADED 상태 분리를 통해 외부 장애가 전체 런타임으로 전파되지 않도록 설계했습니다.
