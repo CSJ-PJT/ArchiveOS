@@ -22,19 +22,19 @@ function matchesFilter(task: PmTask, filter: WorkflowFilter) {
 }
 
 function getOwner(task: PmTask) {
-  if (task.status === "architect_review") return "Architect";
-  if (["ready_for_build", "building"].includes(task.status)) return "Builder";
-  if (task.status === "review") return "Reviewer";
-  if (task.status === "pm_decision_required") return "Human PM";
-  return "Queue";
+  if (task.status === "architect_review") return "설계 검토";
+  if (["ready_for_build", "building"].includes(task.status)) return "구현";
+  if (task.status === "review") return "리뷰";
+  if (task.status === "pm_decision_required") return "PM";
+  return "큐";
 }
 
 export function WorkflowsPage({ data, onRefresh }: { data: AppData; onRefresh: () => void }) {
   const [filter, setFilter] = useState<WorkflowFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
-  const [newTitle, setNewTitle] = useState("Archive factory pipeline check");
-  const [newDescription, setNewDescription] = useState("Run the Archive Platform control pipeline as a PM-visible work item. Validate Nexus, Logistics, Ledger, MCP/RPA, RAG, and approval gates before any risky action.");
+  const [newTitle, setNewTitle] = useState("Archive 공정 파이프라인 점검");
+  const [newDescription, setNewDescription] = useState("PM이 확인 가능한 작업 항목으로 Archive Platform 제어 파이프라인을 점검합니다. 위험 작업 전 Nexus, Logistics, Ledger, MCP/RPA, RAG, 승인 게이트를 확인합니다.");
   const [newTarget, setNewTarget] = useState("Archive Platform");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const canDecide = data.auth.role === "PM" || data.auth.role === "ADMIN";
@@ -91,39 +91,39 @@ export function WorkflowsPage({ data, onRefresh }: { data: AppData; onRefresh: (
   return (
     <div className="page-stack">
       <section className="summary-strip">
-        <MetricCard label="Running" value={summary.running} status={summary.running > 0 ? "working" : "idle"} />
-        <MetricCard label="Waiting" value={summary.waiting} status={summary.waiting > 0 ? "waiting" : "idle"} />
-        <MetricCard label="Review" value={summary.review} status={summary.review > 0 ? "working" : "idle"} />
-        <MetricCard label="Approval Required" value={summary.approval} status={summary.approval > 0 ? "blocked" : "healthy"} />
-        <MetricCard label="Failed" value={summary.failed} status={summary.failed > 0 ? "critical" : "healthy"} />
+        <MetricCard label="진행 중" value={summary.running} status={summary.running > 0 ? "working" : "idle"} />
+        <MetricCard label="대기" value={summary.waiting} status={summary.waiting > 0 ? "waiting" : "idle"} />
+        <MetricCard label="검토" value={summary.review} status={summary.review > 0 ? "working" : "idle"} />
+        <MetricCard label="승인 필요" value={summary.approval} status={summary.approval > 0 ? "blocked" : "healthy"} />
+        <MetricCard label="실패" value={summary.failed} status={summary.failed > 0 ? "critical" : "healthy"} />
       </section>
 
-      <SectionCard title="PM Work Instruction" eyebrow="Control Tower command intake">
+      <SectionCard title="PM 작업 지시" eyebrow="CONTROL TOWER COMMAND INTAKE">
         <div className="form-stack">
           <label>
-            <span>Title</span>
+            <span>제목</span>
             <input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} />
           </label>
           <label>
-            <span>Target</span>
+            <span>대상</span>
             <input value={newTarget} onChange={(event) => setNewTarget(event.target.value)} />
           </label>
           <label>
-            <span>Instruction</span>
+            <span>작업 지시</span>
             <textarea value={newDescription} onChange={(event) => setNewDescription(event.target.value)} />
           </label>
           <p className="small-note">
-            This creates an auditable PM workflow item. It does not execute shell, deployment, MCP, or external writes by itself.
+            감사 가능한 PM 작업 항목만 생성합니다. shell, 배포, MCP, 외부 쓰기를 직접 실행하지 않습니다.
           </p>
           <button className="button button-primary" type="button" disabled={!canCreate || Boolean(busyAction)} onClick={() => void createInstruction()}>
-            {busyAction === "create" ? "Creating..." : "Create Work Instruction"}
+            {busyAction === "create" ? "생성 중..." : "작업 지시 생성"}
           </button>
-          {!canCreate ? <p className="small-note">Admin unlock is required to create new work instructions.</p> : null}
+          {!canCreate ? <p className="small-note">새 작업 지시를 만들려면 관리자 권한이 필요합니다.</p> : null}
         </div>
       </SectionCard>
 
       <section className="workflows-layout">
-        <SectionCard title="Workflow Queue" eyebrow="Queue + pipeline + PM decisions">
+        <SectionCard title="작업 흐름 큐" eyebrow="QUEUE + PIPELINE + PM DECISIONS">
           <div className="filter-row">
             {filters.map((item) => (
               <button className={`chip ${filter === item ? "active" : ""}`} key={item} type="button" onClick={() => setFilter(item)}>
@@ -132,7 +132,7 @@ export function WorkflowsPage({ data, onRefresh }: { data: AppData; onRefresh: (
             ))}
           </div>
           <div className="workflow-list">
-            {filteredTasks.length === 0 ? <div className="empty-state">No workflows match this filter.</div> : null}
+            {filteredTasks.length === 0 ? <div className="empty-state">현재 필터에 맞는 작업 흐름이 없습니다.</div> : null}
             {filteredTasks.map((task) => (
               <button
                 className={`workflow-row ${selectedTask?.id === task.id ? "selected" : ""}`}
@@ -152,7 +152,7 @@ export function WorkflowsPage({ data, onRefresh }: { data: AppData; onRefresh: (
           </div>
         </SectionCard>
 
-        <SectionCard title="Workflow Detail" eyebrow="Human action is recorded only">
+        <SectionCard title="작업 흐름 상세" eyebrow="사람의 결정만 기록">
           {selectedTask ? (
             <WorkflowDetail
               task={selectedTask}
@@ -163,7 +163,7 @@ export function WorkflowsPage({ data, onRefresh }: { data: AppData; onRefresh: (
               canDecide={canDecide}
             />
           ) : (
-            <div className="empty-state">Select a workflow to inspect its chain and PM decision state.</div>
+            <div className="empty-state">작업 흐름을 선택하면 단계와 PM 결정 상태를 확인할 수 있습니다.</div>
           )}
         </SectionCard>
       </section>
@@ -188,12 +188,7 @@ function WorkflowDetail({
   canDecide: boolean;
 }) {
   const flow: Array<[string, PmTaskStatus[]]> = [
-    ["Queue", ["queued"]],
-    ["Architect", ["architect_review"]],
-    ["Builder", ["ready_for_build", "building"]],
-    ["Reviewer", ["review"]],
-    ["PM Decision", ["pm_decision_required"]],
-    ["Done", ["approved", "done"]],
+    ["큐", ["queued"]], ["설계 검토", ["architect_review"]], ["구현", ["ready_for_build", "building"]], ["리뷰", ["review"]], ["PM 결정", ["pm_decision_required"]], ["완료", ["approved", "done"]],
   ];
 
   return (
@@ -214,39 +209,38 @@ function WorkflowDetail({
       </div>
       <div className="detail-grid">
         <div>
-          <span>Priority</span>
+          <span>우선순위</span>
           <strong>{task.priority}</strong>
         </div>
         <div>
-          <span>Iteration</span>
+          <span>반복</span>
           <strong>
             {task.current_iteration}/{task.max_iterations}
           </strong>
         </div>
         <div>
-          <span>Owner</span>
+          <span>담당</span>
           <strong>{getOwner(task)}</strong>
         </div>
         <div>
-          <span>Updated</span>
+          <span>최근 변경</span>
           <strong>{formatTimeAgo(task.updated_at)}</strong>
         </div>
       </div>
       <details className="details-box">
-        <summary>Architecture review / reviewer verdict metadata</summary>
+        <summary>설계 검토·리뷰 판정 메타데이터</summary>
         <pre>{stringifyMeta(task.metadata)}</pre>
       </details>
       <div className="decision-panel">
         <p>
-          This records a PM decision and updates ArchiveOS task state. It does not directly execute Codex, MCP, shell,
-          deployment, or process control.
+          PM 결정과 ArchiveOS 작업 상태만 기록합니다. Codex, MCP, shell, 배포, 프로세스 제어를 직접 실행하지 않습니다.
         </p>
-        <textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Decision reason or retry note" />
-        {!canDecide ? <p>PM or Admin session is required for approval, rejection, hold, and retry.</p> : null}
+        <textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="결정 사유 또는 재시도 메모" />
+        {!canDecide ? <p>승인, 거절, 보류, 재시도에는 PM 또는 관리자 세션이 필요합니다.</p> : null}
         <div className="button-row">
           {(["approve", "reject", "hold", "retry"] as PmDecisionAction[]).map((action) => (
             <button className={`button ${action === "approve" ? "button-primary" : "button-secondary"}`} key={action} type="button" onClick={() => onDecision(action)} disabled={Boolean(busyAction) || !canDecide}>
-              {busyAction === action ? "Recording..." : action}
+              {busyAction === action ? "기록 중..." : action}
             </button>
           ))}
         </div>

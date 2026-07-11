@@ -11,9 +11,9 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 const storageKey = "archiveos.theme";
 
 function getStoredTheme(): ThemeMode {
-  if (typeof window === "undefined") return "dark";
+  if (typeof window === "undefined") return "light";
   const value = window.localStorage.getItem(storageKey);
-  return value === "light" || value === "system" || value === "dark" ? value : "dark";
+  return value === "light" || value === "system" || value === "dark" ? value : "light";
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

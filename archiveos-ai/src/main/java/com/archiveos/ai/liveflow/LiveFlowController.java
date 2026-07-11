@@ -25,7 +25,7 @@ public class LiveFlowController {
     @GetMapping("/api/live-flow/topology")
     public Map<String, Object> topology() { return envelope(service.topology()); }
 
-    @GetMapping("/api/live-flow/events/recent")
+    @GetMapping({"/api/live-flow/events/recent", "/api/live-flow/recent"})
     public Map<String, Object> recent(@RequestParam(defaultValue = "100") int limit) { return envelope(service.recent(limit)); }
 
     @GetMapping("/api/live-flow/replay")
