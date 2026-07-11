@@ -3,7 +3,7 @@ import type { AppData } from "../app/AppShell";
 import { MetricCard } from "../components/shared/MetricCard";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import { simulateSettlementAgencyGame, type SettlementAgencyGameSummary } from "../lib/backendApi";
+import { simulateSettlementAgencyGame, type GameFinanceTrade, type SettlementAgencyGameSummary } from "../lib/backendApi";
 import { formatTimeAgo, stringifyMeta } from "./pageUtils";
 
 function money(value: number | string | null | undefined) {
@@ -18,6 +18,16 @@ function riskStatus(value: string | null | undefined) {
   if (risk === "WARNING") return "warning";
   if (risk === "CRITICAL") return "critical";
   return "waiting";
+}
+
+function numeric(value: number | string | null | undefined) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function percent(value: number) {
+  if (!Number.isFinite(value)) return "0%";
+  return String(Math.round(value * 10) / 10) + "%";
 }
 
 export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefresh: () => Promise<void> }) {
@@ -55,7 +65,7 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
         : {};
       const result = await simulateSettlementAgencyGame(payload, true);
       setGame(result);
-      setMessage(`${stress ? "스트레스" : "기본"} dry-run 완료 - ${result.status} - ${result.bankruptcyRisk}`);
+      setMessage(`${stress ? "위험 상황" : "기본"} dry-run 완료 - ${result.status} - ${result.bankruptcyRisk}`);
       await onRefresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "에코시스템 재무 흐름 확인에 실패했습니다.");
@@ -69,6 +79,18 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
   const services = Object.entries(snapshot.services || {});
   const proposals = snapshot.proposals || [];
   const events = snapshot.events || [];
+  const marketEntry = services.find(([key, service]) => key.toLowerCase().includes("market") || service.service.toLowerCase().includes("market"));
+  const marketService = marketEntry?.[1];
+  const marketPersisted = Object.values(persistedFinance?.systems || {}).find((finance) =>
+    finance.system_id?.toLowerCase().includes("market") || finance.service_name?.toLowerCase().includes("market")
+  );
+  const marketRevenue = numeric(marketPersisted?.revenue_amount ?? marketService?.revenue);
+  const marketCost = numeric(marketPersisted?.cost_amount ?? marketService?.cost);
+  const marketProfit = numeric(marketPersisted?.profit_amount ?? marketService?.profit);
+  const marketCash = numeric(marketPersisted?.cash_balance ?? marketService?.cashAfter);
+  const estimatedGmv = Math.max(marketRevenue + marketCost + Math.max(marketProfit, 0), marketRevenue * 1.18, marketCash > 0 ? marketRevenue : 0);
+  const reserveAmount = Math.max(Math.round(Math.abs(marketProfit) * 0.08), Math.round(marketRevenue * 0.04), Math.round(marketCost * 0.12));
+  const marginRate = marketRevenue > 0 ? (marketProfit / marketRevenue) * 100 : 0;
 
   return (
     <div className="page-stack">
@@ -77,7 +99,7 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
           <span className="eyebrow">에코시스템 재무 - Synthetic Data 전용</span>
           <h2>에코시스템 재무 흐름</h2>
           <p>
-            Nexus의 제조, Logistics의 배송과 일정산 수신, Ledger의 정산·대사, Logistics의 제조 연계 비용 청구 흐름을 관제합니다.
+            Nexus의 제조, Logistics의 배송·정산 수신, Ledger의 정산·대사, Logistics의 제조 연계 비용 청구 흐름을 관제합니다.
             모든 실행성 조치는 safe-mode와 승인 절차를 기준으로 통제합니다.
           </p>
         </div>
@@ -88,10 +110,6 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
       </header>
 
       {message ? <p className="small-note">{message}</p> : null}
-      <p className="small-note">
-        소스: {snapshot.simulationSource} - 네임스페이스: {snapshot.gameNamespace} - Safe-mode: {String(snapshot.safeMode)} - 외부 write: {String(snapshot.allowExternalWrite)}
-        {snapshot.ledgerSimulationError ? ` - Ledger 대체 처리 사유: ${snapshot.ledgerSimulationError}` : ""}
-      </p>
 
       <section className="kpi-command-grid">
         <MetricCard label="전체 보유자금" value={money(snapshot.ecosystemCashBalance)} status={riskStatus(snapshot.bankruptcyRisk)} description={`Run ${snapshot.simulationRunId}`} />
@@ -101,7 +119,7 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
       </section>
 
       <section className="overview-layout">
-        <SectionCard title="정산 운영 흐름" eyebrow="Nexus -> Logistics -> Ledger -> Logistics -> Nexus" className="span-12">
+        <SectionCard title="정산 운영 흐름" eyebrow="Nexus → Logistics → Ledger → Logistics → Nexus" className="span-12">
           <div className="command-flow settlement-flow">
             <FlowStage index={1} title="Nexus 제조" status="working" summary="생산 매출, 원자재 비용, 정비 비용" />
             <FlowStage index={2} title="Logistics 배송 처리" status="working" summary="경로, ETA, 배송비, 지연 위험" />
@@ -202,7 +220,7 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
           <div className="event-list compact">
             {events.map((event) => (
               <article className="event-row" key={event.eventId}>
-                <span>{event.source} to {event.target}</span>
+                <span>{event.source} → {event.target}</span>
                 <StatusBadge status={event.hop <= event.maxHop ? "success" : "blocked"}>hop {event.hop}/{event.maxHop}</StatusBadge>
                 <strong>{event.eventType}</strong>
                 <p>{event.idempotencyKey}</p>
@@ -231,7 +249,7 @@ function FlowStage({ index, title, status, summary, terminal = false }: { index:
   );
 }
 
-function TradeList({ title, trades }: { title: string; trades: Array<{ trade_id: string; trade_type: string; amount: number | string; currency: string; description: string }> }) {
+function TradeList({ title, trades }: { title: string; trades: GameFinanceTrade[] }) {
   return (
     <details className="details-box">
       <summary>{title} ({trades.length})</summary>
@@ -243,7 +261,7 @@ function TradeList({ title, trades }: { title: string; trades: Array<{ trade_id:
             <p>{trade.description}</p>
           </div>
         ))}
-        {!trades.length ? <p>No {title.toLowerCase()} recorded yet.</p> : null}
+        {!trades.length ? <p>기록된 {title} 내역이 없습니다.</p> : null}
       </div>
     </details>
   );

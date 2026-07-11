@@ -294,6 +294,31 @@ export type LiveFlowSummary = {
   recent: LiveFlowEvent[];
   traceId?: string;
   collected?: number;
+  runtime?: {
+    activeServices?: string[];
+    stalledServices?: string[];
+    latestEventAt?: string | null;
+    staleThresholdSeconds?: number;
+    freshnessStatus?: "LIVE" | "SLOW" | "STALE" | "NO_RUNTIME_EVENTS" | string;
+    pipelineStatus?: string;
+    reason?: string;
+    services?: Array<{
+      serviceId: string;
+      serviceName: string;
+      serviceStatus: string;
+      runtimeStatus: string;
+      lastEventAt?: string | null;
+      lastWorkAt?: string | null;
+      runtimeActive?: boolean;
+      autoRunEnabled?: boolean;
+      eventsProducedLastTick?: number;
+      eventsConsumedLastTick?: number;
+      backlogCount?: number;
+      schedulerStatus?: string;
+      pipelineStatus?: string;
+      reason?: string;
+    }>;
+  };
 };
 
 export type LiveFlowTopology = {

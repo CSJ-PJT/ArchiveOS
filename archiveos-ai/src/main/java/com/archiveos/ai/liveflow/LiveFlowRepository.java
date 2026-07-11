@@ -32,6 +32,7 @@ public class LiveFlowRepository {
                   severity = excluded.severity,
                   display_label = excluded.display_label,
                   amount_bucket = excluded.amount_bucket,
+                  occurred_at = excluded.occurred_at,
                   metadata = excluded.metadata,
                   received_at = now()
                 returning *
