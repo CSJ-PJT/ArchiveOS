@@ -105,6 +105,7 @@ archive:
         base-url: ${ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL:http://localhost:8080}
         health-path: /actuator/health
         summary-path: /api/outbox/summary
+        operations-summary-path: /api/operations/summary
         workforce-summary-path: /api/workforce/summary
         productivity-summary-path: /api/productivity/summary
         capacity-summary-path: /api/capacity/summary
