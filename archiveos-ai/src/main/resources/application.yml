@@ -64,6 +64,26 @@ archiveos:
   experimental:
     deepstake:
       enabled: ${ARCHIVEOS_EXPERIMENTAL_DEEPSTAKE_ENABLED:false}
+  ecosystem:
+    balance:
+      market:
+        min-margin: ${ARCHIVEOS_BALANCE_MARKET_MIN_MARGIN:8}
+        max-margin: ${ARCHIVEOS_BALANCE_MARKET_MAX_MARGIN:18}
+      nexus:
+        min-margin: ${ARCHIVEOS_BALANCE_NEXUS_MIN_MARGIN:5}
+        max-margin: ${ARCHIVEOS_BALANCE_NEXUS_MAX_MARGIN:12}
+      logistics:
+        min-margin: ${ARCHIVEOS_BALANCE_LOGISTICS_MIN_MARGIN:3}
+        max-margin: ${ARCHIVEOS_BALANCE_LOGISTICS_MAX_MARGIN:10}
+      ledger:
+        min-margin: ${ARCHIVEOS_BALANCE_LEDGER_MIN_MARGIN:4}
+        max-margin: ${ARCHIVEOS_BALANCE_LEDGER_MAX_MARGIN:12}
+      archiveos:
+        min-margin: ${ARCHIVEOS_BALANCE_ARCHIVEOS_MIN_MARGIN:0}
+        max-margin: ${ARCHIVEOS_BALANCE_ARCHIVEOS_MAX_MARGIN:8}
+      backlog-warning: ${ARCHIVEOS_BALANCE_BACKLOG_WARNING:20}
+      capacity-warning-percent: ${ARCHIVEOS_BALANCE_CAPACITY_WARNING_PERCENT:90}
+      profit-concentration-percent: ${ARCHIVEOS_BALANCE_PROFIT_CONCENTRATION_PERCENT:55}
   security:
     admin-password: ${ARCHIVEOS_ADMIN_PASSWORD:}
     integration-token: ${ARCHIVEOS_INTEGRATION_TOKEN:}

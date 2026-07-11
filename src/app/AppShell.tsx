@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   configuredBackendUrl, getAtlasOverview, getAuthSession, getEcosystemBalanceSummary, getEcosystemSummary, getEcosystemTopology,
   getExternalApprovals, getGameFinanceSummary, getHistorianStatus, getKnowledgeOverview, getLiveFlowRecentEvents, getLiveFlowSummary,
@@ -51,6 +51,7 @@ function AppShellInner() {
   const [streamState, setStreamState] = useState<"connecting" | "connected" | "fallback">("connecting");
   const fallbackTimer = useRef<number | null>(null);
   const reconnectTimer = useRef<number | null>(null);
+  const reconnectAttempt = useRef(0);
   const eventIds = useRef(new Set<string>());
   const { locale, setLocale } = useI18n();
 
@@ -86,6 +87,7 @@ function AppShellInner() {
         if ("event_id" in payload) {
           if (eventIds.current.has(payload.event_id)) return;
           eventIds.current.add(payload.event_id);
+          if (eventIds.current.size > 750) eventIds.current.delete(eventIds.current.values().next().value as string);
           const receivedAt = payload.received_at ? Date.parse(payload.received_at) : Number.NaN;
           const latency = Number.isFinite(receivedAt) ? Math.max(0, Date.now() - receivedAt) : null;
           setData((current) => ({ ...current, lastEventLatencyMs: latency, liveFlowEvents: [payload, ...current.liveFlowEvents.filter((event) => event.event_id !== payload.event_id)].slice(0, 100), liveFlow: current.liveFlow ? { ...current.liveFlow, latest_event_at: payload.occurred_at, recent_events: (current.liveFlow.recent_events ?? 0) + 1, active_flows: (current.liveFlow.active_flows ?? 0) + 1 } : current.liveFlow }));
@@ -105,7 +107,7 @@ function AppShellInner() {
       setStreamState(reconnecting ? "fallback" : "connecting");
       source?.close();
       source = new EventSource(liveFlowStreamUrl(), { withCredentials: true });
-      const connected = (event: Event) => { receive((event as MessageEvent).data); setStreamState("connected"); stopFallback(); clearReconnect(); };
+      const connected = (event: Event) => { receive((event as MessageEvent).data); reconnectAttempt.current = 0; setStreamState("connected"); stopFallback(); clearReconnect(); };
       source.addEventListener("snapshot", connected);
       source.addEventListener("runtime-event", connected);
       source.addEventListener("service-status", (event) => receive((event as MessageEvent).data));
@@ -113,22 +115,32 @@ function AppShellInner() {
         if (disposed) return;
         startFallback();
         source?.close();
-        if (!reconnectTimer.current) reconnectTimer.current = window.setTimeout(() => connect(true), 1000);
+        if (!navigator.onLine) return;
+        const delay = Math.min(1000 * 2 ** reconnectAttempt.current, 30_000);
+        reconnectAttempt.current += 1;
+        if (!reconnectTimer.current) reconnectTimer.current = window.setTimeout(() => connect(true), delay);
       };
     };
+    const reconnectWhenOnline = () => { if (!disposed && !reconnectTimer.current) connect(true); };
+    window.addEventListener("online", reconnectWhenOnline);
     connect();
-    return () => { disposed = true; clearReconnect(); source?.close(); stopFallback(); };
+    return () => { disposed = true; window.removeEventListener("online", reconnectWhenOnline); clearReconnect(); source?.close(); stopFallback(); reconnectAttempt.current = 0; eventIds.current.clear(); };
   }, [route]);
 
   const health = useMemo(() => data.ecosystem?.status === "HEALTHY" ? "healthy" : Object.keys(data.errors).length ? "warning" : "waiting", [data.ecosystem?.status, data.errors]);
   const page = route === "dashboard" ? <ConsoleDashboardPage data={data} onNavigate={navigate} onRefresh={refresh} /> : route === "services" ? <ConsoleServicesPage data={data} /> : route === "operations" ? <ConsoleOperationsPage data={data} onRefresh={refresh} /> : route === "finance" ? <ConsoleFinancePage data={data} onRefresh={refresh} /> : route === "records" ? <ConsoleRecordsPage data={data} /> : <ConsoleSettingsPage data={data} onRefresh={refresh} backendOrigin={configuredBackendUrl} />;
-  return <div className="app-shell"><Sidebar route={route} open={sidebarOpen} onNavigate={navigate} health={health} loading={data.loading} role={data.auth.role} />{sidebarOpen ? <button className="sidebar-scrim" type="button" aria-label="메뉴 닫기" onClick={() => setSidebarOpen(false)} /> : null}<div className="content-shell"><header className="topbar"><button className="mobile-menu-button" type="button" aria-label="메뉴 열기" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>☰</button><div><span className="eyebrow">ARCHIVEOS CONTROL TOWER</span><h1>{consoleText(locale, `nav.${route}`)}</h1></div><div className="topbar-status">{route === "dashboard" ? <span className={`stream-state stream-${streamState}`}>{streamState === "connected" ? `${consoleText(locale, "common.live")}${data.lastEventLatencyMs === null ? "" : ` · ${data.lastEventLatencyMs}ms`}` : streamState === "fallback" ? "연결 재시도 중" : "연결 중"}</span> : null}<LanguagePopover locale={locale} setLocale={setLocale} /><span className="last-sync">{data.refreshedAt ? `갱신 ${new Date(data.refreshedAt).toLocaleTimeString()}` : "불러오는 중"}</span><button className="icon-button" type="button" onClick={refresh} aria-label="현재 화면 새로고침" title={consoleText(locale, "common.refresh")}><Icon name="refresh" /></button></div></header><main className="page-host" id="main-content">{page}</main></div></div>;
+  return <div className="app-shell"><Sidebar route={route} open={sidebarOpen} onNavigate={navigate} health={health} loading={data.loading} role={data.auth.role} />{sidebarOpen ? <button className="sidebar-scrim" type="button" aria-label={consoleText(locale, "common.closeMenu")} onClick={() => setSidebarOpen(false)} /> : null}<div className="content-shell"><header className="topbar"><button className="mobile-menu-button" type="button" aria-label={consoleText(locale, "common.openMenu")} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>☰</button><div><span className="eyebrow">ARCHIVEOS CONTROL TOWER</span><h1>{consoleText(locale, `nav.${route}`)}</h1></div><div className="topbar-status">{route === "dashboard" ? <span className={`stream-state stream-${streamState}`}>{streamState === "connected" ? `${consoleText(locale, "common.live")}${data.lastEventLatencyMs === null ? "" : ` · ${data.lastEventLatencyMs}ms`}` : streamState === "fallback" ? consoleText(locale, "common.reconnecting") : consoleText(locale, "common.connecting")}</span> : null}<LanguagePopover locale={locale} setLocale={setLocale} /><span className="last-sync">{data.refreshedAt ? `${consoleText(locale, "common.updated")} ${new Date(data.refreshedAt).toLocaleTimeString()}` : consoleText(locale, "common.loading")}</span><button className="icon-button" type="button" onClick={refresh} aria-label={consoleText(locale, "common.refresh")} title={consoleText(locale, "common.refresh")}><Icon name="refresh" /></button></div></header><main className="page-host" id="main-content">{page}</main></div></div>;
 }
 
 function LanguagePopover({ locale, setLocale }: { locale: Locale; setLocale: (locale: Locale) => void }) {
   const [open, setOpen] = useState(false);
-  useEffect(() => { const close = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); }; window.addEventListener("keydown", close); return () => window.removeEventListener("keydown", close); }, []);
-  return <div className="language-popover"><button type="button" className="language-trigger" aria-label="표시 언어" aria-expanded={open} onClick={() => setOpen((value) => !value)}><span aria-hidden="true">◎</span><b>{locale === "zh-CN" ? "ZH" : locale.toUpperCase()}</b></button>{open ? <div className="language-menu" role="menu">{languageOptions.map((option) => <button type="button" role="menuitemradio" aria-checked={locale === option.code} key={option.code} onClick={() => { setLocale(option.code); setOpen(false); }}>{t(option.labelKey, locale)}</button>)}</div> : null}</div>;
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+  const close = (returnFocus = false) => { setOpen(false); if (returnFocus) window.setTimeout(() => triggerRef.current?.focus(), 0); };
+  useEffect(() => { const dismiss = (event: PointerEvent) => { const target = event.target as Node; if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) close(false); }; const escape = (event: KeyboardEvent) => { if (event.key === "Escape") close(true); }; window.addEventListener("pointerdown", dismiss); window.addEventListener("keydown", escape); return () => { window.removeEventListener("pointerdown", dismiss); window.removeEventListener("keydown", escape); }; }, []);
+  useEffect(() => { if (open) menuRef.current?.querySelector<HTMLButtonElement>("[aria-checked='true']")?.focus(); }, [open]);
+  return <div className="language-popover"><button ref={triggerRef} type="button" className="language-trigger" aria-label={consoleText(locale, "common.language")} aria-expanded={open} aria-haspopup="menu" aria-controls={open ? menuId : undefined} onClick={() => setOpen((value) => !value)}><span aria-hidden="true">◎</span><b>{locale === "zh-CN" ? "ZH" : locale.toUpperCase()}</b></button>{open ? <div ref={menuRef} id={menuId} className="language-menu" role="menu">{languageOptions.map((option) => <button type="button" role="menuitemradio" aria-checked={locale === option.code} key={option.code} onClick={() => { setLocale(option.code); close(true); }}>{t(option.labelKey, locale)}</button>)}</div> : null}</div>;
 }
 
 function loadersFor(route: CoreRoute): Array<[keyof AppData, () => Promise<unknown>]> {

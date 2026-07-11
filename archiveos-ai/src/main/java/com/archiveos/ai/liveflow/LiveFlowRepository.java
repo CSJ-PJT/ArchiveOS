@@ -58,6 +58,23 @@ public class LiveFlowRepository {
                 this::row, clamp(limit));
     }
 
+    public boolean existsEventId(String eventId) {
+        Integer count = jdbc.queryForObject("select count(*) from public.ecosystem_flow_event where event_id = ?", Integer.class, eventId);
+        return count != null && count > 0;
+    }
+
+    /** Returns persisted events strictly after a Last-Event-ID in receive order. */
+    public List<Map<String, Object>> findAfterEventId(String eventId, int limit) {
+        return jdbc.query("""
+                select current_event.* from public.ecosystem_flow_event current_event
+                join public.ecosystem_flow_event checkpoint on checkpoint.event_id = ?
+                 where current_event.received_at > checkpoint.received_at
+                    or (current_event.received_at = checkpoint.received_at and current_event.id > checkpoint.id)
+                 order by current_event.received_at asc, current_event.id asc
+                 limit ?
+                """, this::row, eventId, clampReplayLimit(limit));
+    }
+
     public List<Map<String, Object>> replay(String from, String to, int limit) {
         if (from != null && !from.isBlank() && to != null && !to.isBlank()) {
             return jdbc.query("""
@@ -127,6 +144,7 @@ public class LiveFlowRepository {
     }
 
     private int clamp(int limit) { return Math.min(Math.max(limit, 1), 500); }
+    private int clampReplayLimit(int limit) { return Math.min(Math.max(limit, 1), 250); }
     private String instant(ResultSet rs, String name) throws SQLException {
         Timestamp timestamp = rs.getTimestamp(name);
         return timestamp == null ? null : timestamp.toInstant().toString();
