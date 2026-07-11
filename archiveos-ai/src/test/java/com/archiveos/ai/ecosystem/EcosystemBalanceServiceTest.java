@@ -28,7 +28,7 @@ class EcosystemBalanceServiceTest {
                 .containsEntry("operatingMargin", java.math.BigDecimal.valueOf(30).setScale(2))
                 .containsEntry("balance", "CONCENTRATED");
         assertThat(nexus).containsEntry("balance", "NO_DATA").containsEntry("revenue", null).containsEntry("operatingMargin", null);
-        assertThat(summary).containsEntry("balanceStatus", "REVIEW");
+        assertThat(summary).containsEntry("balanceStatus", "PARTIAL_DATA");
     }
 
     private Map<String, Object> service(String name, Map<String, Object> summary) {
