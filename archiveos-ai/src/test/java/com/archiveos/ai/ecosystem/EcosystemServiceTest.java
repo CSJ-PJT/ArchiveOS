@@ -31,7 +31,7 @@ class EcosystemServiceTest {
         IntegrationResult unavailable = new IntegrationResult(EcosystemServiceStatus.UNAVAILABLE, null, Map.of(), "Connection refused", 1);
         when(market.health()).thenReturn(unavailable); when(market.operationsSummary()).thenReturn(unavailable);
         when(market.marketEconomySummary()).thenReturn(unavailable); when(market.outboxSummary()).thenReturn(unavailable);
-        when(nexus.health()).thenReturn(unavailable); when(nexus.outboxSummary()).thenReturn(unavailable);
+        when(nexus.health()).thenReturn(unavailable); when(nexus.outboxSummary()).thenReturn(unavailable); when(nexus.operationsSummary()).thenReturn(unavailable);
         when(logitics.health()).thenReturn(unavailable); when(logitics.operationsSummary()).thenReturn(unavailable);
         when(ledger.health()).thenReturn(unavailable); when(ledger.operationsSummary()).thenReturn(unavailable);
         when(repository.recordHealth(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
@@ -73,6 +73,7 @@ class EcosystemServiceTest {
         Map<String, EcosystemProperties.ServiceConfig> services = new LinkedHashMap<>();
         services.put("market", marketConfig());
         services.put("nexus", config("Archive-Nexus", "http://localhost:8080", "/api/outbox/summary"));
+        services.get("nexus").setOperationsSummaryPath("/api/operations/summary");
         services.put("logitics", config("Archive-Logistics", "http://localhost:8092", "/api/operations/summary"));
         services.put("ledger", config("Archive-Ledger", "http://localhost:18080", "/api/operations/summary"));
         services.get("ledger").setApprovalCallbackPath("/api/approvals/callback");
