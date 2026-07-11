@@ -27,12 +27,12 @@ public class EcosystemBalanceService {
         BigDecimal totalProfit = BigDecimal.ZERO;
         for (String key : List.of("market", "nexus", "logitics", "ledger", "archiveos")) {
             Map<String, Object> source = "archiveos".equals(key) ? Map.of("status", "HEALTHY", "name", "ArchiveOS") : map(services.get(key));
-            Map<String, Object> body = map(source.get("summary"));
-            BigDecimal revenue = amount(body, "totalRevenue", "revenue", "revenueAmount");
-            BigDecimal cost = amount(body, "totalCost", "cost", "costAmount");
-            BigDecimal profit = amount(body, "profit", "profitAmount");
+            Map<String, Object> body = financeBody(map(source.get("summary")));
+            BigDecimal revenue = revenueFor(key, body);
+            BigDecimal cost = costFor(key, body);
+            BigDecimal profit = profitFor(key, body);
             if (profit == null && revenue != null && cost != null) profit = revenue.subtract(cost);
-            BigDecimal cash = amount(body, "cashBalance", "cash", "balance");
+            BigDecimal cash = amount(body, "cashBalance", "availableCash", "cash", "balance");
             BigDecimal backlog = amount(body, "backlog", "pending", "approvalRequired");
             if (!"archiveos".equals(key)) {
                 totalRevenue = totalRevenue.add(orZero(revenue));
@@ -93,6 +93,7 @@ public class EcosystemBalanceService {
         row.put("serviceId", "archiveos".equals(key) ? "archiveos" : "logitics".equals(key) ? "archive-logistics" : "archive-" + key);
         row.put("serviceName", "archiveos".equals(key) ? "ArchiveOS" : string(source.get("name"), "Archive-" + key));
         row.put("status", "archiveos".equals(key) ? "HEALTHY" : string(source.get("status"), "UNKNOWN"));
+        row.put("financeSource", key + " latest summary");
         row.put("revenue", revenue); row.put("cost", cost); row.put("profit", profit); row.put("cashBalance", cash); row.put("backlog", backlog);
         row.put("targetMinMargin", target.getMinMargin()); row.put("targetMaxMargin", target.getMaxMargin()); row.put("operatingMargin", margin);
         row.put("marginGap", margin == null ? null : margin.compareTo(target.getMinMargin()) < 0 ? margin.subtract(target.getMinMargin()) : margin.compareTo(target.getMaxMargin()) > 0 ? margin.subtract(target.getMaxMargin()) : BigDecimal.ZERO);
@@ -115,8 +116,8 @@ public class EcosystemBalanceService {
     }
 
     private Map<String, Object> action(String service, String title, String reason, String mode) { return Map.of("serviceId", service, "title", title, "reason", reason, "mode", mode); }
-    private String balanceStatus(List<Map<String, Object>> rows) { return rows.stream().anyMatch(row -> "UNDER_PRESSURE".equals(row.get("balance"))) ? "WATCH" : rows.stream().anyMatch(row -> "CONCENTRATED".equals(row.get("balance")) || concentrationExceeded(row)) ? "REVIEW" : "BALANCED"; }
-    private String reviewReason(List<Map<String, Object>> rows) { return rows.stream().filter(row -> "CONCENTRATED".equals(row.get("balance"))).findFirst().map(row -> row.get("serviceName") + " 수익 집중도가 권장 범위를 초과했습니다.").orElseGet(() -> rows.stream().filter(this::concentrationExceeded).findFirst().map(row -> row.get("serviceName") + " 이익 기여도가 정책 집중도 기준을 초과했습니다.").orElseGet(() -> rows.stream().filter(row -> "UNDER_PRESSURE".equals(row.get("balance"))).findFirst().map(row -> row.get("serviceName") + " 손익이 권장 범위 아래입니다.").orElse("현재 수집된 합성 지표는 균형 범위에 있습니다."))); }
+    private String balanceStatus(List<Map<String, Object>> rows) { long available = rows.stream().filter(row -> !"NO_DATA".equals(row.get("balance"))).count(); if (available == 0) return "NO_DATA"; if (available < rows.size()) return "PARTIAL_DATA"; return rows.stream().anyMatch(row -> "UNDER_PRESSURE".equals(row.get("balance")) || "CONCENTRATED".equals(row.get("balance")) || concentrationExceeded(row)) ? "COMPLETE_REVIEW" : "COMPLETE_BALANCED"; }
+    private String reviewReason(List<Map<String, Object>> rows) { long missing = rows.stream().filter(row -> "NO_DATA".equals(row.get("balance"))).count(); if (missing == rows.size()) return "수집된 재무 데이터가 없어 생태계 균형을 평가할 수 없습니다."; if (missing > 0) return "일부 서비스의 재무 데이터가 아직 수집되지 않아 생태계 균형은 부분 평가 상태입니다."; return rows.stream().filter(row -> "UNDER_PRESSURE".equals(row.get("balance"))).findFirst().map(row -> row.get("serviceName") + " 손익이 권장 범위 아래입니다.").orElse("현재 수집된 합성 지표는 균형 범위에 있습니다."); }
     private boolean concentrationExceeded(Map<String, Object> row) { BigDecimal share = decimal(row.get("profitShare")); return share != null && share.compareTo(BigDecimal.valueOf(policy.getProfitConcentrationPercent())) > 0; }
     @SuppressWarnings("unchecked") private Map<String, Object> map(Object value) { return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of(); }
     private String string(Object value, String fallback) { return value == null || String.valueOf(value).isBlank() ? fallback : String.valueOf(value); }
@@ -125,4 +126,8 @@ public class EcosystemBalanceService {
     private BigDecimal decimal(Object value) { try { return value == null ? null : new BigDecimal(String.valueOf(value)); } catch (NumberFormatException error) { return null; } }
     private BigDecimal orZero(BigDecimal value) { return value == null ? BigDecimal.ZERO : value; }
     private BigDecimal ratio(BigDecimal value, BigDecimal total) { return value == null || total.signum() == 0 ? null : value.multiply(BigDecimal.valueOf(100)).divide(total, 2, RoundingMode.HALF_UP); }
+    private BigDecimal revenueFor(String key, Map<String, Object> body) { return switch (key) { case "market" -> amount(body, "recognizedRevenue", "totalRevenue", "revenue"); case "nexus" -> amount(body, "manufacturingRevenue", "totalRevenue", "revenue"); case "logitics" -> amount(body, "logisticsRevenue", "totalRevenue", "revenue"); case "ledger" -> amount(body, "settlementAgencyRevenue", "totalRevenue", "revenue"); default -> amount(body, "costRecoveryRevenue", "totalRevenue", "revenue"); }; }
+    private BigDecimal costFor(String key, Map<String, Object> body) { return switch (key) { case "market" -> amount(body, "totalExpense", "totalCost", "cost"); case "nexus" -> amount(body, "totalCost", "materialCost", "maintenanceCost", "qualityLossCost", "workforceCost"); case "logitics" -> amount(body, "totalCost", "fuelCost", "tollCost", "workforceCost", "delayPenaltyCost"); case "ledger" -> amount(body, "operatingCost", "totalCost", "cost"); default -> amount(body, "operatingCost", "totalCost", "cost"); }; }
+    private BigDecimal profitFor(String key, Map<String, Object> body) { return amount(body, "operatingProfit", "profit", "profitAmount"); }
+    private Map<String, Object> financeBody(Map<String, Object> source) { Map<String, Object> result = new LinkedHashMap<>(source); for (String key : List.of("data", "summary", "economy", "marketEconomy", "settlementAgency", "cashflow", "workforce")) if (result.get(key) instanceof Map<?, ?>) result.putAll(financeBody(map(result.get(key)))); return result; }
 }
