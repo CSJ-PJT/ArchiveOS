@@ -312,3 +312,23 @@ docker compose config --quiet
 ## 정리
 
 Archive Platform Ecosystem은 Archive-Market, Archive-Nexus, Archive-Logistics, Archive-Ledger, ArchiveOS를 연결해 외부 수요, 제조 이벤트 생성, 물류 경로와 비용 계산, 금융성 원장과 정산, 승인과 정책 근거, 장애 관제를 하나의 이벤트 드리븐 AX 백엔드 흐름으로 구현한 Java/Spring 기반 프로젝트입니다. 각 서비스는 Outbox, idempotency, retry, safe-mode, DEGRADED 상태 분리를 통해 외부 장애가 전체 런타임으로 전파되지 않도록 설계했습니다.
+# ArchiveOS Console V3
+
+ArchiveOS는 Archive-Market, Archive-Nexus, Archive-Logistics, Archive-Ledger의 상태·합성 런타임 이벤트·승인·정산 균형을 읽기 전용으로 관제하는 Control Tower입니다.
+
+## 핵심 콘솔
+
+- **대시보드**: 전체 상태, 라이브 메쉬, 우선 조치, 서비스 균형
+- **서비스**: 핵심 서비스 상태와 외부 연동(Atlas) 분리
+- **운영**: 에이전트, 작업 역량, 작업 흐름, 자동화
+- **재무**: 합성 정산 흐름, 서비스별 손익, 승인·정산, 대사
+- **기록**: 실시간 이벤트, 감사 이력, 운영 지식
+- **설정**: 일반 설정, 연동, 고급 도구
+
+실시간 메쉬는 `GET /api/live-flow/stream` SSE를 우선 사용하며 실제로 수집·저장된 합성 런타임 이벤트만 표시합니다. 실제 고객·결제·계좌·금융 데이터는 사용하지 않습니다.
+
+Archive 핵심 상태는 Market/Nexus/Logistics/Ledger/ArchiveOS만으로 계산합니다. Atlas와 실험 시스템은 외부 연동으로 분리되며, 기본 비활성인 Labs 시스템은 핵심 KPI나 상태 판정에 포함되지 않습니다.
+
+## 언어 지원
+
+한국어(기본), English, 日本語, 简体中文을 지원합니다. 우측 상단 지구본 메뉴에서 선택하며 `archive.locale`에 저장합니다. eventType, API path, enum 및 기존 계약 호환 키(`logitics`)는 번역하지 않고 UI 문구만 번역합니다.

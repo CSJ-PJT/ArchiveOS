@@ -33,12 +33,14 @@ class LiveFlowServiceTest {
                 "failed_callbacks", 1,
                 "degraded_systems", 1));
         when(repository.recent(12)).thenReturn(List.of());
-        when(ecosystem.summary()).thenReturn(Map.of("services", Map.of(
+        Map<String, Object> ecosystemSnapshot = Map.of("services", Map.of(
                 "market", Map.of("status", "HEALTHY", "name", "Archive-Market", "summary", Map.of(
                         "orders", Map.of("total", 3), "totalRevenue", "1000000", "bankruptcyRisk", "LOW")),
                 "logitics", Map.of("status", "UNAVAILABLE", "name", "Archive-Logistics", "summary", Map.of()),
                 "nexus", Map.of("status", "HEALTHY", "name", "Archive-Nexus", "summary", Map.of("pending", 2)),
-                "ledger", Map.of("status", "HEALTHY", "name", "Archive-Ledger", "summary", Map.of("approvalRequired", 1)))));
+                "ledger", Map.of("status", "HEALTHY", "name", "Archive-Ledger", "summary", Map.of("approvalRequired", 1))));
+        when(ecosystem.summary()).thenReturn(ecosystemSnapshot);
+        when(ecosystem.refresh()).thenReturn(ecosystemSnapshot);
         when(approvals.pending(50)).thenReturn(List.of(Map.of(
                 "approval_request_id", "APR-1",
                 "correlation_id", "corr-1",
@@ -73,7 +75,9 @@ class LiveFlowServiceTest {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> edges = (List<Map<String, Object>>) topology.get("edges");
         assertThat(nodes).extracting(node -> node.get("id")).contains("market", "logistics", "nexus", "ledger", "archiveos", "settlement");
-        assertThat(edges).anySatisfy(edge -> assertThat(edge).containsEntry("from", "market").containsEntry("to", "logistics"));
+        assertThat(edges).anySatisfy(edge -> assertThat(edge).containsEntry("from", "market").containsEntry("to", "nexus"));
+        assertThat(edges).anySatisfy(edge -> assertThat(edge).containsEntry("from", "nexus").containsEntry("to", "logistics"));
+        assertThat(edges).anySatisfy(edge -> assertThat(edge).containsEntry("from", "archiveos").containsEntry("to", "settlement"));
     }
 
     private AuditLogService audit() {

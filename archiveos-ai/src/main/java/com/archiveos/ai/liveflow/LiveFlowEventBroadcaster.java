@@ -1,0 +1,103 @@
+package com.archiveos.ai.liveflow;
+
+import java.io.IOException;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import org.springframework.http.MediaType;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+/**
+ * Small in-process SSE fan-out for normalized flow events.  Events are already
+ * persisted by {@link LiveFlowRepository}; this component only delivers the
+ * persisted representation to connected read-only dashboards.
+ */
+@Component
+public class LiveFlowEventBroadcaster {
+    private static final long TIMEOUT_MS = 15 * 60 * 1000L;
+    private static final int HISTORY_LIMIT = 250;
+    private final Map<String, SseEmitter> emitters = new ConcurrentHashMap<>();
+    private final CopyOnWriteArrayList<Map<String, Object>> history = new CopyOnWriteArrayList<>();
+
+    public SseEmitter connect(String lastEventId, Map<String, Object> snapshot) {
+        SseEmitter emitter = new SseEmitter(TIMEOUT_MS);
+        String id = "emitter-" + System.nanoTime();
+        emitters.put(id, emitter);
+        emitter.onCompletion(() -> emitters.remove(id));
+        emitter.onTimeout(() -> {
+            emitters.remove(id);
+            emitter.complete();
+        });
+        emitter.onError(error -> emitters.remove(id));
+        try {
+            send(emitter, "snapshot-" + Instant.now().toEpochMilli(), "snapshot", snapshot);
+            replayAfter(emitter, lastEventId);
+        } catch (IOException error) {
+            emitters.remove(id);
+            emitter.completeWithError(error);
+        }
+        return emitter;
+    }
+
+    public void publish(Map<String, Object> event) {
+        if (event == null || event.isEmpty()) return;
+        Map<String, Object> safe = new LinkedHashMap<>(event);
+        history.add(safe);
+        while (history.size() > HISTORY_LIMIT) history.remove(0);
+        String eventId = String.valueOf(safe.getOrDefault("event_id", "flow-" + System.nanoTime()));
+        for (Map.Entry<String, SseEmitter> entry : emitters.entrySet()) {
+            try {
+                send(entry.getValue(), eventId, "runtime-event", safe);
+            } catch (IOException error) {
+                emitters.remove(entry.getKey());
+                entry.getValue().completeWithError(error);
+            }
+        }
+    }
+
+    public void publishStatus(Map<String, Object> status) {
+        broadcast("service-status-" + Instant.now().toEpochMilli(), "service-status", status);
+    }
+
+    @Scheduled(fixedDelay = 20_000L)
+    public void heartbeat() {
+        broadcast("heartbeat-" + Instant.now().toEpochMilli(), "heartbeat", Map.of("at", Instant.now().toString()));
+    }
+
+    private void replayAfter(SseEmitter emitter, String lastEventId) throws IOException {
+        int start = -1;
+        if (lastEventId != null && !lastEventId.isBlank()) {
+            for (int index = 0; index < history.size(); index++) {
+                if (lastEventId.equals(String.valueOf(history.get(index).get("event_id")))) {
+                    start = index;
+                    break;
+                }
+            }
+        }
+        if (start < 0) return;
+        for (Map<String, Object> event : history.subList(start + 1, history.size())) {
+            send(emitter, String.valueOf(event.get("event_id")), "runtime-event", event);
+        }
+    }
+
+    private void broadcast(String id, String type, Map<String, Object> payload) {
+        for (Map.Entry<String, SseEmitter> entry : emitters.entrySet()) {
+            try {
+                send(entry.getValue(), id, type, payload);
+            } catch (IOException error) {
+                emitters.remove(entry.getKey());
+                entry.getValue().completeWithError(error);
+            }
+        }
+    }
+
+    private void send(SseEmitter emitter, String id, String type, Object payload) throws IOException {
+        emitter.send(SseEmitter.event().id(id).name(type).data(payload, MediaType.APPLICATION_JSON));
+    }
+}

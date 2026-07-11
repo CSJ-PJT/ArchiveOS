@@ -259,6 +259,36 @@ export type EcosystemDryRun = {
   steps: Array<{ order: number; service: string; action: string; mode: string }>;
 };
 
+export type EcosystemBalanceService = {
+  serviceId: string;
+  serviceName: string;
+  status: string;
+  revenue: string | number;
+  cost: string | number;
+  profit: string | number;
+  cashBalance: string | number;
+  backlog: string | number;
+  operatingMargin: string | number;
+  revenueShare: string | number;
+  expenseShare: string | number;
+  profitShare: string | number;
+  balance: "WITHIN_RANGE" | "CONCENTRATED" | "UNDER_PRESSURE" | string;
+};
+
+export type EcosystemBalanceSummary = {
+  syntheticData: true;
+  targetMargins: Record<string, string>;
+  totals: { revenue: string | number; cost: string | number; profit: string | number };
+  services: EcosystemBalanceService[];
+  balanceStatus: string;
+  reviewReason?: string;
+};
+
+export type EcosystemBalanceRecommendations = {
+  syntheticData: true;
+  recommendations: Array<{ serviceId: string; title: string; reason: string; mode: string }>;
+};
+
 export type LiveFlowEvent = {
   id: number | string;
   event_id: string;
@@ -319,6 +349,11 @@ export type LiveFlowSummary = {
       reason?: string;
     }>;
   };
+  /** Current queue count; unlike pending_approvals this is not a historic event snapshot count. */
+  approvalBacklog?: number | null;
+  approvalBacklogSource?: string;
+  processingBacklog?: number | null;
+  processingBacklogSource?: string;
 };
 
 export type LiveFlowTopology = {
@@ -670,6 +705,25 @@ export async function getEcosystemTimeline(limit = 50) {
   return response.data;
 }
 
+export async function getEcosystemBalanceSummary() {
+  const response = await request<ApiEnvelope<EcosystemBalanceSummary>>("/api/ecosystem/balance/summary");
+  return response.data;
+}
+
+export async function getEcosystemBalanceRecommendations() {
+  const response = await request<ApiEnvelope<EcosystemBalanceRecommendations>>("/api/ecosystem/balance/recommendations");
+  return response.data;
+}
+
+export async function simulateEcosystemBalance(input: Record<string, unknown> = {}) {
+  const response = await request<ApiEnvelope<Record<string, unknown>>>("/api/ecosystem/balance/simulate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
 export async function getMarketIntegrationSummary() {
   const response = await request<ApiEnvelope<Record<string, unknown>>>("/api/integrations/market/summary");
   return response.data;
@@ -762,6 +816,10 @@ export async function getLiveFlowCorrelation(correlationId: string) {
 export async function getLiveFlowEntity(entityId: string) {
   const response = await request<ApiEnvelope<{ entityId: string; data: LiveFlowEvent[] }>>(`/api/live-flow/entity/${encodeURIComponent(entityId)}`);
   return response.data;
+}
+
+export function liveFlowStreamUrl() {
+  return `${configuredBackendUrl}/api/live-flow/stream`;
 }
 
 export async function getWorkforceOverview() {

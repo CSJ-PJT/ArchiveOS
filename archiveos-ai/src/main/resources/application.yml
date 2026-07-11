@@ -61,6 +61,9 @@ archiveos:
     enabled: ${ARCHIVEOS_SCHEDULER_ENABLED:false}
     nightly-cron: ${ARCHIVEOS_NIGHTLY_CRON:0 50 23 * * *}
     daily-cron: ${ARCHIVEOS_DAILY_CRON:0 0 9 * * *}
+  experimental:
+    deepstake:
+      enabled: ${ARCHIVEOS_EXPERIMENTAL_DEEPSTAKE_ENABLED:false}
   security:
     admin-password: ${ARCHIVEOS_ADMIN_PASSWORD:}
     integration-token: ${ARCHIVEOS_INTEGRATION_TOKEN:}
@@ -70,6 +73,8 @@ archiveos:
     secure-cookie: ${ARCHIVEOS_SECURE_COOKIE:false}
 
 archive:
+  live-flow:
+    collector-interval-ms: ${ARCHIVE_LIVE_FLOW_COLLECTOR_INTERVAL_MS:1000}
   ecosystem:
     enabled: ${ARCHIVE_ECOSYSTEM_ENABLED:true}
     refresh-timeout-ms: ${ARCHIVE_ECOSYSTEM_REFRESH_TIMEOUT_MS:3000}

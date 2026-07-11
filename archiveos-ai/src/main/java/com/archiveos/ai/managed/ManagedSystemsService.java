@@ -26,6 +26,8 @@ public class ManagedSystemsService {
     private String ledgerCallbackToken;
     @Value("${archiveos.ledger.enabled:false}")
     private boolean ledgerEnabled;
+    @Value("${archiveos.experimental.deepstake.enabled:false}")
+    private boolean deepStakeEnabled;
 
     public ManagedSystemsService(ManagedSystemsRepository repository, ExternalApprovalRepository approvals) {
         this.repository = repository;
@@ -62,7 +64,10 @@ public class ManagedSystemsService {
     public List<Map<String, Object>> systems() {
         List<Map<String, Object>> tasks = repository.pmTasks();
         Map<String, Object> queue = repository.queueSummary();
-        return List.of(archiveOsSystem(queue), archiveMarketSystem(), archiveNexusSystem(tasks), archiveLogiticsSystem(), atlasSystem(), archiveLedgerSystem(), deepStakePlaceholder());
+        List<Map<String, Object>> systems = new ArrayList<>(List.of(
+                archiveOsSystem(queue), archiveMarketSystem(), archiveNexusSystem(tasks), archiveLogiticsSystem(), archiveLedgerSystem()));
+        if (deepStakeEnabled) systems.add(deepStakePlaceholder());
+        return systems;
     }
 
     public Map<String, Object> system(String systemId) {
@@ -92,8 +97,7 @@ public class ManagedSystemsService {
     public List<Map<String, Object>> pmInbox() {
         List<Map<String, Object>> items = new ArrayList<>();
         items.addAll(nexusApprovalItems());
-        addIfNotNull(items, atlasStatusItem());
-        addIfNotNull(items, atlasRecoveryItem());
+        // Atlas is an external integration. Its health must not alter Archive core inbox/KPI state.
         addIfNotNull(items, dailyReportItem());
         items.addAll(ledgerApprovalItems());
         items.addAll(ledgerCallbackFailedItems());

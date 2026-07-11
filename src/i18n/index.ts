@@ -221,13 +221,9 @@ function translateAttributes(root: ParentNode, reverse: Map<string, string>) {
   }
 }
 
-export function applyLocale(locale: Locale, root: ParentNode = document.body) {
+export function applyLocale(locale: Locale, _root: ParentNode = document.body) {
   const normalized = normalizeLocale(locale);
   window.localStorage.setItem("archive.locale", normalized);
-  window.localStorage.setItem("archiveos-language", normalized);
   document.documentElement.lang = normalized;
   document.documentElement.dataset.language = normalized;
-  const reverse = buildReverseMap(normalized);
-  translateTextNodes(root, reverse);
-  translateAttributes(root, reverse);
 }
