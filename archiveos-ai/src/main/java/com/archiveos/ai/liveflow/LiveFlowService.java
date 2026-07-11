@@ -5,6 +5,7 @@ import com.archiveos.ai.approval.callback.ApprovalCallbackOutboxRepository;
 import com.archiveos.ai.audit.AuditLogService;
 import com.archiveos.ai.ecosystem.EcosystemService;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -22,6 +23,10 @@ public class LiveFlowService {
     private final ExternalApprovalRepository approvals;
     private final ApprovalCallbackOutboxRepository callbacks;
     private final AuditLogService audit;
+    private volatile Instant lastAutoRefreshAt = Instant.EPOCH;
+    private static final Duration AUTO_REFRESH_INTERVAL = Duration.ofSeconds(15);
+    private static final long LIVE_THRESHOLD_SECONDS = 60;
+    private static final long STALE_THRESHOLD_SECONDS = 300;
 
     public LiveFlowService(LiveFlowRepository repository, EcosystemService ecosystem,
                            ExternalApprovalRepository approvals, ApprovalCallbackOutboxRepository callbacks,
@@ -34,11 +39,18 @@ public class LiveFlowService {
     }
 
     public Map<String, Object> summary() {
+        ensureFresh();
+        return summarySnapshot();
+    }
+
+    private Map<String, Object> summarySnapshot() {
         Map<String, Object> value = new LinkedHashMap<>(repository.summary());
+        List<Map<String, Object>> recent = repository.recent(12);
         value.put("mode", "LIVE");
         value.put("dataPolicy", "Synthetic Runtime Events");
         value.put("warning", "No real customer, payment, account, or financial data.");
-        value.put("recent", repository.recent(12));
+        value.put("recent", recent);
+        value.put("runtime", runtimeSummary(value, recent));
         return value;
     }
 
@@ -62,7 +74,10 @@ public class LiveFlowService {
                         edge("ledger", "settlement", "daily settlement")));
     }
 
-    public Map<String, Object> recent(int limit) { return Map.of("data", repository.recent(limit)); }
+    public Map<String, Object> recent(int limit) {
+        ensureFresh();
+        return Map.of("data", repository.recent(limit));
+    }
     public Map<String, Object> replay(String from, String to, int limit) { return Map.of("mode", "REPLAY", "data", repository.replay(from, to, limit)); }
     public Map<String, Object> correlation(String correlationId) { return Map.of("correlationId", correlationId, "data", repository.byCorrelation(correlationId, 200)); }
     public Map<String, Object> entity(String entityId) { return Map.of("entityId", entityId, "data", repository.byEntity(entityId, 200)); }
@@ -87,7 +102,7 @@ public class LiveFlowService {
             }
             collectApprovals(saved);
             collectCallbacks(saved);
-            Map<String, Object> result = new LinkedHashMap<>(summary());
+            Map<String, Object> result = new LinkedHashMap<>(summarySnapshot());
             result.put("traceId", traceId);
             result.put("collected", saved.size());
             audit.recordEvent("live_flow_refresh_completed", "live_flow", traceId, traceId,
@@ -98,6 +113,175 @@ public class LiveFlowService {
                     Map.of("error", error.getClass().getSimpleName()));
             throw error;
         }
+    }
+
+    private void ensureFresh() {
+        Instant now = Instant.now();
+        if (Duration.between(lastAutoRefreshAt, now).compareTo(AUTO_REFRESH_INTERVAL) < 0) return;
+        synchronized (this) {
+            now = Instant.now();
+            if (Duration.between(lastAutoRefreshAt, now).compareTo(AUTO_REFRESH_INTERVAL) < 0) return;
+            lastAutoRefreshAt = now;
+        }
+        try {
+            refresh();
+        } catch (RuntimeException error) {
+            audit.recordEvent("live_flow_auto_refresh_failed", "live_flow", "auto-refresh", "auto-refresh",
+                    Map.of("error", error.getClass().getSimpleName()));
+        }
+    }
+
+    private Map<String, Object> runtimeSummary(Map<String, Object> summary, List<Map<String, Object>> recent) {
+        Map<String, Instant> latestByNode = latestByNode(recent);
+        Instant latest = parseInstant(summary.get("latest_event_at"));
+        if (latest == null) {
+            latest = latestByNode.values().stream().max(Instant::compareTo).orElse(null);
+        }
+        String freshness = freshness(latest);
+        List<Map<String, Object>> serviceStates = new ArrayList<>();
+        List<String> activeServices = new ArrayList<>();
+        List<String> stalledServices = new ArrayList<>();
+        try {
+            Map<String, Object> ecosystemSummary = ecosystem.summary();
+            Map<String, Object> services = map(ecosystemSummary.get("services"));
+            for (String key : List.of("market", "nexus", "logitics", "ledger")) {
+                Map<String, Object> state = runtimeServiceState(key, map(services.get(key)), latestByNode.get(nodeOf(key)));
+                serviceStates.add(state);
+                String runtimeStatus = string(state.get("runtimeStatus"), "UNKNOWN");
+                String serviceName = string(state.get("serviceName"), systemId(key));
+                if (List.of("PROCESSING", "WAITING", "HEALTHY").contains(runtimeStatus)) activeServices.add(serviceName);
+                if ("STALLED".equals(runtimeStatus)) stalledServices.add(serviceName);
+            }
+            Map<String, Object> archiveOs = archiveOsRuntimeState(latestByNode.get("archiveos"));
+            serviceStates.add(archiveOs);
+            if (List.of("PROCESSING", "WAITING", "HEALTHY").contains(string(archiveOs.get("runtimeStatus"), ""))) activeServices.add("ArchiveOS");
+            if ("STALLED".equals(string(archiveOs.get("runtimeStatus"), ""))) stalledServices.add("ArchiveOS");
+        } catch (RuntimeException error) {
+            stalledServices.add("ArchiveOS collector");
+        }
+        String pipelineStatus = "NO_RUNTIME_EVENTS".equals(freshness) ? "NO_RUNTIME_EVENTS"
+                : !stalledServices.isEmpty() ? "DEGRADED"
+                : freshness;
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("activeServices", activeServices);
+        value.put("stalledServices", stalledServices);
+        value.put("latestEventAt", latest == null ? null : latest.toString());
+        value.put("staleThresholdSeconds", STALE_THRESHOLD_SECONDS);
+        value.put("freshnessStatus", freshness);
+        value.put("pipelineStatus", pipelineStatus);
+        value.put("reason", runtimeReason(freshness, stalledServices));
+        value.put("services", serviceStates);
+        return value;
+    }
+
+    private Map<String, Object> runtimeServiceState(String key, Map<String, Object> service, Instant latestNodeEventAt) {
+        String serviceStatus = string(service.get("status"), "UNKNOWN");
+        Map<String, Object> summary = map(service.get("summary"));
+        Map<String, Object> body = responseData(summary);
+        Map<String, Object> operations = responseData(map(summary.get("operations")));
+        Map<String, Object> runtime = firstMap(body, "runtime", "pipeline", "scheduler");
+        Map<String, Object> outbox = firstMap(body, "outbox", "outboxSummary");
+        Instant lastEventAt = firstInstant(
+                runtime.get("lastEventAt"), runtime.get("lastWorkAt"),
+                body.get("latestEventAt"), body.get("lastEventAt"), body.get("lastWorkAt"),
+                operations.get("latestEventAt"), operations.get("lastEventAt"), operations.get("lastWorkAt"),
+                latestNodeEventAt);
+        String schedulerStatus = string(firstNonNull(runtime.get("schedulerStatus"), body.get("schedulerStatus")), "");
+        String pipelineStatus = string(firstNonNull(runtime.get("pipelineStatus"), body.get("pipelineStatus")), "");
+        boolean runtimeActive = bool(firstNonNull(runtime.get("runtimeActive"), body.get("runtimeActive")));
+        boolean autoRunEnabled = bool(firstNonNull(runtime.get("autoRunEnabled"), body.get("autoRunEnabled")));
+        long produced = number(runtime.get("eventsProducedLastTick"));
+        long consumed = number(runtime.get("eventsConsumedLastTick"));
+        long backlog = number(firstNonNull(runtime.get("backlogCount"), body.get("backlogCount"), outbox.get("pending")));
+        String runtimeStatus = runtimeStatus(serviceStatus, lastEventAt, schedulerStatus, pipelineStatus, runtimeActive, produced, consumed);
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("serviceId", systemId(key));
+        value.put("serviceName", string(service.get("name"), systemId(key)));
+        value.put("serviceStatus", serviceStatus);
+        value.put("runtimeStatus", runtimeStatus);
+        value.put("lastEventAt", lastEventAt == null ? null : lastEventAt.toString());
+        value.put("lastWorkAt", string(firstNonNull(runtime.get("lastWorkAt"), body.get("lastWorkAt")), null));
+        value.put("runtimeActive", runtimeActive);
+        value.put("autoRunEnabled", autoRunEnabled);
+        value.put("eventsProducedLastTick", produced);
+        value.put("eventsConsumedLastTick", consumed);
+        value.put("backlogCount", backlog);
+        value.put("schedulerStatus", schedulerStatus);
+        value.put("pipelineStatus", pipelineStatus);
+        value.put("reason", runtimeStatusReason(runtimeStatus, serviceStatus, lastEventAt, schedulerStatus, backlog));
+        return value;
+    }
+
+    private Map<String, Object> archiveOsRuntimeState(Instant latestNodeEventAt) {
+        String runtimeStatus = runtimeStatus("HEALTHY", latestNodeEventAt, "RUNNING", "LIVE_FLOW_COLLECTING", true, 0, 0);
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("serviceId", "archiveos");
+        value.put("serviceName", "ArchiveOS");
+        value.put("serviceStatus", "HEALTHY");
+        value.put("runtimeStatus", runtimeStatus);
+        value.put("lastEventAt", latestNodeEventAt == null ? null : latestNodeEventAt.toString());
+        value.put("lastWorkAt", latestNodeEventAt == null ? null : latestNodeEventAt.toString());
+        value.put("runtimeActive", true);
+        value.put("autoRunEnabled", true);
+        value.put("eventsProducedLastTick", 0);
+        value.put("eventsConsumedLastTick", 0);
+        value.put("backlogCount", 0);
+        value.put("schedulerStatus", "RUNNING");
+        value.put("pipelineStatus", "LIVE_FLOW_COLLECTING");
+        value.put("reason", runtimeStatusReason(runtimeStatus, "HEALTHY", latestNodeEventAt, "RUNNING", 0));
+        return value;
+    }
+
+    private String runtimeStatus(String serviceStatus, Instant lastEventAt, String schedulerStatus, String pipelineStatus,
+                                 boolean runtimeActive, long produced, long consumed) {
+        if ("UNAVAILABLE".equalsIgnoreCase(serviceStatus) || "FAILED".equalsIgnoreCase(serviceStatus)) return "FAILED";
+        if ("DEGRADED".equalsIgnoreCase(serviceStatus)) return "WARNING";
+        long age = ageSeconds(lastEventAt);
+        boolean explicitRunning = runtimeActive || "RUNNING".equalsIgnoreCase(schedulerStatus) || pipelineStatus.toUpperCase(Locale.ROOT).contains("LIVE");
+        boolean tickMoved = produced > 0 || consumed > 0;
+        if (age >= 0 && age <= LIVE_THRESHOLD_SECONDS) return tickMoved || explicitRunning ? "PROCESSING" : "HEALTHY";
+        if (age >= 0 && age <= STALE_THRESHOLD_SECONDS) return "WAITING";
+        return "STALLED";
+    }
+
+    private String freshness(Instant latest) {
+        long age = ageSeconds(latest);
+        if (age < 0) return "NO_RUNTIME_EVENTS";
+        if (age <= LIVE_THRESHOLD_SECONDS) return "LIVE";
+        if (age <= STALE_THRESHOLD_SECONDS) return "SLOW";
+        return "STALE";
+    }
+
+    private String runtimeReason(String freshness, List<String> stalledServices) {
+        if ("NO_RUNTIME_EVENTS".equals(freshness)) return "No recent runtime events have been collected.";
+        if ("STALE".equals(freshness)) return "Latest runtime event is older than the stale threshold.";
+        if ("SLOW".equals(freshness)) return "Runtime events are arriving slowly.";
+        if (!stalledServices.isEmpty()) return "Some services are healthy but have no recent runtime activity.";
+        return "Runtime events are being collected from Archive services.";
+    }
+
+    private String runtimeStatusReason(String runtimeStatus, String serviceStatus, Instant lastEventAt, String schedulerStatus, long backlog) {
+        if ("FAILED".equals(runtimeStatus)) return "Service status is " + serviceStatus + ".";
+        if ("WARNING".equals(runtimeStatus)) return "Service is degraded.";
+        if ("STALLED".equals(runtimeStatus)) return "Service is up, but no recent runtime event was observed.";
+        if ("WAITING".equals(runtimeStatus)) return backlog > 0 ? "Service has backlog and is waiting for processing." : "Service has no event in the last minute.";
+        if ("PROCESSING".equals(runtimeStatus)) return "Recent runtime event detected" + (schedulerStatus == null || schedulerStatus.isBlank() ? "." : " and scheduler is " + schedulerStatus + ".");
+        return lastEventAt == null ? "Runtime timestamp is not available." : "Service is healthy.";
+    }
+
+    private Map<String, Instant> latestByNode(List<Map<String, Object>> recent) {
+        Map<String, Instant> value = new LinkedHashMap<>();
+        for (Map<String, Object> event : recent) {
+            Instant occurred = parseInstant(event.get("occurred_at"));
+            if (occurred == null) continue;
+            for (String key : List.of("from_node", "to_node")) {
+                String node = string(event.get(key), "");
+                if (node.isBlank()) continue;
+                Instant current = value.get(node);
+                if (current == null || occurred.isAfter(current)) value.put(node, occurred);
+            }
+        }
+        return value;
     }
 
     private void collectServiceSnapshots(List<Map<String, Object>> saved, Map<String, Object> services) {
@@ -249,6 +433,53 @@ public class LiveFlowService {
         if (value instanceof Number number) return number.longValue();
         try { return value == null ? 0 : Long.parseLong(String.valueOf(value)); }
         catch (NumberFormatException error) { return 0; }
+    }
+    private boolean bool(Object value) {
+        if (value instanceof Boolean bool) return bool;
+        if (value instanceof Number number) return number.intValue() != 0;
+        return value != null && Boolean.parseBoolean(String.valueOf(value));
+    }
+    private Instant firstInstant(Object... values) {
+        for (Object value : values) {
+            Instant instant = parseInstant(value);
+            if (instant != null) return instant;
+        }
+        return null;
+    }
+    private Instant parseInstant(Object value) {
+        if (value instanceof Instant instant) return instant;
+        if (value == null) return null;
+        try {
+            String text = String.valueOf(value);
+            if (text.isBlank()) return null;
+            return Instant.parse(text.endsWith("Z") || text.contains("+") ? text : text + "Z");
+        } catch (RuntimeException error) {
+            return null;
+        }
+    }
+    private long ageSeconds(Instant instant) {
+        if (instant == null) return -1;
+        return Math.max(0, Duration.between(instant, Instant.now()).toSeconds());
+    }
+    private Map<String, Object> responseData(Map<String, Object> response) {
+        Map<String, Object> data = firstMap(response, "data");
+        return data.isEmpty() ? response : data;
+    }
+    private Map<String, Object> firstMap(Map<String, Object> source, String... keys) {
+        if (source == null || source.isEmpty()) return Map.of();
+        for (String key : keys) {
+            Object value = source.get(key);
+            if (value instanceof Map<?, ?> map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> typed = (Map<String, Object>) map;
+                return typed;
+            }
+        }
+        return Map.of();
+    }
+    private Object firstNonNull(Object... values) {
+        for (Object value : values) if (value != null) return value;
+        return null;
     }
     @SuppressWarnings("unchecked") private Map<String, Object> map(Object value) { return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of(); }
     private String string(Object value, String fallback) { return value == null ? fallback : String.valueOf(value); }
