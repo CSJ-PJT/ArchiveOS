@@ -7,13 +7,16 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 public class LiveFlowController {
     private final LiveFlowService service;
+    private final LiveFlowEventBroadcaster broadcaster;
 
-    public LiveFlowController(LiveFlowService service) {
+    public LiveFlowController(LiveFlowService service, LiveFlowEventBroadcaster broadcaster) {
         this.service = service;
+        this.broadcaster = broadcaster;
     }
 
     @GetMapping("/api/live-flow/summary")
@@ -40,6 +43,11 @@ public class LiveFlowController {
 
     @PostMapping("/api/live-flow/refresh")
     public Map<String, Object> refresh() { return envelope(service.refresh()); }
+
+    @GetMapping(value = "/api/live-flow/stream", produces = "text/event-stream")
+    public SseEmitter stream(@org.springframework.web.bind.annotation.RequestHeader(value = "Last-Event-ID", required = false) String lastEventId) {
+        return broadcaster.connect(lastEventId, service.summary());
+    }
 
     private Map<String, Object> envelope(Object data) {
         Map<String, Object> value = new LinkedHashMap<>();

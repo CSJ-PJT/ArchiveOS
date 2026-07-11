@@ -15,13 +15,15 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class LiveFlowRepository {
     private final JdbcTemplate jdbc;
+    private final LiveFlowEventBroadcaster broadcaster;
 
-    public LiveFlowRepository(JdbcTemplate jdbc) {
+    public LiveFlowRepository(JdbcTemplate jdbc, LiveFlowEventBroadcaster broadcaster) {
         this.jdbc = jdbc;
+        this.broadcaster = broadcaster;
     }
 
     public Map<String, Object> upsert(LiveFlowEvent event) {
-        return jdbc.queryForObject("""
+        List<Map<String, Object>> changed = jdbc.query("""
                 insert into public.ecosystem_flow_event(
                   event_id, correlation_id, source_system_id, source_service_id, domain, event_type,
                   entity_type, entity_id, from_node, to_node, status, severity, display_label,
@@ -35,11 +37,20 @@ public class LiveFlowRepository {
                   occurred_at = excluded.occurred_at,
                   metadata = excluded.metadata,
                   received_at = now()
+                where ecosystem_flow_event.status is distinct from excluded.status
+                   or ecosystem_flow_event.severity is distinct from excluded.severity
+                   or ecosystem_flow_event.display_label is distinct from excluded.display_label
+                   or ecosystem_flow_event.amount_bucket is distinct from excluded.amount_bucket
+                   or ecosystem_flow_event.metadata is distinct from excluded.metadata
                 returning *
                 """, this::row,
                 event.eventId(), event.correlationId(), event.sourceSystemId(), event.sourceServiceId(), event.domain(), event.eventType(),
                 event.entityType(), event.entityId(), event.fromNode(), event.toNode(), event.status(), event.severity(), event.displayLabel(),
                 event.amountBucket(), Timestamp.from(event.occurredAt()), Json.write(event.metadata() == null ? Map.of() : event.metadata()));
+        Map<String, Object> saved = changed.stream().findFirst().orElseGet(() -> jdbc.queryForObject(
+                "select * from public.ecosystem_flow_event where event_id = ?", this::row, event.eventId()));
+        if (!changed.isEmpty()) broadcaster.publish(saved);
+        return saved;
     }
 
     public List<Map<String, Object>> recent(int limit) {

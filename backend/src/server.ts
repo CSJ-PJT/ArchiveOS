@@ -131,6 +131,9 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Ecosystem Summary", method: "GET", path: "/api/ecosystem/summary", service: "runtime", description: "Market, Nexus, Logistics, Ledger integrated operations status." },
   { name: "Ecosystem Topology", method: "GET", path: "/api/ecosystem/topology", service: "runtime", description: "Control Tower topology nodes and edges." },
   { name: "Ecosystem Timeline", method: "GET", path: "/api/ecosystem/timeline", service: "runtime", description: "Cross-service timeline events." },
+  { name: "Ecosystem Balance Summary", method: "GET", path: "/api/ecosystem/balance/summary", service: "runtime", description: "Read-only synthetic service balance analysis." },
+  { name: "Ecosystem Balance Recommendations", method: "GET", path: "/api/ecosystem/balance/recommendations", service: "runtime", description: "Read-only synthetic balance recommendations." },
+  { name: "Ecosystem Balance Simulation", method: "POST", path: "/api/ecosystem/balance/simulate", service: "runtime", description: "Admin safe dry-run balance simulation." },
   { name: "Refresh Ecosystem", method: "POST", path: "/api/ecosystem/refresh", service: "runtime", description: "Read-only external service health refresh." },
   { name: "Ecosystem Demo Dry-run", method: "POST", path: "/api/ecosystem/demo/dry-run", service: "runtime", description: "Safe dry-run ecosystem scenario." },
   { name: "Ecosystem Demo Run", method: "POST", path: "/api/ecosystem/demo/run", service: "runtime", description: "Blocked unless external writes are explicitly enabled." },
@@ -155,6 +158,7 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Live Flow Summary", method: "GET", path: "/api/live-flow/summary", service: "runtime", description: "Operational Twin summary from runtime flow events." },
   { name: "Live Flow Topology", method: "GET", path: "/api/live-flow/topology", service: "runtime", description: "Operational Twin node and lane topology." },
   { name: "Live Flow Recent Events", method: "GET", path: "/api/live-flow/events/recent", service: "runtime", description: "Recent normalized runtime flow events." },
+  { name: "Live Flow Stream", method: "GET", path: "/api/live-flow/stream", service: "runtime", description: "Unbuffered SSE stream of persisted normalized flow events." },
   { name: "Live Flow Replay", method: "GET", path: "/api/live-flow/replay", service: "runtime", description: "Replay normalized runtime flow events by time window." },
   { name: "Live Flow Correlation", method: "GET", path: "/api/live-flow/correlation/:id", service: "runtime", description: "Trace one runtime correlation chain." },
   { name: "Live Flow Entity", method: "GET", path: "/api/live-flow/entity/:id", service: "runtime", description: "Trace one entity through the flow." },
@@ -771,6 +775,18 @@ app.get("/api/ecosystem/timeline", async (request, response) => {
   await relayArchiveOsAi(response, `/api/ecosystem/timeline?limit=${encodeURIComponent(String(limit))}`, undefined, undefined, request);
 });
 
+app.get("/api/ecosystem/balance/summary", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ecosystem/balance/summary", undefined, undefined, request);
+});
+
+app.get("/api/ecosystem/balance/recommendations", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ecosystem/balance/recommendations", undefined, undefined, request);
+});
+
+app.post("/api/ecosystem/balance/simulate", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ecosystem/balance/simulate", jsonProxyRequest("POST", request.body), undefined, request);
+});
+
 app.post("/api/ecosystem/refresh", async (request, response) => {
   await relayArchiveOsAi(response, "/api/ecosystem/refresh", { method: "POST" }, undefined, request);
 });
@@ -881,6 +897,10 @@ app.get("/api/live-flow/topology", async (request, response) => {
 app.get("/api/live-flow/events/recent", async (request, response) => {
   const limit = request.query.limit ? `?limit=${encodeURIComponent(String(request.query.limit))}` : "";
   await relayArchiveOsAi(response, `/api/live-flow/events/recent${limit}`, undefined, undefined, request);
+});
+
+app.get("/api/live-flow/stream", async (request, response) => {
+  await relayArchiveOsAiSse(request, response, "/api/live-flow/stream");
 });
 
 app.get("/api/live-flow/replay", async (request, response) => {
@@ -2040,6 +2060,39 @@ async function relayArchiveOsAi(
       error: error instanceof Error ? error.message : "ArchiveOS AI module is unavailable.",
       details: "ArchiveOS AI module is unavailable or not configured.",
     });
+  }
+}
+
+async function relayArchiveOsAiSse(request: any, response: any, path: string) {
+  const baseUrl = process.env.ARCHIVEOS_AI_BASE_URL?.trim() || "http://localhost:4100";
+  const headers = new Headers({ accept: "text/event-stream" });
+  const cookie = request?.header?.("cookie");
+  const lastEventId = request?.header?.("last-event-id");
+  if (cookie) headers.set("cookie", cookie);
+  if (lastEventId) headers.set("Last-Event-ID", lastEventId);
+  try {
+    const upstream = await fetch(`${baseUrl}${path}`, { headers });
+    if (!upstream.ok || !upstream.body) {
+      response.status(upstream.status || 503).json({ error: "Live Flow stream is unavailable." });
+      return;
+    }
+    response.status(200);
+    response.setHeader("content-type", "text/event-stream; charset=utf-8");
+    response.setHeader("cache-control", "no-cache, no-transform");
+    response.setHeader("connection", "keep-alive");
+    response.setHeader("x-accel-buffering", "no");
+    response.flushHeaders?.();
+    const reader = upstream.body.getReader();
+    request.on("close", () => reader.cancel().catch(() => undefined));
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      response.write(Buffer.from(value));
+    }
+    response.end();
+  } catch {
+    if (!response.headersSent) response.status(503).json({ error: "Live Flow stream is unavailable." });
+    else response.end();
   }
 }
 
