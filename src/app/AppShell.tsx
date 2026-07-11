@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
-  configuredBackendUrl, getAtlasOverview, getAuthSession, getEcosystemBalanceSummary, getEcosystemSummary, getEcosystemTopology,
+  configuredBackendUrl, getAtlasOverview, getAuthSession, getEcosystemBalanceRecommendations, getEcosystemBalanceSummary, getEcosystemSummary, getEcosystemTopology,
   getExternalApprovals, getGameFinanceSummary, getHistorianStatus, getKnowledgeOverview, getLiveFlowRecentEvents, getLiveFlowSummary,
   getLiveFlowTopology, getMcpRegistry, getMeshOverview, getPmTasks, getQueueSummary, getRuntimeTimeline, getWorkforceOverview, liveFlowStreamUrl,
   type AuthSession, type AtlasOverview, type EcosystemBalanceSummary, type EcosystemSummary, type EcosystemTopology, type ExternalApprovalRequest,
@@ -145,7 +145,7 @@ function LanguagePopover({ locale, setLocale }: { locale: Locale; setLocale: (lo
 
 function loadersFor(route: CoreRoute): Array<[keyof AppData, () => Promise<unknown>]> {
   const auth: [keyof AppData, () => Promise<unknown>] = ["auth", getAuthSession];
-  if (route === "dashboard") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["liveFlowTopology", getLiveFlowTopology], ["liveFlowEvents", () => getLiveFlowRecentEvents(30)], ["balance", getEcosystemBalanceSummary]];
+  if (route === "dashboard") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["liveFlowTopology", getLiveFlowTopology], ["liveFlowEvents", () => getLiveFlowRecentEvents(30)], ["balance", getEcosystemBalanceSummary], ["balanceRecommendations", getEcosystemBalanceRecommendations]];
   if (route === "services") return [auth, ["ecosystem", getEcosystemSummary], ["ecosystemTopology", getEcosystemTopology], ["atlas", getAtlasOverview]];
   if (route === "operations") return [auth, ["mesh", getMeshOverview], ["workforce", getWorkforceOverview], ["queue", getQueueSummary], ["tasks", getPmTasks]];
   if (route === "finance") return [auth, ["ecosystem", getEcosystemSummary], ["balance", getEcosystemBalanceSummary], ["gameFinance", getGameFinanceSummary], ["externalApprovals", () => getExternalApprovals(50)]];

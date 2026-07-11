@@ -51,7 +51,7 @@ export function SettingsPage({
   }
 
   if (data.auth.role === "PUBLIC") {
-    return <div className="page-stack"><SectionCard title="Operator Sign In" eyebrow="Settings are not available to Public sessions">
+    return <div className="page-stack"><SectionCard title="운영자 로그인" eyebrow="PUBLIC 세션에서는 설정을 변경할 수 없습니다">
       <div className="decision-panel">
         <select value={requestedRole} onChange={(event) => setRequestedRole(event.target.value as Exclude<PlatformRole, "PUBLIC">)}>
           <option value="OPERATOR">Operator</option><option value="PM">PM</option><option value="ADMIN">Admin</option>
@@ -59,7 +59,7 @@ export function SettingsPage({
         <input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="admin" />
         <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="ARCHIVEOS_ADMIN_PASSWORD" />
         {authError ? <div className="empty-state error-state">{authError}</div> : null}
-        <button className="button button-primary" type="button" onClick={login} disabled={authBusy || !password}>{authBusy ? "Signing in..." : "Sign in"}</button>
+        <button className="button button-primary" type="button" onClick={login} disabled={authBusy || !password}>{authBusy ? "로그인 중..." : "로그인"}</button>
       </div>
     </SectionCard></div>;
   }

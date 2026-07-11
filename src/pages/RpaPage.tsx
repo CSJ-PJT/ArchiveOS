@@ -118,25 +118,25 @@ export function RpaPage({ role }: { role: PlatformRole }) {
     <div className="page-stack">
       <header className="page-heading">
         <div>
-          <span className="eyebrow">Human-in-the-loop automation</span>
-          <h2>RPA Decisions</h2>
+          <span className="eyebrow">APPROVAL-GUARDED AUTOMATION</span>
+          <h2>자동화 검토</h2>
           <p>자동 분류 결과와 PM 승인 이력을 실제 실행 제어와 분리해 추적합니다.</p>
         </div>
-        <button className="button button-secondary" type="button" onClick={() => void refresh()}>Refresh</button>
+        <button className="button button-secondary" type="button" onClick={() => void refresh()}>새로고침</button>
       </header>
 
       <section className="summary-strip">
-        <div className="metric-card"><span>Total</span><strong>{summary.total}</strong><small>recent tasks</small></div>
-        <div className="metric-card"><span>Approval Required</span><strong>{summary.approvalRequired}</strong><small>PM gate</small></div>
-        <div className="metric-card"><span>High Risk</span><strong>{summary.highRisk}</strong><small>rule/AI classification</small></div>
-        <div className="metric-card"><span>Decided</span><strong>{summary.decided}</strong><small>decision records</small></div>
+        <div className="metric-card"><span>전체 작업</span><strong>{summary.total}</strong><small>최근 항목</small></div>
+        <div className="metric-card"><span>승인 필요</span><strong>{summary.approvalRequired}</strong><small>PM 게이트</small></div>
+        <div className="metric-card"><span>고위험</span><strong>{summary.highRisk}</strong><small>규칙 기반 분류</small></div>
+        <div className="metric-card"><span>결정 완료</span><strong>{summary.decided}</strong><small>결정 기록</small></div>
       </section>
 
       {message ? <div className="empty-state success-state">{message}</div> : null}
-      {error ? <div className="empty-state error-state">RPA is unavailable. {error}</div> : null}
+      {error ? <div className="empty-state error-state">RPA 서비스에 연결할 수 없습니다. {error}</div> : null}
 
       <section className="workflows-layout">
-        <SectionCard title="Classify Automation Work" eyebrow="Admin creates reviewable RPA task">
+        <SectionCard title="자동화 작업 분류" eyebrow="관리자가 검토 가능한 RPA 작업을 생성">
           <div className="form-stack">
             <label>
               <span>Title</span>
@@ -160,7 +160,7 @@ export function RpaPage({ role }: { role: PlatformRole }) {
           </div>
         </SectionCard>
 
-        <SectionCard title="Classified Tasks" eyebrow="Risk and approval queue">
+        <SectionCard title="분류된 작업" eyebrow="위험도와 승인 큐">
           <div className="workflow-list">
             {tasks.map((task) => (
               <button
@@ -184,7 +184,7 @@ export function RpaPage({ role }: { role: PlatformRole }) {
       </section>
 
       <section className="workflows-layout">
-        <SectionCard title="Decision Detail" eyebrow="PM/Admin decision record">
+        <SectionCard title="결정 상세" eyebrow="PM/관리자 결정 기록">
           {selected ? (
             <RpaDetail
               detail={selected}

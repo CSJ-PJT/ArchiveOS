@@ -899,6 +899,12 @@ app.get("/api/live-flow/events/recent", async (request, response) => {
   await relayArchiveOsAi(response, `/api/live-flow/events/recent${limit}`, undefined, undefined, request);
 });
 
+// Backward-compatible short alias used by console smoke checks and read-only clients.
+app.get("/api/live-flow/recent", async (request, response) => {
+  const limit = request.query.limit ? `?limit=${encodeURIComponent(String(request.query.limit))}` : "";
+  await relayArchiveOsAi(response, `/api/live-flow/events/recent${limit}`, undefined, undefined, request);
+});
+
 app.get("/api/live-flow/stream", async (request, response) => {
   await relayArchiveOsAiSse(request, response, "/api/live-flow/stream");
 });
