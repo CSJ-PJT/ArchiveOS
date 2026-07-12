@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { CoreRoute } from "../../app/navigation";
 import type { LiveFlowEvent, LiveFlowSummary, LiveFlowTopology } from "../../lib/backendApi";
+import { useI18n } from "../../i18n/I18nProvider";
+import type { TranslationKey } from "../../i18n";
 import { StatusBadge, normalizeStatus } from "../shared/StatusBadge";
 
 type MeshNode = { id: string; label: string; type: string; x: number; y: number };
@@ -11,7 +13,8 @@ type RuntimeService = NonNullable<NonNullable<LiveFlowSummary["runtime"]>["servi
 const roleByNode: Record<string, string> = { market: "주문·결제", nexus: "제조", logistics: "물류", ledger: "정산", archiveos: "운영 오케스트레이터", settlement: "정산 배치" };
 
 /** Runtime events are the sole source of animated tokens. No timer creates traffic. */
-export function LiveMeshTopology({ topology, summary, events, onNavigate }: { topology: LiveFlowTopology | null; summary: LiveFlowSummary | null; events: LiveFlowEvent[]; onNavigate?: (route: CoreRoute) => void }) {
+export function LiveMeshTopology({ topology, summary, events, onNavigate, onAsk }: { topology: LiveFlowTopology | null; summary: LiveFlowSummary | null; events: LiveFlowEvent[]; onNavigate?: (route: CoreRoute) => void; onAsk?: (question: string) => void }) {
+  const { translate } = useI18n();
   const [selection, setSelection] = useState<Selection>(null);
   const openerRef = useRef<HTMLElement | SVGElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
@@ -90,11 +93,11 @@ export function LiveMeshTopology({ topology, summary, events, onNavigate }: { to
       })}
     </div></div>
 
-    {selection ? <MeshDrawer selection={selection} runtime={runtime} events={visibleEvents} edgeMetrics={edgeMetrics} onClose={closeSelection} closeRef={closeRef} onNavigate={onNavigate} /> : null}
+    {selection ? <MeshDrawer selection={selection} runtime={runtime} events={visibleEvents} edgeMetrics={edgeMetrics} onClose={closeSelection} closeRef={closeRef} onNavigate={onNavigate} onAsk={onAsk} translate={translate} /> : null}
   </section>;
 }
 
-function MeshDrawer({ selection, runtime, events, edgeMetrics, onClose, closeRef, onNavigate }: { selection: Exclude<Selection, null>; runtime: RuntimeService[]; events: LiveFlowEvent[]; edgeMetrics: Map<string, EdgeMetric>; onClose: () => void; closeRef: RefObject<HTMLButtonElement>; onNavigate?: (route: CoreRoute) => void }) {
+function MeshDrawer({ selection, runtime, events, edgeMetrics, onClose, closeRef, onNavigate, onAsk, translate }: { selection: Exclude<Selection, null>; runtime: RuntimeService[]; events: LiveFlowEvent[]; edgeMetrics: Map<string, EdgeMetric>; onClose: () => void; closeRef: RefObject<HTMLButtonElement>; onNavigate?: (route: CoreRoute) => void; onAsk?: (question: string) => void; translate: (key: TranslationKey) => string }) {
   const isEvent = selection.type === "event"; const isNode = selection.type === "node";
   const event = isEvent ? selection.event : null; const node = isNode ? selection.node : null; const edge = selection.type === "edge" ? selection.edge : null;
   const nodeRuntime = node ? runtime.find((item) => normalizeNode(item.serviceId || item.serviceName) === node.id) : null;
@@ -108,7 +111,7 @@ function MeshDrawer({ selection, runtime, events, edgeMetrics, onClose, closeRef
       <header><div><span className="eyebrow">{isEvent ? "선택 이벤트" : isNode ? "선택 서비스" : "선택 경로"}</span><h3>{title}</h3></div><button ref={closeRef} type="button" className="mesh-drawer-close" onClick={onClose} aria-label="상세 정보 닫기">×</button></header>
       <dl className="mesh-drawer-facts"><dt>상태</dt><dd><StatusBadge status={status}>{runtimeLabel(status)}</StatusBadge></dd><dt>{isNode ? "역할" : "경로"}</dt><dd>{isNode ? roleByNode[node!.id] : event ? `${event.from_node} → ${event.to_node}` : `${shortNodeLabel(edge?.from)} → ${shortNodeLabel(edge?.to)}`}</dd><dt>{isNode ? "최근 성공" : "마지막 발생"}</dt><dd>{formatTime(lastAt)}</dd><dt>적체</dt><dd>{typeof nodeRuntime?.backlogCount === "number" ? nodeRuntime.backlogCount.toLocaleString() : "데이터 없음"}</dd><dt>처리 역량</dt><dd>데이터 없음</dd></dl>
       <div className="mesh-drawer-related"><strong>연관 흐름</strong>{event ? <p><span className="mono">{event.correlation_id || "연결 정보 없음"}</span><br />{event.entity_type} · {event.entity_id}</p> : <p>{related.length ? `최근 ${related.length}건의 수집 이벤트` : "연결 정보 없음"}</p>}<ol>{related.slice(0, 3).map((item) => <li key={item.event_id}>{formatTime(item.occurred_at)} · {item.event_type}</li>)}</ol></div>
-      <footer><span>{event ? impactLabel(event) : metric?.warning ? "확인 필요" : runtimeReason(nodeRuntime?.reason)}</span>{onNavigate ? <button type="button" className="text-button" onClick={() => onNavigate(isNode ? "services" : "records")}>{isNode ? "서비스 보기" : "기록 보기"} →</button> : null}</footer>
+      <footer><span>{event ? impactLabel(event) : metric?.warning ? "확인 필요" : runtimeReason(nodeRuntime?.reason)}</span><span className="mesh-drawer-actions">{onAsk ? <button type="button" className="text-button" onClick={() => { onAsk(questionForSelection(selection, translate)); onClose(); }}>{translate("copilot.analyze")} →</button> : null}{onNavigate ? <button type="button" className="text-button" onClick={() => onNavigate(isNode ? "services" : "records")}>{isNode ? "서비스 보기" : "기록 보기"} →</button> : null}</span></footer>
     </aside>
   </div>;
 }
@@ -133,6 +136,8 @@ function nodeBacklog(node: MeshNode, runtime: RuntimeService[], events: LiveFlow
 function runtimeErrorLabel(status?: string | null, reason?: string | null) { const text = String(status || "").toUpperCase(); if (["HEALTHY", "LIVE", "COMPLETED", "PROCESSING", "RUNNING"].includes(text)) return "없음"; return runtimeReason(reason); }
 function runtimeReason(value?: string | null) { const text = String(value || "").trim(); if (!text) return "수집된 상태와 최근 이벤트를 기준으로 표시합니다."; if (/service is healthy|healthy/i.test(text)) return "최근 수집 상태가 정상입니다."; if (/unavailable|connection|timeout/i.test(text)) return "연결 또는 수집 상태를 확인하세요."; if (/stale|no runtime event/i.test(text)) return "최근 실행 이벤트가 없어 흐름 상태를 확인하세요."; return "수집된 상태와 최근 이벤트를 기준으로 표시합니다."; }
 function impactLabel(event: LiveFlowEvent) { return tokenTone(event) === "critical" ? "확인 필요" : tokenTone(event) === "warning" ? "지연 가능성" : "정상 흐름"; }
+function questionForSelection(selection: Exclude<Selection, null>, translate: (key: TranslationKey) => string) { if (selection.type === "node") return interpolate(translate("copilot.questionNode"), { name: selection.node.label }); if (selection.type === "edge") return interpolate(translate("copilot.questionEdge"), { from: shortNodeLabel(selection.edge.from), to: shortNodeLabel(selection.edge.to), eventType: selection.edge.label }); return interpolate(translate("copilot.questionCorrelation"), { id: selection.event.correlation_id || "NO_DATA" }); }
+function interpolate(template: string, variables: Record<string, string>) { return Object.entries(variables).reduce((text, [key, value]) => text.split(`{${key}}`).join(value), template); }
 function impactDescription(event: LiveFlowEvent) { if (tokenTone(event) === "critical") return "실패 또는 위험 상태입니다. 관련 승인·콜백·적체를 확인하세요."; if (tokenTone(event) === "warning") return "지연 또는 처리 대기 상태입니다. 서비스 처리량과 적체를 확인하세요."; return "수집된 합성 런타임 이벤트가 서비스 간 흐름에 반영되었습니다."; }
 function formatTime(value?: string | null) { if (!value || value === "-") return "데이터 없음"; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
 function eventAge(value?: string | null) { if (!value) return "최근 이벤트 없음"; const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000)); return seconds < 60 ? `${seconds}초 전 수신` : `${Math.floor(seconds / 60)}분 전 수신`; }

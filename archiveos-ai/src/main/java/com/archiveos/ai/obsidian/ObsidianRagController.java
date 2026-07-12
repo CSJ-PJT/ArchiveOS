@@ -45,7 +45,7 @@ public class ObsidianRagController {
 
     @PostMapping("/api/rag/ask")
     public ResponseEntity<Map<String, Object>> ask(@Valid @RequestBody RagAskRequest request) {
-        return ResponseEntity.ok(Map.of("data", ragService.answer(request.question())));
+        return ResponseEntity.ok(Map.of("data", ragService.answer(request.question(), request.context())));
     }
 
     @ExceptionHandler(AiUnavailableException.class)
@@ -62,5 +62,5 @@ public class ObsidianRagController {
                 "status", "database_unavailable"));
     }
 
-    public record RagAskRequest(@NotBlank String question) {}
+    public record RagAskRequest(@NotBlank String question, Map<String, Object> context) {}
 }

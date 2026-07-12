@@ -88,6 +88,12 @@ public class ObsidianRagService {
                 }
             }
 
+            if (embeddingEnabled) {
+                int backfilled = backfillPendingEmbeddings();
+                embeddedChunks += backfilled;
+                embeddedTotal += backfilled;
+            }
+
             success = true;
             String reason = embeddingEnabled ? null : "OPENAI_API_KEY is not configured. Documents were synced without embeddings.";
             return new ObsidianSyncResult(true, documents.size(), created, updated, skipped, deletedChunks, embeddedChunks, reason);
@@ -123,6 +129,15 @@ public class ObsidianRagService {
     }
 
     public RagAnswer answer(String question) {
+        return answer(question, null);
+    }
+
+    /**
+     * Optional runtime context is deliberately constrained before it reaches a
+     * model prompt. Dashboard context may contain only synthetic operational
+     * identifiers and summary values; arbitrary client metadata is ignored.
+     */
+    public RagAnswer answer(String question, Map<String, Object> runtimeContext) {
         Instant startedAt = Instant.now();
         boolean success = false;
         int referenceCount = 0;
@@ -144,7 +159,7 @@ public class ObsidianRagService {
                 return new RagAnswer(buildFallbackAnswer(question, references), references);
             }
 
-            String promptText = buildPrompt(question, references);
+            String promptText = buildPrompt(question, references, runtimeContext);
             String answer = models.chat(promptText);
             success = true;
             return new RagAnswer(answer, references);
@@ -169,6 +184,28 @@ public class ObsidianRagService {
         return properties.openAiConfigured() && models.embeddingAvailable();
     }
 
+    /**
+     * Older local syncs may have stored chunks while OpenAI was disabled. Once
+     * a key is configured, embed only those pending rows; do not re-embed
+     * unchanged content or recreate documents.
+     */
+    private int backfillPendingEmbeddings() {
+        int embedded = 0;
+        while (true) {
+            List<ObsidianJdbcRepository.PendingChunk> pending = repository.findPendingEmbeddingChunks(64);
+            if (pending.isEmpty()) return embedded;
+            List<String> texts = pending.stream().map(ObsidianJdbcRepository.PendingChunk::text).toList();
+            List<float[]> vectors = models.embed(texts);
+            if (vectors.size() != pending.size()) {
+                throw new IllegalStateException("Embedding response count did not match the pending chunk batch.");
+            }
+            for (int index = 0; index < pending.size(); index += 1) {
+                repository.updateChunkEmbedding(pending.get(index).id(), vectors.get(index));
+                embedded += 1;
+            }
+        }
+    }
+
     private void requireChatConfigured() {
         if (!models.chatAvailable()) {
             throw new AiUnavailableException("ChatModel bean is unavailable. Check Spring AI OpenAI configuration.");
@@ -179,7 +216,7 @@ public class ObsidianRagService {
         return models.embed(text);
     }
 
-    private String buildPrompt(String question, List<RagReference> references) {
+    private String buildPrompt(String question, List<RagReference> references, Map<String, Object> runtimeContext) {
         List<String> contexts = new ArrayList<>();
         for (int index = 0; index < references.size(); index += 1) {
             RagReference reference = references.get(index);
@@ -210,9 +247,37 @@ public class ObsidianRagService {
                 Question:
                 %s
 
-                Context:
+                Runtime context (synthetic operational summary only):
                 %s
-                """.formatted(question, String.join("\n---\n", contexts));
+
+                Knowledge context:
+                %s
+                """.formatted(question, formatRuntimeContext(runtimeContext), String.join("\n---\n", contexts));
+    }
+
+    private String formatRuntimeContext(Map<String, Object> context) {
+        if (context == null || context.isEmpty()) return "Not provided.";
+        List<String> fields = new ArrayList<>();
+        appendContext(fields, "ecosystemStatus", context.get("ecosystemStatus"));
+        appendContext(fields, "activeEvents", context.get("activeEvents"));
+        appendContext(fields, "approvalBacklog", context.get("approvalBacklog"));
+        appendContext(fields, "processingBacklog", context.get("processingBacklog"));
+        appendContext(fields, "balanceStatus", context.get("balanceStatus"));
+        appendContext(fields, "balanceReason", context.get("balanceReason"));
+        appendContext(fields, "selectedService", context.get("selectedService"));
+        appendContext(fields, "selectedCorrelationId", context.get("selectedCorrelationId"));
+        appendContext(fields, "services", context.get("services"));
+        appendContext(fields, "recentEvents", context.get("recentEvents"));
+        return fields.isEmpty() ? "Not provided." : String.join("\n", fields);
+    }
+
+    private void appendContext(List<String> fields, String label, Object value) {
+        if (value == null) return;
+        String text = String.valueOf(value)
+                .replaceAll("(?i)(api[_-]?key|password|token|secret|jdbc:[^\\s]+)", "[redacted]")
+                .replaceAll("[\\r\\n]+", " ");
+        if (text.length() > 1000) text = text.substring(0, 1000) + "…";
+        fields.add(label + ": " + text);
     }
 
     private String buildFallbackAnswer(String question, List<RagReference> references) {

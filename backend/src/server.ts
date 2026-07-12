@@ -390,10 +390,13 @@ app.post("/api/rag/ask", async (request, response) => {
   }
 
   try {
+    const context = request.body?.context && typeof request.body.context === "object" && !Array.isArray(request.body.context)
+      ? request.body.context
+      : undefined;
     response.status(200).json(await proxyArchiveOsAi("/api/rag/ask", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, ...(context ? { context } : {}) }),
     }));
   } catch (error) {
     sendProxyError(response, error, "RAG ask failed.");
