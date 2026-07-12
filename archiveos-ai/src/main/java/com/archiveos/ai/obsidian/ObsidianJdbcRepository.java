@@ -126,6 +126,31 @@ public class ObsidianJdbcRepository {
                 Json.write(metadata));
     }
 
+    public List<PendingChunk> findPendingEmbeddingChunks(int limit) {
+        return jdbcTemplate.query("""
+                select id, chunk_text
+                from public.obsidian_chunks
+                where embedding is null
+                  and coalesce(metadata ->> 'embedding_status', 'pending') <> 'failed'
+                order by id asc
+                limit ?
+                """,
+                (rs, rowNum) -> new PendingChunk(rs.getLong("id"), rs.getString("chunk_text")),
+                Math.min(Math.max(limit, 1), 250));
+    }
+
+    public void updateChunkEmbedding(long chunkId, float[] embedding) {
+        jdbcTemplate.update("""
+                update public.obsidian_chunks
+                set embedding = ?::vector,
+                    metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+                        'embedding_status', 'embedded',
+                        'embedded_at', ?
+                    )
+                where id = ?
+                """, toVectorLiteral(embedding), Instant.now().toString(), chunkId);
+    }
+
     public List<Map<String, Object>> listDocuments(int limit) {
         return jdbcTemplate.queryForList("""
                 select id, file_path, title, content_hash, last_modified_at, created_at, updated_at
@@ -294,6 +319,8 @@ public class ObsidianJdbcRepository {
     }
 
     public record ExistingDocument(long id, String contentHash) {}
+
+    public record PendingChunk(long id, String text) {}
 
     public record KnowledgeStatistics(
             int documents,

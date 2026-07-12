@@ -2,14 +2,18 @@ import { useMemo, useState } from "react";
 import type { AppData } from "../app/AppShell";
 import type { CoreRoute } from "../app/navigation";
 import { LiveMeshTopology } from "../components/console/LiveMeshTopology";
+import { DashboardRagCopilot } from "../components/console/DashboardRagCopilot";
 import { Icon, type IconName } from "../components/shared/Icon";
 import { StatusBadge, normalizeStatus, type SemanticStatus } from "../components/shared/StatusBadge";
+import { useI18n } from "../i18n/I18nProvider";
 
 type EventFilter = "ALL" | "MARKET" | "NEXUS" | "LOGISTICS" | "LEDGER" | "ARCHIVEOS" | "WARNING";
 
 export function ConsoleDashboardPage({ data, onNavigate, onRefresh }: { data: AppData; onNavigate: (route: CoreRoute) => void; onRefresh: () => void }) {
   void onRefresh;
+  const { translate } = useI18n();
   const [eventFilter, setEventFilter] = useState<EventFilter>("ALL");
+  const [copilotQuestion, setCopilotQuestion] = useState<string | null>(null);
   const services = Object.values(data.ecosystem?.services ?? {});
   const healthy = services.filter((service) => service.status === "HEALTHY").length + 1;
   const runtime = data.liveFlow?.runtime;
@@ -30,21 +34,24 @@ export function ConsoleDashboardPage({ data, onNavigate, onRefresh }: { data: Ap
         <h2>Archive 생태계 운영 현황</h2>
         <p>핵심 서비스 상태, 실시간 이벤트, 병목과 재무 균형을 한 화면에서 확인합니다.</p>
       </div>
-      <div className="dashboard-header-status" aria-label="대시보드 수집 상태">
-        <StatusBadge status={normalizeStatus(ecosystemStatus)}>{statusLabel(ecosystemStatus)}</StatusBadge>
-        <StatusBadge status={runtime?.pipelineStatus === "LIVE" ? "healthy" : runtime?.pipelineStatus ? "warning" : "empty"}>{runtime?.pipelineStatus === "LIVE" ? "실시간 수집" : runtime?.pipelineStatus ? "흐름 확인 필요" : "수집 상태 확인"}</StatusBadge>
+      <div className="dashboard-header-tools">
+        <DashboardRagCopilot data={data} seedQuestion={copilotQuestion} onSeedHandled={() => setCopilotQuestion(null)} />
+        <div className="dashboard-header-status" aria-label="대시보드 수집 상태">
+          <StatusBadge status={normalizeStatus(ecosystemStatus)}>{statusLabel(ecosystemStatus)}</StatusBadge>
+          <StatusBadge status={runtime?.pipelineStatus === "LIVE" ? "healthy" : runtime?.pipelineStatus ? "warning" : "empty"}>{runtime?.pipelineStatus === "LIVE" ? "실시간 수집" : runtime?.pipelineStatus ? "흐름 확인 필요" : "수집 상태 확인"}</StatusBadge>
+        </div>
       </div>
     </section>
 
     <section className="dashboard-kpi-grid" aria-label="핵심 운영 지표">
       <DashboardKpi icon="health" label="정상 서비스" value={`${healthy}/5`} helper="핵심 서비스와 Control Tower" status={healthy >= 5 ? "healthy" : "warning"} note="마지막 확인 기준" action="서비스" onClick={() => onNavigate("services")} />
       <DashboardKpi icon="activity" label="활성 이벤트" value={displayCount(data.liveFlow?.active_flows)} helper={data.liveFlow?.latest_event_at ? `마지막 수신 ${timeAgo(data.liveFlow.latest_event_at)}` : "최근 실행 이벤트 없음"} status={runtime?.freshnessStatus === "LIVE" ? "working" : runtime?.freshnessStatus === "NO_RUNTIME_EVENTS" ? "empty" : "warning"} trend={activeTrend} trendTone="activity" trendLabel="최근 30분" mobileTrendLabel="최근 30분" action="이벤트" onClick={() => onNavigate("records")} />
-      <DashboardKpi icon="approval" label="승인 대기" value={displayCount(data.liveFlow?.approvalBacklog)} helper="현재 승인 큐 기준" status={numberStatus(data.liveFlow?.approvalBacklog)} trend={approvalTrend} trendTone="approval" trendLabel="최근 30분" mobileTrendLabel="승인 큐 기준" action="승인·정산" onClick={() => onNavigate("finance")} />
-      <DashboardKpi icon="workflow" label="처리 적체" value={displayCount(data.liveFlow?.processingBacklog)} helper="현재 처리 대기 기준" status={numberStatus(data.liveFlow?.processingBacklog)} trend={backlogTrend} trendTone="backlog" trendLabel="최근 30분" mobileTrendLabel="처리 대기 기준" action="운영" onClick={() => onNavigate("operations")} />
-      <DashboardKpi icon="overview" label="생태계 균형" value={balanceView.label} valueCompact helper={balanceShortSummary(balance?.balanceStatus)} helperTitle={balance?.reviewReason || balanceView.description} status={balanceView.status} badgeLabel={balanceView.badge} note={balance ? "마지막 계산 기준" : "재무 Runtime Mesh 수집 대기"} action="손익" onClick={() => onNavigate("finance")} />
+      <DashboardKpi icon="approval" label="승인 대기" value={displayCount(data.liveFlow?.approvalBacklog)} helper="현재 승인 큐 기준" status={numberStatus(data.liveFlow?.approvalBacklog)} trend={approvalTrend} trendTone="approval" trendLabel="최근 30분" mobileTrendLabel="승인 큐 기준" action={translate("copilot.analyze")} onClick={() => setCopilotQuestion(translate("copilot.questionApproval"))} />
+      <DashboardKpi icon="workflow" label="처리 적체" value={displayCount(data.liveFlow?.processingBacklog)} helper="현재 처리 대기 기준" status={numberStatus(data.liveFlow?.processingBacklog)} trend={backlogTrend} trendTone="backlog" trendLabel="최근 30분" mobileTrendLabel="처리 대기 기준" action={translate("copilot.analyze")} onClick={() => setCopilotQuestion(translate("copilot.questionBacklog"))} />
+      <DashboardKpi icon="overview" label="생태계 균형" value={balanceView.label} valueCompact helper={balanceShortSummary(balance?.balanceStatus)} helperTitle={balance?.reviewReason || balanceView.description} status={balanceView.status} badgeLabel={balanceView.badge} note={balance ? "마지막 계산 기준" : "재무 Runtime Mesh 수집 대기"} action={translate("copilot.analyze")} onClick={() => setCopilotQuestion(interpolate(translate("copilot.questionBalance"), { status: balance?.balanceStatus || "NO_DATA" }))} />
     </section>
 
-    <LiveMeshTopology topology={data.liveFlowTopology} summary={data.liveFlow} events={allEvents} onNavigate={onNavigate} />
+    <LiveMeshTopology topology={data.liveFlowTopology} summary={data.liveFlow} events={allEvents} onNavigate={onNavigate} onAsk={setCopilotQuestion} />
 
     <section className="dashboard-event-strip" aria-labelledby="dashboard-recent-events-title">
       <header className="dashboard-event-strip-header">
@@ -55,11 +62,13 @@ export function ConsoleDashboardPage({ data, onNavigate, onRefresh }: { data: Ap
         </div>
       </header>
       {events.length ? <><div className="dashboard-event-columns" aria-hidden="true"><span>시간</span><span>경로</span><span>이벤트</span><span>대상</span><span>Correlation</span><span>상태</span></div><ol className="dashboard-event-list">{events.map((event) => <li key={event.event_id} className={isFresh(event.received_at) ? "is-new" : ""}>
-        <time className="event-time">{formatTime(event.occurred_at)}</time><span className="event-route" title={`${event.from_node} → ${event.to_node}`}>{displayServiceName(event.from_node)} → {displayServiceName(event.to_node)}</span><strong className="event-type" title={event.event_type}>{event.event_type}</strong><small className="event-entity" title={event.entity_id}>{event.entity_id || "대상 정보 없음"}</small><button type="button" className="correlation-link" title={event.correlation_id ? "상관관계 ID 복사" : "연결 정보 없음"} onClick={() => copyCorrelation(event.correlation_id)}>{shortId(event.correlation_id) || "연결 정보 없음"}</button><StatusBadge status={normalizeStatus(event.status)}>{statusLabel(event.status)}</StatusBadge>
+        <time className="event-time">{formatTime(event.occurred_at)}</time><span className="event-route" title={`${event.from_node} → ${event.to_node}`}>{displayServiceName(event.from_node)} → {displayServiceName(event.to_node)}</span><strong className="event-type" title={event.event_type}>{event.event_type}</strong><small className="event-entity" title={event.entity_id}>{event.entity_id || "대상 정보 없음"}</small><button type="button" className="correlation-link" title={event.correlation_id ? "AI 코파일럿에서 흐름 분석" : "연결 정보 없음"} onClick={() => setCopilotQuestion(interpolate(translate("copilot.questionCorrelation"), { id: event.correlation_id || "NO_DATA" }))}>{shortId(event.correlation_id) || "연결 정보 없음"}</button><StatusBadge status={normalizeStatus(event.status)}>{statusLabel(event.status)}</StatusBadge>
       </li>)}</ol></> : <p className="dashboard-event-empty">실시간 연결은 정상이며 새 런타임 이벤트를 기다리고 있습니다.</p>}
     </section>
   </div>;
 }
+
+function interpolate(template: string, variables: Record<string, string>) { return Object.entries(variables).reduce((text, [key, value]) => text.split(`{${key}}`).join(value), template); }
 
 function DashboardKpi({ icon, label, value, helper, helperTitle, status, badgeLabel, trend, trendTone, trendLabel, mobileTrendLabel, note, action, onClick, valueCompact = false }: { icon: IconName; label: string; value: string; helper: string; helperTitle?: string; status: SemanticStatus; badgeLabel?: string; trend?: number[]; trendTone?: "activity" | "approval" | "backlog"; trendLabel?: string; mobileTrendLabel?: string; note?: string; action: string; onClick: () => void; valueCompact?: boolean }) {
   const hasTrend = Boolean(trend?.some((value) => value > 0));
@@ -86,7 +95,6 @@ function sparklinePoints(values: number[]) { const max = Math.max(...values, 1);
 function numberStatus(value: number | null | undefined): SemanticStatus { return typeof value !== "number" ? "empty" : value > 0 ? "warning" : "healthy"; }
 function displayCount(value: number | null | undefined) { return typeof value === "number" ? value.toLocaleString() : "데이터 없음"; }
 function shortId(value: string | null | undefined) { return value ? `${value.slice(0, 12)}…` : null; }
-function copyCorrelation(value: string | null | undefined) { if (value) void navigator.clipboard?.writeText(value).catch(() => undefined); }
 function displayServiceName(value: string) { const normalized = value.toLowerCase(); if (normalized.includes("market")) return "Market"; if (normalized.includes("nexus")) return "Nexus"; if (normalized.includes("logit")) return "Logistics"; if (normalized.includes("ledger")) return "Ledger"; if (normalized.includes("settle")) return "Settlement"; if (normalized.includes("archiveos")) return "ArchiveOS"; return value; }
 function formatTime(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
 function timeAgo(value: string) { const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000)); return seconds < 60 ? `${seconds}초 전` : `${Math.floor(seconds / 60)}분 전`; }

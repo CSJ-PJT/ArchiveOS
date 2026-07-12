@@ -1073,6 +1073,32 @@ export type AiRuntime = {
   };
 };
 
+export type RagReference = {
+  title: string;
+  path: string;
+  heading: string | null;
+  chunkText: string;
+  score: number;
+};
+
+export type RagAnswer = {
+  answer: string;
+  references: RagReference[];
+};
+
+export type RagRuntimeContext = {
+  ecosystemStatus?: string | null;
+  services?: Array<{ name?: string; status?: string }>;
+  activeEvents?: number | null;
+  approvalBacklog?: number | null;
+  processingBacklog?: number | null;
+  balanceStatus?: string | null;
+  balanceReason?: string | null;
+  recentEvents?: Array<{ eventType?: string; source?: string; target?: string; entityId?: string | null; correlationId?: string | null; status?: string }>;
+  selectedService?: string | null;
+  selectedCorrelationId?: string | null;
+};
+
 export type SpringBatchExecution = {
   id: number;
   jobName: string | null;
@@ -1635,8 +1661,28 @@ export async function getRuntimeVersion() {
   return response.data;
 }
 
-export async function getAiRuntime() {
-  const response = await request<ApiEnvelope<AiRuntime>>("/api/ai/runtime");
+export async function getAiRuntime(init?: RequestInit) {
+  const response = await request<ApiEnvelope<AiRuntime>>("/api/ai/runtime", init);
+  return response.data;
+}
+
+export async function searchRag(query: string, init?: RequestInit) {
+  const response = await request<ApiEnvelope<RagReference[]>>(`/api/rag/search?query=${encodeURIComponent(query)}`, init);
+  return response.data;
+}
+
+export async function askRag(question: string, context?: RagRuntimeContext, init?: RequestInit) {
+  const response = await request<ApiEnvelope<RagAnswer>>("/api/rag/ask", {
+    ...init,
+    method: "POST",
+    headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+    body: JSON.stringify({ question, ...(context ? { context } : {}) }),
+  });
+  return response.data;
+}
+
+export async function syncObsidian(init?: RequestInit) {
+  const response = await request<ApiEnvelope<Record<string, unknown>>>("/api/obsidian/sync", { method: "POST", ...init });
   return response.data;
 }
 
