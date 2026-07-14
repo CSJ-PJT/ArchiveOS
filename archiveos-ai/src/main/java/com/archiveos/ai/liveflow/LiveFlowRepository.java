@@ -1,6 +1,7 @@
 package com.archiveos.ai.liveflow;
 
 import com.archiveos.ai.obsidian.Json;
+import com.archiveos.ai.world.WorldEventBroadcaster;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -16,10 +17,12 @@ import org.springframework.stereotype.Repository;
 public class LiveFlowRepository {
     private final JdbcTemplate jdbc;
     private final LiveFlowEventBroadcaster broadcaster;
+    private final WorldEventBroadcaster worldBroadcaster;
 
-    public LiveFlowRepository(JdbcTemplate jdbc, LiveFlowEventBroadcaster broadcaster) {
+    public LiveFlowRepository(JdbcTemplate jdbc, LiveFlowEventBroadcaster broadcaster, WorldEventBroadcaster worldBroadcaster) {
         this.jdbc = jdbc;
         this.broadcaster = broadcaster;
+        this.worldBroadcaster = worldBroadcaster;
     }
 
     public Map<String, Object> upsert(LiveFlowEvent event) {
@@ -49,7 +52,10 @@ public class LiveFlowRepository {
                 event.amountBucket(), Timestamp.from(event.occurredAt()), Json.write(event.metadata() == null ? Map.of() : event.metadata()));
         Map<String, Object> saved = changed.stream().findFirst().orElseGet(() -> jdbc.queryForObject(
                 "select * from public.ecosystem_flow_event where event_id = ?", this::row, event.eventId()));
-        if (!changed.isEmpty()) broadcaster.publish(saved);
+        if (!changed.isEmpty()) {
+            broadcaster.publish(saved);
+            worldBroadcaster.publishRuntimeEvent(saved);
+        }
         return saved;
     }
 

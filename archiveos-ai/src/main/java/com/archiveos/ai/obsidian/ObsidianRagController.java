@@ -40,7 +40,7 @@ public class ObsidianRagController {
         if (query == null || query.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "query is required."));
         }
-        return ResponseEntity.ok(Map.of("data", ragService.search(query, limit)));
+        return ResponseEntity.ok(Map.of("data", ragService.search(query, limit), "status", "SEARCH_ONLY"));
     }
 
     @PostMapping("/api/rag/ask")

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AppData } from "../app/AppShell";
 import type { CoreRoute } from "../app/navigation";
 import { LiveMeshTopology } from "../components/console/LiveMeshTopology";
@@ -21,6 +21,19 @@ export function ConsoleDashboardPage({ data, onNavigate, onRefresh }: { data: Ap
   const allEvents = data.liveFlowEvents;
   const filteredEvents = useMemo(() => allEvents.filter((event) => matchesFilter(event, eventFilter)), [allEvents, eventFilter]);
   const events = filteredEvents.slice(0, 4);
+  useEffect(() => {
+    const onCorrelationClick = (nativeEvent: MouseEvent) => {
+      const button = (nativeEvent.target as HTMLElement | null)?.closest<HTMLButtonElement>(".dashboard-event-list .correlation-link");
+      if (!button) return;
+      const correlationId = allEvents.find((event) => shortId(event.correlation_id) === button.textContent?.trim())?.correlation_id;
+      if (!correlationId) return;
+      nativeEvent.preventDefault();
+      window.sessionStorage.setItem("archiveos.records.correlation", correlationId);
+      onNavigate("records");
+    };
+    document.addEventListener("click", onCorrelationClick);
+    return () => document.removeEventListener("click", onCorrelationClick);
+  }, [allEvents, onNavigate]);
   const ecosystemStatus = data.ecosystem?.status ?? "UNKNOWN";
   const balanceView = balanceStatusView(balance?.balanceStatus);
   const approvalTrend = buildTrend(allEvents, (event) => /approval/i.test(`${event.event_type} ${event.status}`));

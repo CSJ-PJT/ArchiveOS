@@ -1099,6 +1099,15 @@ export type RagRuntimeContext = {
   selectedCorrelationId?: string | null;
 };
 
+export type DecisionRecommendation = {
+  recommendation_id: string; status: string; summary: string; confidence: number | null;
+  observed_facts: Array<{ name: string; value: unknown; source: string }>;
+  hypotheses: Array<{ statement: string }>; recommended_actions: Array<{ action: string; execution: string; requiresHumanApproval: boolean }>;
+  risks: Array<{ level: string; message: string }>; references_json: Array<{ title: string; heading: string; excerpt: string; score: number; sourceType: string }>;
+  runtime_evidence: Array<{ name: string; value: unknown; source: string }>; policy_checks: Array<{ rule: string; status: string; detail: string }>;
+  created_at: string; decided_at: string | null; decided_by: string | null; decision_reason: string | null;
+};
+
 export type SpringBatchExecution = {
   id: number;
   jobName: string | null;
@@ -1680,6 +1689,19 @@ export async function askRag(question: string, context?: RagRuntimeContext, init
   });
   return response.data;
 }
+
+export async function analyzeDecision(input: { question: string; service?: string | null; entityId?: string | null; correlationId?: string | null; triggerType?: string }) {
+  const response = await request<ApiEnvelope<DecisionRecommendation>>("/api/ai/decisions/analyze", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ requestId: crypto.randomUUID(), triggerType: input.triggerType ?? "MANUAL", service: input.service ?? "Archive-Ledger", entityId: input.entityId ?? null, correlationId: input.correlationId ?? null, question: input.question, runtimeContext: {} }) });
+  return response.data;
+}
+export async function getDecisionRecommendations(limit = 30) { const response = await request<ApiEnvelope<DecisionRecommendation[]>>(`/api/ai/decisions?limit=${limit}`); return response.data; }
+export type AiOperationsItem = { inboxId: string; type: string; sourceId: string; service: string; title: string; summary: string; severity: string; deterministicScore: number; aiSuggestedPriority: string | null; status: string; createdAt: string | null; };
+export type IncidentRecord = { incident_id: string; status: string; severity: string; title: string; detected_at: string; analysis?: Record<string, unknown>; references_json?: unknown[]; recommended_actions?: unknown[]; };
+export type CorrelationTimeline = { correlationId: string; events: Array<{ sequence: number; occurredAt: string; source: string; target: string; eventType: string; normalizedStage: string; entityId: string; orderId?: string | null; simulationRunId?: string | null; eventId: string; causationId?: string | null; causationStatus?: string; latencyFromPrevious: number | null; status: string }>; anomalies: Array<Record<string, unknown>>; lineage?: { simulationRunIds?: string[]; simulationRunIdDistinctCount?: number; [key: string]: unknown }; aiCalled: boolean; };
+export async function getPmAttention() { const response = await request<ApiEnvelope<AiOperationsItem[]>>("/api/pm-attention"); return response.data; }
+export async function getIncidents() { const response = await request<ApiEnvelope<IncidentRecord[]>>("/api/incidents"); return response.data; }
+export async function getCorrelationTimeline(correlationId: string) { const response = await request<ApiEnvelope<CorrelationTimeline>>(`/api/correlation-timeline/${encodeURIComponent(correlationId)}`); return response.data; }
+export async function decideRecommendation(id: string, action: "approve" | "reject", reason: string) { const response = await request<ApiEnvelope<DecisionRecommendation>>(`/api/ai/decisions/${encodeURIComponent(id)}/${action}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason }) }); return response.data; }
 
 export async function syncObsidian(init?: RequestInit) {
   const response = await request<ApiEnvelope<Record<string, unknown>>>("/api/obsidian/sync", { method: "POST", ...init });

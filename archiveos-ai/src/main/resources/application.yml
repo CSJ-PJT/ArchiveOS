@@ -11,9 +11,9 @@ spring:
       - optional:file:.env[.properties]
       - optional:file:.env.local[.properties]
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:archiveos}
-    username: ${DB_USER:archiveos}
-    password: ${DB_PASSWORD:archiveos}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:}
+    username: ${DB_USER:}
+    password: ${DB_PASSWORD:}
   flyway:
     enabled: true
     baseline-on-migrate: true
@@ -55,7 +55,7 @@ archiveos:
     slack-channel: ${SLACK_CHANNEL:}
   ledger:
     base-url: ${ARCHIVE_LEDGER_BASE_URL:}
-    callback-token: ${ARCHIVE_LEDGER_CALLBACK_TOKEN:}
+    callback-token: ${ARCHIVE_TOKEN_OS_TO_LEDGER:}
     enabled: ${ARCHIVE_LEDGER_ENABLED:false}
   scheduler:
     enabled: ${ARCHIVEOS_SCHEDULER_ENABLED:false}
@@ -64,6 +64,10 @@ archiveos:
   experimental:
     deepstake:
       enabled: ${ARCHIVEOS_EXPERIMENTAL_DEEPSTAKE_ENABLED:false}
+  world:
+    adapter-mode: ${ARCHIVE_WORLD_ADAPTER_MODE:mock}
+    manifest-path: ${ARCHIVE_WORLD_MANIFEST_PATH:}
+    event-limit: ${ARCHIVE_WORLD_EVENT_LIMIT:100}
   ecosystem:
     balance:
       market:
@@ -87,6 +91,12 @@ archiveos:
   security:
     admin-password: ${ARCHIVEOS_ADMIN_PASSWORD:}
     integration-token: ${ARCHIVEOS_INTEGRATION_TOKEN:}
+    market-to-os-token: ${ARCHIVE_TOKEN_MARKET_TO_OS:}
+    nexus-to-os-token: ${ARCHIVE_TOKEN_NEXUS_TO_OS:}
+    logistics-to-os-token: ${ARCHIVE_TOKEN_LOGISTICS_TO_OS:}
+    ledger-to-os-token: ${ARCHIVE_TOKEN_LEDGER_TO_OS:}
+    authenticated-read-token: ${ARCHIVE_TOKEN_AUTHENTICATED_READ:}
+    admin-operator-token: ${ARCHIVE_TOKEN_ADMIN_OPERATOR:}
     session-timeout-minutes: ${ARCHIVEOS_SESSION_TIMEOUT_MINUTES:30}
     max-login-attempts: ${ARCHIVEOS_LOGIN_MAX_ATTEMPTS:5}
     lockout-minutes: ${ARCHIVEOS_LOGIN_LOCKOUT_MINUTES:15}
