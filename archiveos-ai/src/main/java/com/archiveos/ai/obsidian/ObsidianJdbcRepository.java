@@ -201,7 +201,7 @@ public class ObsidianJdbcRepository {
                 """,
                 (rs, rowNum) -> mapReference(rs),
                 like, like, like, like, like, safeLimit);
-        return rows.isEmpty() ? latestChunks(safeLimit) : rows;
+        return rows;
     }
 
     private List<RagReference> latestChunks(int limit) {

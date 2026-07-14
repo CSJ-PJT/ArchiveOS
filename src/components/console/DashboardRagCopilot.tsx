@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppData } from "../../app/AppShell";
-import { askRag, getAiRuntime, searchRag, syncObsidian, type AiRuntime, type RagAnswer, type RagReference, type RagRuntimeContext } from "../../lib/backendApi";
+import { analyzeDecision, askRag, getAiRuntime, searchRag, syncObsidian, type AiRuntime, type DecisionRecommendation, type RagAnswer, type RagReference, type RagRuntimeContext } from "../../lib/backendApi";
 import { useI18n } from "../../i18n/I18nProvider";
 import type { TranslationKey } from "../../i18n";
 import { Icon } from "../shared/Icon";
@@ -21,6 +21,8 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
   const [answer, setAnswer] = useState<RagAnswer | null>(null);
   const [results, setResults] = useState<RagReference[] | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
+  const [decision, setDecision] = useState<DecisionRecommendation | null>(null);
+  const [decisionBusy, setDecisionBusy] = useState(false);
   const triggerRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -74,7 +76,7 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
     if (!normalized || loading) return;
     requestRef.current?.abort();
     const controller = new AbortController(); requestRef.current = controller;
-    setQuery(normalized); setOpen(true); setLoading(true); setRequestError(null); setAnswer(null); setResults(null);
+    setQuery(normalized); setOpen(true); setLoading(true); setRequestError(null); setAnswer(null); setResults(null); setDecision(null);
     try {
       if (mode === "search") setResults(await searchRag(normalized, { signal: controller.signal }));
       else setAnswer(await askRag(normalized, context, { signal: controller.signal }));
@@ -91,6 +93,14 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
     try { await syncObsidian(); await refreshRuntime(); }
     catch (error) { setRequestError(safeError(error)); }
     finally { setSyncing(false); }
+  }
+
+  async function createDecision() {
+    if (decisionBusy || data.auth.role !== "ADMIN" || !query.trim()) return;
+    setDecisionBusy(true); setRequestError(null);
+    try { setDecision(await analyzeDecision({ question: query, service: context.selectedService || "Archive-Ledger", correlationId: context.selectedCorrelationId })); }
+    catch (error) { setRequestError(safeError(error)); }
+    finally { setDecisionBusy(false); }
   }
 
   function trapFocus(event: React.KeyboardEvent<HTMLElement>) {
@@ -121,7 +131,8 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
         {!loading && !answer && !results && !requestError ? <section className="copilot-suggestions"><strong>{translate("copilot.recommendation")}</strong>{suggestions.length ? <div>{suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => void submit(suggestion)}>{suggestion}</button>)}</div> : <p>{translate("copilot.runtimeContext")}</p>}</section> : null}
         {loading ? <section className="copilot-loading"><span className="copilot-spinner" aria-hidden="true" />{translate("copilot.loading")}<button type="button" className="text-button" onClick={() => requestRef.current?.abort()}>{translate("copilot.cancel")}</button></section> : null}
         {requestError ? <section className="copilot-error"><strong>{translate("copilot.error")}</strong><p>{requestError}</p><button type="button" onClick={() => void submit()}>{translate("copilot.retry")}</button></section> : null}
-        {answer ? <><section className="copilot-answer"><strong>{translate("copilot.answer")}</strong><p>{answer.answer}</p><small>{translate("copilot.humanReview")}</small></section><ReferenceList references={answer.references} title={translate("copilot.references")} empty={translate("copilot.noReferences")} /></> : null}
+        {answer ? <><section className="copilot-answer"><strong>{translate("copilot.answer")}</strong><p>{answer.answer}</p><small>{translate("copilot.humanReview")}</small>{data.auth.role === "ADMIN" ? <button type="button" className="text-button" onClick={() => void createDecision()} disabled={decisionBusy || !answer.references.length}>{decisionBusy ? "분석 제안 생성 중" : "근거 기반 제안 만들기"}</button> : null}</section><ReferenceList references={answer.references} title={translate("copilot.references")} empty={translate("copilot.noReferences")} /></> : null}
+        {decision ? <section className="copilot-context"><strong>Decision Engine · {decision.status}</strong><p>{decision.summary}</p><small>제안만 기록되었으며, 외부 서비스 실행은 수행되지 않았습니다.</small></section> : null}
         {results ? <ReferenceList references={results} title={translate("copilot.searchResults")} empty={translate("copilot.noResults")} /> : null}
         <section className="copilot-context"><strong>{translate("copilot.context")}</strong><p>{translate("copilot.runtimeContext")}</p><dl><dt>ecosystemStatus</dt><dd>{context.ecosystemStatus || "NO_DATA"}</dd><dt>activeEvents</dt><dd>{displayValue(context.activeEvents)}</dd><dt>approvalBacklog</dt><dd>{displayValue(context.approvalBacklog)}</dd><dt>processingBacklog</dt><dd>{displayValue(context.processingBacklog)}</dd><dt>balanceStatus</dt><dd>{context.balanceStatus || "NO_DATA"}</dd></dl></section>
       </aside>

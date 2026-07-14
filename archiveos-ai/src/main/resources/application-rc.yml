@@ -1,0 +1,19 @@
+spring:
+  config:
+    activate:
+      on-profile: rc
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
+  datasource:
+    username: ${DB_USER:?DB_USER is required for rc}
+    password: ${DB_PASSWORD:?DB_PASSWORD is required for rc}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

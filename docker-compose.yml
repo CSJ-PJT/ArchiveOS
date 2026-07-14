@@ -3,11 +3,9 @@ services:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME:-archiveos}
-      POSTGRES_USER: ${DB_USER:-archiveos}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-archiveos}
-    ports:
-      - "127.0.0.1:${DB_HOST_PORT:-5432}:5432"
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+      POSTGRES_USER: ${DB_USER:?DB_USER is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     volumes:
       - archiveos-postgres:/var/lib/postgresql/data
     healthcheck:
@@ -58,18 +56,27 @@ services:
     init: true
     environment:
       ARCHIVEOS_AI_PORT: 4100
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-archiveos-disabled-key}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL: ${SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL:-}
       SPRING_AI_OPENAI_EMBEDDING_OPTIONS_MODEL: ${SPRING_AI_OPENAI_EMBEDDING_OPTIONS_MODEL:-}
       OBSIDIAN_VAULT_PATH: /vault
+      ARCHIVE_TOKEN_MARKET_TO_OS: ${ARCHIVE_TOKEN_MARKET_TO_OS:-}
+      ARCHIVE_TOKEN_NEXUS_TO_OS: ${ARCHIVE_TOKEN_NEXUS_TO_OS:-}
+      ARCHIVE_TOKEN_LOGISTICS_TO_OS: ${ARCHIVE_TOKEN_LOGISTICS_TO_OS:-}
+      ARCHIVE_TOKEN_LEDGER_TO_OS: ${ARCHIVE_TOKEN_LEDGER_TO_OS:-}
+      ARCHIVE_WORLD_ADAPTER_MODE: ${ARCHIVE_WORLD_ADAPTER_MODE:-mock}
+      ARCHIVE_WORLD_MANIFEST_PATH: /archive-world/assets/manifests/archive-world-assets.json
+      ARCHIVE_WORLD_EVENT_LIMIT: ${ARCHIVE_WORLD_EVENT_LIMIT:-100}
+      ARCHIVE_TOKEN_AUTHENTICATED_READ: ${ARCHIVE_TOKEN_AUTHENTICATED_READ:-}
+      ARCHIVE_TOKEN_ADMIN_OPERATOR: ${ARCHIVE_TOKEN_ADMIN_OPERATOR:-}
       OBSIDIAN_CHUNK_SIZE: ${OBSIDIAN_CHUNK_SIZE:-1200}
       OBSIDIAN_CHUNK_OVERLAP: ${OBSIDIAN_CHUNK_OVERLAP:-160}
       RAG_MAX_REFERENCES: ${RAG_MAX_REFERENCES:-5}
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-archiveos}
-      DB_USER: ${DB_USER:-archiveos}
-      DB_PASSWORD: ${DB_PASSWORD:-archiveos}
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
       SLACK_CHANNEL: ${SLACK_CHANNEL:-archiveos-alerts}
@@ -83,7 +90,7 @@ services:
       ARCHIVEOS_LOGIN_LOCKOUT_MINUTES: ${ARCHIVEOS_LOGIN_LOCKOUT_MINUTES:-15}
       ARCHIVEOS_SECURE_COOKIE: ${ARCHIVEOS_SECURE_COOKIE:-false}
       ARCHIVE_LEDGER_BASE_URL: ${ARCHIVE_LEDGER_BASE_URL:-}
-      ARCHIVE_LEDGER_CALLBACK_TOKEN: ${ARCHIVE_LEDGER_CALLBACK_TOKEN:-}
+      ARCHIVE_TOKEN_OS_TO_LEDGER: ${ARCHIVE_TOKEN_OS_TO_LEDGER:-}
       ARCHIVE_LEDGER_ENABLED: ${ARCHIVE_LEDGER_ENABLED:-false}
       ARCHIVE_ECOSYSTEM_ENABLED: ${ARCHIVE_ECOSYSTEM_ENABLED:-true}
       ARCHIVE_ECOSYSTEM_REFRESH_TIMEOUT_MS: ${ARCHIVE_ECOSYSTEM_REFRESH_TIMEOUT_MS:-3000}
@@ -109,7 +116,10 @@ services:
       retries: 20
       start_period: 60s
     volumes:
-      - ${HOST_OBSIDIAN_VAULT_PATH:-./docs}:/vault:ro
+      # Memory Writer writes only after an explicit ADMIN-approved API action.
+      # Sync and embedding remain separate manual actions.
+      - ${HOST_OBSIDIAN_VAULT_PATH:-./docs}:/vault
+      - ${HOST_ARCHIVE_WORLD_ROOT:-../Archive-World}:/archive-world:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -119,7 +129,7 @@ services:
       context: .
     restart: unless-stopped
     ports:
-      - "5173:80"
+      - "127.0.0.1:5173:80"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
       interval: 10s

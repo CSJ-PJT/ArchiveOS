@@ -163,6 +163,11 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Live Flow Correlation", method: "GET", path: "/api/live-flow/correlation/:id", service: "runtime", description: "Trace one runtime correlation chain." },
   { name: "Live Flow Entity", method: "GET", path: "/api/live-flow/entity/:id", service: "runtime", description: "Trace one entity through the flow." },
   { name: "Live Flow Refresh", method: "POST", path: "/api/live-flow/refresh", service: "runtime", description: "Admin-only read-only collection from Archive services." },
+  { name: "World Assets", method: "GET", path: "/api/world/assets", service: "runtime", description: "Read-only Archive-World manifest adapter." },
+  { name: "World Layout", method: "GET", path: "/api/world/layout", service: "runtime", description: "Digital Twin district and route DTO." },
+  { name: "World Events", method: "GET", path: "/api/world/events", service: "runtime", description: "Timeline-derived viewer event DTO." },
+  { name: "World State", method: "GET", path: "/api/world/state", service: "runtime", description: "Read-only Digital Twin adapter status." },
+  { name: "World Stream", method: "GET", path: "/api/world/stream", service: "runtime", description: "SSE viewer event adapter." },
   { name: "Workforce Overview", method: "GET", path: "/api/workforce/overview", service: "runtime", description: "Synthetic workforce, capacity, productivity, and cashflow overview." },
   { name: "Workforce Bottlenecks", method: "GET", path: "/api/workforce/bottlenecks", service: "runtime", description: "Service bottleneck and backlog summary." },
   { name: "Workforce Recommendations", method: "GET", path: "/api/workforce/recommendations", service: "runtime", description: "Recommendation-only workforce actions." },
@@ -280,7 +285,9 @@ app.use("/api", async (request, response, next) => {
     const session = await readJavaSession(request);
     const role = String(session.role ?? "PUBLIC").toUpperCase();
     const pmAction = /^\/api\/(tasks|rpa\/tasks)\/[^/]+\/(decision|retry|approve|reject|hold|request_retry)$/.test(requestPath)
-      || /^\/api\/approvals\/external\/[^/]+\/(approve|reject|hold)$/.test(requestPath);
+      || /^\/api\/approvals\/external\/[^/]+\/(approve|reject|hold)$/.test(requestPath)
+      || /^\/api\/ai\/decisions\/[^/]+\/(approve|reject)$/.test(requestPath)
+      || /^\/api\/memory\/drafts\/[^/]+\/approve$/.test(requestPath);
     if (role === "PUBLIC") {
       response.status(401).json({ error: "Authentication required." });
       return;
@@ -345,6 +352,30 @@ app.get("/api/ax/roadmap", (_request, response) => {
 app.post("/api/obsidian/sync", async (request, response) => {
   await relayArchiveOsAi(response, "/api/obsidian/sync", { method: "POST" }, undefined, request);
 });
+
+app.post("/api/ai/decisions/analyze", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ai/decisions/analyze", jsonProxyRequest("POST", request.body), undefined, request);
+});
+app.get("/api/ai/decisions", async (request, response) => {
+  const limit = request.query.limit ? `?limit=${encodeURIComponent(String(request.query.limit))}` : "";
+  await relayArchiveOsAi(response, `/api/ai/decisions${limit}`, undefined, undefined, request);
+});
+app.get("/api/ai/decisions/:id", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/ai/decisions/${encodeURIComponent(request.params.id)}`, undefined, undefined, request);
+});
+app.post("/api/ai/decisions/:id/:action(approve|reject)", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/ai/decisions/${encodeURIComponent(request.params.id)}/${request.params.action}`, jsonProxyRequest("POST", request.body), undefined, request);
+});
+app.post("/api/memory/drafts", async (request, response) => { await relayArchiveOsAi(response, "/api/memory/drafts", jsonProxyRequest("POST", request.body), undefined, request); });
+app.get("/api/memory/records", async (_request, response) => { await relayArchiveOsAi(response, "/api/memory/records"); });
+app.get("/api/memory/:kind/:id", async (request, response) => { await relayArchiveOsAi(response, `/api/memory/${encodeURIComponent(request.params.kind)}/${encodeURIComponent(request.params.id)}`, undefined, undefined, request); });
+app.post("/api/memory/drafts/:id/:action(approve|write)", async (request, response) => { await relayArchiveOsAi(response, `/api/memory/drafts/${encodeURIComponent(request.params.id)}/${request.params.action}`, jsonProxyRequest("POST", request.body), undefined, request); });
+app.get("/api/correlation-timeline/:id", async (request, response) => { await relayArchiveOsAi(response, `/api/correlation-timeline/${encodeURIComponent(request.params.id)}`, undefined, undefined, request); });
+app.post("/api/correlation-timeline/:id/explain", async (request, response) => { await relayArchiveOsAi(response, `/api/correlation-timeline/${encodeURIComponent(request.params.id)}/explain`, jsonProxyRequest("POST", request.body), undefined, request); });
+app.get("/api/pm-attention", async (_request, response) => { await relayArchiveOsAi(response, "/api/pm-attention"); });
+app.get("/api/incidents", async (_request, response) => { await relayArchiveOsAi(response, "/api/incidents"); });
+app.post("/api/incidents/detect", async (request, response) => { await relayArchiveOsAi(response, "/api/incidents/detect", { method: "POST" }, undefined, request); });
+app.post("/api/incidents/:id/:action(analyze|acknowledge|resolve)", async (request, response) => { await relayArchiveOsAi(response, `/api/incidents/${encodeURIComponent(request.params.id)}/${request.params.action}`, jsonProxyRequest("POST", request.body), undefined, request); });
 
 app.get("/api/ai/runtime", async (_request, response) => {
   try {
@@ -931,6 +962,25 @@ app.get("/api/live-flow/entity/:id", async (request, response) => {
 
 app.post("/api/live-flow/refresh", async (request, response) => {
   await relayArchiveOsAi(response, "/api/live-flow/refresh", { method: "POST" }, undefined, request);
+});
+
+app.get("/api/world/assets", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/world/assets", undefined, undefined, request);
+});
+app.get("/api/world/layout", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/world/layout", undefined, undefined, request);
+});
+app.get("/api/world/events", async (request, response) => {
+  const params = new URLSearchParams();
+  if (request.query.limit) params.set("limit", String(request.query.limit));
+  if (request.query.correlationId) params.set("correlationId", String(request.query.correlationId));
+  await relayArchiveOsAi(response, `/api/world/events${params.size ? `?${params.toString()}` : ""}`, undefined, undefined, request);
+});
+app.get("/api/world/state", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/world/state", undefined, undefined, request);
+});
+app.get("/api/world/stream", async (request, response) => {
+  await relayArchiveOsAiSse(request, response, "/api/world/stream");
 });
 
 app.get("/api/workforce/overview", async (request, response) => {

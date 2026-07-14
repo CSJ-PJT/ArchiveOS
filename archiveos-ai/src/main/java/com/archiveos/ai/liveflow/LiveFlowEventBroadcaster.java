@@ -8,6 +8,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.springframework.http.MediaType;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -26,6 +29,11 @@ public class LiveFlowEventBroadcaster {
     private static final Logger log = LoggerFactory.getLogger(LiveFlowEventBroadcaster.class);
     private static final long TIMEOUT_MS = 15 * 60 * 1000L;
     private static final int HISTORY_LIMIT = 250;
+    private static final ScheduledExecutorService INITIAL_DISPATCHER = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "live-flow-sse-initial-dispatch");
+        thread.setDaemon(true);
+        return thread;
+    });
     private final Map<String, SseEmitter> emitters = new ConcurrentHashMap<>();
     private final CopyOnWriteArrayList<Map<String, Object>> history = new CopyOnWriteArrayList<>();
     private final LiveFlowRepository repository;
@@ -44,13 +52,17 @@ public class LiveFlowEventBroadcaster {
             emitter.complete();
         });
         emitter.onError(error -> emitters.remove(id));
-        try {
-            send(emitter, "snapshot-" + Instant.now().toEpochMilli(), "snapshot", snapshot);
-            replayAfter(emitter, lastEventId);
-        } catch (IOException error) {
-            emitters.remove(id);
-            emitter.completeWithError(error);
-        }
+        // The MVC async response is established only after this method returns. Dispatching the
+        // initial snapshot on the next task prevents the first SSE frame from being lost.
+        INITIAL_DISPATCHER.schedule(() -> {
+            try {
+                send(emitter, "snapshot-" + Instant.now().toEpochMilli(), "snapshot", snapshot);
+                replayAfter(emitter, lastEventId);
+            } catch (IOException error) {
+                emitters.remove(id);
+                emitter.completeWithError(error);
+            }
+        }, 500, TimeUnit.MILLISECONDS);
         return emitter;
     }
 

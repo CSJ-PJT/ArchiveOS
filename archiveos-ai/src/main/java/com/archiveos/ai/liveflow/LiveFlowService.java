@@ -44,6 +44,23 @@ public class LiveFlowService {
         return summarySnapshot();
     }
 
+    /** SSE connection establishment must not wait for a new external collector pass. */
+    public Map<String, Object> streamSnapshot() {
+        Map<String, Object> value = new LinkedHashMap<>(repository.summary());
+        List<Map<String, Object>> recent = repository.recent(12);
+        Instant latest = parseInstant(value.get("latest_event_at"));
+        if (latest == null) latest = latestByNode(recent).values().stream().max(Instant::compareTo).orElse(null);
+        value.put("mode", "LIVE");
+        value.put("dataPolicy", "Synthetic Runtime Events");
+        value.put("recent", recent);
+        Map<String, Object> runtime = new LinkedHashMap<>();
+        runtime.put("latestEventAt", latest == null ? null : latest.toString());
+        runtime.put("freshnessStatus", freshness(latest));
+        runtime.put("pipelineStatus", freshness(latest).equals("LIVE") ? "LIVE" : "STALE");
+        value.put("runtime", runtime);
+        return value;
+    }
+
     private Map<String, Object> summarySnapshot() {
         Map<String, Object> value = new LinkedHashMap<>(repository.summary());
         List<Map<String, Object>> recent = repository.recent(12);
