@@ -123,6 +123,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - default
+      - archive-runtime
 
   frontend:
     build:
@@ -142,3 +145,7 @@ services:
 
 volumes:
   archiveos-postgres:
+
+networks:
+  archive-runtime:
+    name: archive-runtime
