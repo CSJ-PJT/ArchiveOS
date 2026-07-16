@@ -10,6 +10,7 @@ coverage/
 **/.gradle/
 archiveos-ai/build/
 .env
+.env.rc
 .env.local
 .env.*.local
 *.tsbuildinfo
@@ -31,3 +32,5 @@ Thumbs.db
 Desktop.ini
 hs_err_pid*
 replay_pid*
+# Local human-approved Obsidian memory records are runtime data, never repository content.
+docs/Decisions/

@@ -79,3 +79,14 @@ The following are not translated because they are operating contracts rather tha
 ## Future improvement
 
 The current pass is deliberately low-risk. A later cleanup can replace DOM application with direct `t("key")` calls inside every component once the UI stabilizes further. That would improve static analysis coverage and allow stricter missing-key tests.
+# Console V3 i18n 감사
+
+- 기본 언어: 한국어(`ko`), localStorage 키: `archive.locale`
+- 지원 언어: `ko`, `en`, `ja`, `zh-CN`
+- 변경: native select 및 MutationObserver 기반 DOM 재작성 제거
+- 구조: `I18nProvider`와 `useI18n`을 사용해 React 렌더 단계에서 선택 언어를 유지
+- 언어 선택: 우측 상단 지구본 popover, ESC 및 ARIA 상태 지원
+
+번역하지 않는 값: API path, eventType, enum, correlationId, service ID, repository 이름, 내부 `logitics` 호환 키.
+
+기존 상세 하위 화면에는 한국어 중심 운영 문구가 남아 있다. V3의 6개 핵심 메뉴·헤더·상태 선택기는 key 기반으로 우선 전환했으며, 이후 상세 화면별 문구 키 보강은 API/도메인 식별자에 영향을 주지 않는 범위에서 진행한다.

@@ -259,6 +259,46 @@ export type EcosystemDryRun = {
   steps: Array<{ order: number; service: string; action: string; mode: string }>;
 };
 
+export type EcosystemBalanceService = {
+  serviceId: string;
+  serviceName: string;
+  status: string;
+  revenue: string | number | null;
+  cost: string | number | null;
+  profit: string | number | null;
+  cashBalance: string | number | null;
+  backlog: string | number | null;
+  targetMinMargin: string | number;
+  targetMaxMargin: string | number;
+  operatingMargin: string | number | null;
+  marginGap: string | number | null;
+  balanceReason: string;
+  capacityUtilization?: string | number | null;
+  approvalBacklog?: string | number | null;
+  settlementBacklog?: string | number | null;
+  feeConcentration?: string | number | null;
+  negativeProfitStreak?: string | number | null;
+  revenueShare: string | number | null;
+  expenseShare: string | number | null;
+  profitShare: string | number | null;
+  balance: "WITHIN_RANGE" | "CONCENTRATED" | "UNDER_PRESSURE" | "NO_DATA" | string;
+};
+
+export type EcosystemBalanceSummary = {
+  syntheticData: true;
+  targetMargins: Record<string, string>;
+  policy?: { backlogWarning: number; capacityWarningPercent: number; profitConcentrationPercent: number };
+  totals: { revenue: string | number; cost: string | number; profit: string | number };
+  services: EcosystemBalanceService[];
+  balanceStatus: string;
+  reviewReason?: string;
+};
+
+export type EcosystemBalanceRecommendations = {
+  syntheticData: true;
+  recommendations: Array<{ serviceId: string; title: string; reason: string; mode: string }>;
+};
+
 export type LiveFlowEvent = {
   id: number | string;
   event_id: string;
@@ -319,6 +359,11 @@ export type LiveFlowSummary = {
       reason?: string;
     }>;
   };
+  /** Current queue count; unlike pending_approvals this is not a historic event snapshot count. */
+  approvalBacklog?: number | null;
+  approvalBacklogSource?: string;
+  processingBacklog?: number | null;
+  processingBacklogSource?: string;
 };
 
 export type LiveFlowTopology = {
@@ -670,6 +715,25 @@ export async function getEcosystemTimeline(limit = 50) {
   return response.data;
 }
 
+export async function getEcosystemBalanceSummary() {
+  const response = await request<ApiEnvelope<EcosystemBalanceSummary>>("/api/ecosystem/balance/summary");
+  return response.data;
+}
+
+export async function getEcosystemBalanceRecommendations() {
+  const response = await request<ApiEnvelope<EcosystemBalanceRecommendations>>("/api/ecosystem/balance/recommendations");
+  return response.data;
+}
+
+export async function simulateEcosystemBalance(input: Record<string, unknown> = {}) {
+  const response = await request<ApiEnvelope<Record<string, unknown>>>("/api/ecosystem/balance/simulate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
 export async function getMarketIntegrationSummary() {
   const response = await request<ApiEnvelope<Record<string, unknown>>>("/api/integrations/market/summary");
   return response.data;
@@ -762,6 +826,10 @@ export async function getLiveFlowCorrelation(correlationId: string) {
 export async function getLiveFlowEntity(entityId: string) {
   const response = await request<ApiEnvelope<{ entityId: string; data: LiveFlowEvent[] }>>(`/api/live-flow/entity/${encodeURIComponent(entityId)}`);
   return response.data;
+}
+
+export function liveFlowStreamUrl() {
+  return `${configuredBackendUrl}/api/live-flow/stream`;
 }
 
 export async function getWorkforceOverview() {
@@ -1003,6 +1071,41 @@ export type AiRuntime = {
     documentCount: number;
     lastSyncAt: string | null;
   };
+};
+
+export type RagReference = {
+  title: string;
+  path: string;
+  heading: string | null;
+  chunkText: string;
+  score: number;
+};
+
+export type RagAnswer = {
+  answer: string;
+  references: RagReference[];
+};
+
+export type RagRuntimeContext = {
+  ecosystemStatus?: string | null;
+  services?: Array<{ name?: string; status?: string }>;
+  activeEvents?: number | null;
+  approvalBacklog?: number | null;
+  processingBacklog?: number | null;
+  balanceStatus?: string | null;
+  balanceReason?: string | null;
+  recentEvents?: Array<{ eventType?: string; source?: string; target?: string; entityId?: string | null; correlationId?: string | null; status?: string }>;
+  selectedService?: string | null;
+  selectedCorrelationId?: string | null;
+};
+
+export type DecisionRecommendation = {
+  recommendation_id: string; status: string; summary: string; confidence: number | null;
+  observed_facts: Array<{ name: string; value: unknown; source: string }>;
+  hypotheses: Array<{ statement: string }>; recommended_actions: Array<{ action: string; execution: string; requiresHumanApproval: boolean }>;
+  risks: Array<{ level: string; message: string }>; references_json: Array<{ title: string; heading: string; excerpt: string; score: number; sourceType: string }>;
+  runtime_evidence: Array<{ name: string; value: unknown; source: string }>; policy_checks: Array<{ rule: string; status: string; detail: string }>;
+  created_at: string; decided_at: string | null; decided_by: string | null; decision_reason: string | null;
 };
 
 export type SpringBatchExecution = {
@@ -1567,8 +1670,41 @@ export async function getRuntimeVersion() {
   return response.data;
 }
 
-export async function getAiRuntime() {
-  const response = await request<ApiEnvelope<AiRuntime>>("/api/ai/runtime");
+export async function getAiRuntime(init?: RequestInit) {
+  const response = await request<ApiEnvelope<AiRuntime>>("/api/ai/runtime", init);
+  return response.data;
+}
+
+export async function searchRag(query: string, init?: RequestInit) {
+  const response = await request<ApiEnvelope<RagReference[]>>(`/api/rag/search?query=${encodeURIComponent(query)}`, init);
+  return response.data;
+}
+
+export async function askRag(question: string, context?: RagRuntimeContext, init?: RequestInit) {
+  const response = await request<ApiEnvelope<RagAnswer>>("/api/rag/ask", {
+    ...init,
+    method: "POST",
+    headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+    body: JSON.stringify({ question, ...(context ? { context } : {}) }),
+  });
+  return response.data;
+}
+
+export async function analyzeDecision(input: { question: string; service?: string | null; entityId?: string | null; correlationId?: string | null; triggerType?: string }) {
+  const response = await request<ApiEnvelope<DecisionRecommendation>>("/api/ai/decisions/analyze", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ requestId: crypto.randomUUID(), triggerType: input.triggerType ?? "MANUAL", service: input.service ?? "Archive-Ledger", entityId: input.entityId ?? null, correlationId: input.correlationId ?? null, question: input.question, runtimeContext: {} }) });
+  return response.data;
+}
+export async function getDecisionRecommendations(limit = 30) { const response = await request<ApiEnvelope<DecisionRecommendation[]>>(`/api/ai/decisions?limit=${limit}`); return response.data; }
+export type AiOperationsItem = { inboxId: string; type: string; sourceId: string; service: string; title: string; summary: string; severity: string; deterministicScore: number; aiSuggestedPriority: string | null; status: string; createdAt: string | null; };
+export type IncidentRecord = { incident_id: string; status: string; severity: string; title: string; detected_at: string; analysis?: Record<string, unknown>; references_json?: unknown[]; recommended_actions?: unknown[]; };
+export type CorrelationTimeline = { correlationId: string; events: Array<{ sequence: number; occurredAt: string; source: string; target: string; eventType: string; normalizedStage: string; entityId: string; orderId?: string | null; simulationRunId?: string | null; eventId: string; causationId?: string | null; causationStatus?: string; latencyFromPrevious: number | null; status: string }>; anomalies: Array<Record<string, unknown>>; lineage?: { simulationRunIds?: string[]; simulationRunIdDistinctCount?: number; [key: string]: unknown }; aiCalled: boolean; };
+export async function getPmAttention() { const response = await request<ApiEnvelope<AiOperationsItem[]>>("/api/pm-attention"); return response.data; }
+export async function getIncidents() { const response = await request<ApiEnvelope<IncidentRecord[]>>("/api/incidents"); return response.data; }
+export async function getCorrelationTimeline(correlationId: string) { const response = await request<ApiEnvelope<CorrelationTimeline>>(`/api/correlation-timeline/${encodeURIComponent(correlationId)}`); return response.data; }
+export async function decideRecommendation(id: string, action: "approve" | "reject", reason: string) { const response = await request<ApiEnvelope<DecisionRecommendation>>(`/api/ai/decisions/${encodeURIComponent(id)}/${action}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason }) }); return response.data; }
+
+export async function syncObsidian(init?: RequestInit) {
+  const response = await request<ApiEnvelope<Record<string, unknown>>>("/api/obsidian/sync", { method: "POST", ...init });
   return response.data;
 }
 

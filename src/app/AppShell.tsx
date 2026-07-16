@@ -1,334 +1,156 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
-  configuredBackendUrl,
-  getAxReadiness,
-  getAuthSession,
-  getAtlasOverview,
-  getAiRuntime,
-  getDashboardData,
-  getEndpointHealth,
-  getExternalApprovals,
-  getEcosystemSummary,
-  getEcosystemTopology,
-  getEcosystemTimeline,
-  getHistorianStatus,
-  getKnowledgeOverview,
-  getLatestArchitectureReview,
-  getLatestBatchStatus,
-  getLatestDailyReport,
-  getLocalRuntimeStatus,
-  getManagedSystemsOverview,
-  getMeshOverview,
-  getPmTasks,
-  getPlatformReadiness,
-  getPublicAccessStatus,
-  getQueueSummary,
-  getRecentCommands,
-  getRecentRuntimeEvents,
-  getRuntimeVersion,
-  getSecurityStatus,
-  getSettlementAgencyGameSummary,
-  getGameFinanceSummary,
-  getLiveFlowSummary,
-  getLiveFlowTopology,
-  getLiveFlowRecentEvents,
-  getWorkforceOverview,
-  getKpiOverview,
-  getMcpRegistry,
-  getRuntimeTimeline,
-  type AuthSession,
-  type ArchitectureReview,
-  type AtlasOverview,
-  type AxReadiness,
-  type AiRuntime,
-  type DashboardData,
-  type EndpointHealth,
-  type ExternalApprovalRequest,
-  type EcosystemSummary,
-  type EcosystemTopology,
-  type EcosystemTimeline,
-  type GameFinanceSummary,
-  type LiveFlowSummary,
-  type LiveFlowTopology,
-  type LiveFlowEvent,
-  type WorkforceOverview,
-  type HistorianStatus,
-  type KnowledgeOverview,
-  type KpiOverview,
-  type LatestBatchStatus,
-  type LocalRuntimeStatus,
-  type ManagedSystemsOverview,
-  type MeshOverview,
-  type PlatformReadiness,
-  type PublicAccessStatus,
-  type QueueSummary,
-  type RuntimeEvent,
-  type RuntimeVersion,
-  type SecurityStatus,
-  type McpRegistryEntry,
-  type RuntimeTimelineEntry,
-  type SettlementAgencyGameSummary,
+  configuredBackendUrl, getAtlasOverview, getAuthSession, getEcosystemBalanceRecommendations, getEcosystemBalanceSummary, getEcosystemSummary, getEcosystemTopology,
+  getExternalApprovals, getGameFinanceSummary, getHistorianStatus, getKnowledgeOverview, getLiveFlowRecentEvents, getLiveFlowSummary,
+  getLiveFlowTopology, getMcpRegistry, getMeshOverview, getPmTasks, getQueueSummary, getRuntimeTimeline, getWorkforceOverview, liveFlowStreamUrl,
+  type AuthSession, type AtlasOverview, type EcosystemBalanceSummary, type EcosystemSummary, type EcosystemTopology, type ExternalApprovalRequest,
+  type GameFinanceSummary, type HistorianStatus, type KnowledgeOverview, type LiveFlowEvent, type LiveFlowSummary, type LiveFlowTopology,
+  type McpRegistryEntry, type MeshOverview, type QueueSummary, type RuntimeTimelineEntry, type WorkforceOverview,
+  type ArchitectureReview, type AxReadiness, type AiRuntime, type DashboardData, type EndpointHealth, type EcosystemTimeline,
+  type KpiOverview, type LatestBatchStatus, type LocalRuntimeStatus, type ManagedSystemsOverview, type PlatformReadiness,
+  type PublicAccessStatus, type RuntimeEvent, type RuntimeVersion, type SecurityStatus, type SettlementAgencyGameSummary,
 } from "../lib/backendApi";
 import type { CommandRun, DailyReport, PmTask } from "../types/database";
-import { navigationItems, type AppRoute } from "./navigation";
-import { OverviewPage } from "../pages/OverviewPage";
-import { WorkflowsPage } from "../pages/WorkflowsPage";
-import { KnowledgePage } from "../pages/KnowledgePage";
-import { HistoryPage } from "../pages/HistoryPage";
-import { SettingsPage } from "../pages/SettingsPage";
-import { AgentsPage } from "../pages/AgentsPage";
-import { BatchPage } from "../pages/BatchPage";
-import { RpaPage } from "../pages/RpaPage";
-import { AtlasPage } from "../pages/AtlasPage";
-import { McpRegistryPage } from "../pages/McpRegistryPage";
-import { ManagedSystemsPage } from "../pages/ManagedSystemsPage";
-import { LedgerApprovalsPage } from "../pages/LedgerApprovalsPage";
-import { EcosystemPage } from "../pages/EcosystemPage";
-import { SettlementGamePage } from "../pages/SettlementGamePage";
-import { LiveFlowPage } from "../pages/LiveFlowPage";
-import { WorkforcePage } from "../pages/WorkforcePage";
-import { Icon } from "../components/shared/Icon";
+import { navigationItems, normalizeRoute, type CoreRoute } from "./navigation";
 import { Sidebar } from "../components/shared/Sidebar";
+import { Icon } from "../components/shared/Icon";
 import { ThemeProvider } from "../theme/ThemeProvider";
-import { applyLocale, languageOptions as i18nLanguageOptions, readStoredLocale, t, type Locale } from "../i18n";
+import { I18nProvider, useI18n } from "../i18n/I18nProvider";
+import { consoleText } from "../i18n/console";
+import { languageOptions, t, type Locale } from "../i18n";
+import { ConsoleDashboardPage } from "../pages/ConsoleDashboardPage";
+import { ConsoleServicesPage } from "../pages/ConsoleServicesPage";
+import { ConsoleOperationsPage } from "../pages/ConsoleOperationsPage";
+import { ConsoleFinancePage } from "../pages/ConsoleFinancePage";
+import { ConsoleRecordsPage } from "../pages/ConsoleRecordsPage";
+import { ConsoleSettingsPage } from "../pages/ConsoleSettingsPage";
 
 export type AppData = {
-  loading: boolean;
-  refreshedAt: string | null;
-  errors: Record<string, string>;
-  dashboard: DashboardData | null;
-  runtime: LocalRuntimeStatus | null;
-  queue: QueueSummary | null;
-  tasks: PmTask[];
-  events: RuntimeEvent[];
-  commands: CommandRun[];
-  knowledge: KnowledgeOverview | null;
-  historian: HistorianStatus | null;
-  mesh: MeshOverview | null;
-  kpi: KpiOverview | null;
-  endpointHealth: EndpointHealth | null;
-  platformReadiness: PlatformReadiness | null;
-  publicAccess: PublicAccessStatus | null;
-  runtimeVersion: RuntimeVersion | null;
-  security: SecurityStatus | null;
-  architect: ArchitectureReview | null;
-  axReadiness: AxReadiness | null;
-  aiRuntime: AiRuntime | null;
-  latestBatch: LatestBatchStatus | null;
-  dailyReport: DailyReport | null;
-  auth: AuthSession;
-  atlas: AtlasOverview | null;
-  managedSystems: ManagedSystemsOverview | null;
-  externalApprovals: ExternalApprovalRequest[];
-  ecosystem: EcosystemSummary | null;
-  ecosystemTopology: EcosystemTopology | null;
-  ecosystemTimeline: EcosystemTimeline | null;
-  settlementGame: SettlementAgencyGameSummary | null;
-  gameFinance: GameFinanceSummary | null;
-  liveFlow: LiveFlowSummary | null;
-  liveFlowTopology: LiveFlowTopology | null;
-  liveFlowEvents: LiveFlowEvent[];
-  workforce: WorkforceOverview | null;
-  mcpRegistry: McpRegistryEntry[];
-  timeline: RuntimeTimelineEntry[];
+  loading: boolean; refreshedAt: string | null; errors: Record<string, string>; auth: AuthSession;
+  dashboard: DashboardData | null; runtime: LocalRuntimeStatus | null; events: RuntimeEvent[]; commands: CommandRun[]; kpi: KpiOverview | null;
+  endpointHealth: EndpointHealth | null; platformReadiness: PlatformReadiness | null; publicAccess: PublicAccessStatus | null; runtimeVersion: RuntimeVersion | null;
+  security: SecurityStatus | null; architect: ArchitectureReview | null; axReadiness: AxReadiness | null; aiRuntime: AiRuntime | null; latestBatch: LatestBatchStatus | null; dailyReport: DailyReport | null;
+  managedSystems: ManagedSystemsOverview | null; ecosystemTimeline: EcosystemTimeline | null; settlementGame: SettlementAgencyGameSummary | null;
+  ecosystem: EcosystemSummary | null; ecosystemTopology: EcosystemTopology | null; liveFlow: LiveFlowSummary | null; liveFlowTopology: LiveFlowTopology | null; liveFlowEvents: LiveFlowEvent[];
+  balance: EcosystemBalanceSummary | null; balanceRecommendations: { recommendations: Array<{ serviceId: string; title: string; reason: string; mode: string }> } | null;
+  workforce: WorkforceOverview | null; mesh: MeshOverview | null; queue: QueueSummary | null; tasks: PmTask[]; atlas: AtlasOverview | null;
+  gameFinance: GameFinanceSummary | null; externalApprovals: ExternalApprovalRequest[]; knowledge: KnowledgeOverview | null; historian: HistorianStatus | null;
+  mcpRegistry: McpRegistryEntry[]; timeline: RuntimeTimelineEntry[];
+  lastEventLatencyMs: number | null;
 };
 
-const emptyData: AppData = {
-  loading: true,
-  refreshedAt: null,
-  errors: {},
-  dashboard: null,
-  runtime: null,
-  queue: null,
-  tasks: [],
-  events: [],
-  commands: [],
-  knowledge: null,
-  historian: null,
-  mesh: null,
-  kpi: null,
-  endpointHealth: null,
-  platformReadiness: null,
-  publicAccess: null,
-  runtimeVersion: null,
-  security: null,
-  architect: null,
-  axReadiness: null,
-  aiRuntime: null,
-  latestBatch: null,
-  dailyReport: null,
-  auth: { actor: "anonymous", role: "PUBLIC", authenticated: false },
-  atlas: null,
-  managedSystems: null,
-  externalApprovals: [],
-  ecosystem: null,
-  ecosystemTopology: null,
-  ecosystemTimeline: null,
-  settlementGame: null,
-  gameFinance: null,
-  liveFlow: null,
-  liveFlowTopology: null,
-  liveFlowEvents: [],
-  workforce: null,
-  mcpRegistry: [],
-  timeline: [],
-};
-
-async function settle<T>(key: string, fn: () => Promise<T>) {
-  try {
-    return { key, value: await fn(), error: null };
-  } catch (err) {
-    return { key, value: null, error: err instanceof Error ? err.message : String(err) };
-  }
-}
+const publicAuth: AuthSession = { actor: "anonymous", role: "PUBLIC", authenticated: false };
+const emptyData: AppData = { loading: true, refreshedAt: null, errors: {}, auth: publicAuth, dashboard: null, runtime: null, events: [], commands: [], kpi: null, endpointHealth: null, platformReadiness: null, publicAccess: null, runtimeVersion: null, security: null, architect: null, axReadiness: null, aiRuntime: null, latestBatch: null, dailyReport: null, managedSystems: null, ecosystemTimeline: null, settlementGame: null, ecosystem: null, ecosystemTopology: null, liveFlow: null, liveFlowTopology: null, liveFlowEvents: [], balance: null, balanceRecommendations: null, workforce: null, mesh: null, queue: null, tasks: [], atlas: null, gameFinance: null, externalApprovals: [], knowledge: null, historian: null, mcpRegistry: [], timeline: [], lastEventLatencyMs: null };
+type Result = { key: keyof AppData; value: unknown; error: string | null };
+async function settle(key: keyof AppData, fn: () => Promise<unknown>): Promise<Result> { try { return { key, value: await fn(), error: null }; } catch (error) { return { key, value: null, error: error instanceof Error ? error.message : String(error) }; } }
 
 function AppShellInner() {
-  const [route, setRoute] = useState<AppRoute>("overview");
+  const [route, setRouteState] = useState<CoreRoute>(() => routeFromLocation());
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [data, setData] = useState<AppData>(emptyData);
-  const [language, setLanguage] = useState<Locale>(() => readStoredLocale());
+  const [streamState, setStreamState] = useState<"connecting" | "connected" | "fallback">("connecting");
+  const fallbackTimer = useRef<number | null>(null);
+  const reconnectTimer = useRef<number | null>(null);
+  const reconnectAttempt = useRef(0);
+  const eventIds = useRef(new Set<string>());
+  const { locale, setLocale } = useI18n();
 
+  const navigate = useCallback((next: CoreRoute) => { window.history.pushState({}, "", `#/${next}`); setRouteState(next); setSidebarOpen(false); }, []);
   useEffect(() => {
-    applyLocale(language);
-    const observer = new MutationObserver(() => window.requestAnimationFrame(() => applyLocale(language)));
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [language]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => applyLocale(language), 0);
-    return () => window.clearTimeout(timer);
-  }, [data, language, route]);
+    const requested = (window.location.hash.replace(/^#\/?/, "") || window.location.pathname.split("/").filter(Boolean).pop() || "").toLowerCase();
+    const canonical = normalizeRoute(requested);
+    if (requested && requested !== canonical) window.history.replaceState({}, "", `#/${canonical}`);
+  }, []);
+  useEffect(() => { const onPopState = () => setRouteState(routeFromLocation()); window.addEventListener("popstate", onPopState); window.addEventListener("hashchange", onPopState); return () => { window.removeEventListener("popstate", onPopState); window.removeEventListener("hashchange", onPopState); }; }, []);
+  useEffect(() => { document.body.classList.toggle("sidebar-open", sidebarOpen); return () => document.body.classList.remove("sidebar-open"); }, [sidebarOpen]);
 
   const refresh = useCallback(async () => {
     setData((current) => ({ ...current, loading: true }));
-    const authResult = await settle("auth", getAuthSession);
-    const role = authResult.value?.role ?? "PUBLIC";
-    const operatorAccess = role !== "PUBLIC";
-    const adminAccess = role === "ADMIN";
-    const results = [authResult, ...(await Promise.all([
-      settle("dashboard", getDashboardData),
-      settle("runtime", getLocalRuntimeStatus),
-      settle("queue", getQueueSummary),
-      settle("tasks", getPmTasks),
-      settle("events", getRecentRuntimeEvents),
-      settle("commands", getRecentCommands),
-      settle("knowledge", getKnowledgeOverview),
-      settle("historian", getHistorianStatus),
-      settle("mesh", getMeshOverview),
-      settle("kpi", () => getKpiOverview("7d")),
-      settle("endpointHealth", getEndpointHealth),
-      settle("platformReadiness", getPlatformReadiness),
-      adminAccess ? settle("publicAccess", getPublicAccessStatus) : Promise.resolve({ key: "publicAccess", value: null, error: null }),
-      settle("runtimeVersion", getRuntimeVersion),
-      adminAccess ? settle("security", getSecurityStatus) : Promise.resolve({ key: "security", value: null, error: null }),
-      settle("architect", getLatestArchitectureReview),
-      settle("axReadiness", getAxReadiness),
-      settle("aiRuntime", getAiRuntime),
-      settle("latestBatch", getLatestBatchStatus),
-      settle("dailyReport", getLatestDailyReport),
-      settle("atlas", getAtlasOverview),
-      settle("managedSystems", getManagedSystemsOverview),
-      settle("externalApprovals", () => getExternalApprovals(50)),
-      settle("ecosystem", getEcosystemSummary),
-      settle("ecosystemTopology", getEcosystemTopology),
-      settle("ecosystemTimeline", () => getEcosystemTimeline(50)),
-      settle("settlementGame", getSettlementAgencyGameSummary),
-      settle("gameFinance", getGameFinanceSummary),
-      settle("liveFlow", getLiveFlowSummary),
-      settle("liveFlowTopology", getLiveFlowTopology),
-      settle("liveFlowEvents", () => getLiveFlowRecentEvents(100)),
-      settle("workforce", getWorkforceOverview),
-      operatorAccess ? settle("mcpRegistry", getMcpRegistry) : Promise.resolve({ key: "mcpRegistry", value: [], error: null }),
-      operatorAccess ? settle("timeline", () => getRuntimeTimeline(100)) : Promise.resolve({ key: "timeline", value: [], error: null }),
-    ]))];
-
-    const next: AppData = { ...emptyData, loading: false, refreshedAt: new Date().toISOString(), errors: {} };
-    for (const result of results) {
-      if (result.error) {
-        next.errors[result.key] = result.error;
-      } else {
-        (next as unknown as Record<string, unknown>)[result.key] = result.value;
-      }
-    }
-    setData(next);
-  }, []);
+    const loaders = loadersFor(route);
+    const results = await Promise.all(loaders.map(([key, fn]) => settle(key, fn)));
+    setData((current) => {
+      const next: AppData = { ...current, loading: false, refreshedAt: new Date().toISOString(), errors: {} };
+      for (const result of results) { if (result.error) next.errors[result.key] = result.error; else (next as unknown as Record<string, unknown>)[result.key] = result.value; }
+      if (!next.auth) next.auth = publicAuth;
+      return next;
+    });
+  }, [route]);
+  useEffect(() => { refresh(); }, [refresh]);
 
   useEffect(() => {
-    refresh();
-    const timer = window.setInterval(refresh, 45_000);
-    return () => window.clearInterval(timer);
-  }, [refresh]);
+    if (route !== "dashboard") return;
+    let disposed = false;
+    let source: EventSource | null = null;
+    const receive = (raw: string) => {
+      try {
+        const payload = JSON.parse(raw) as LiveFlowEvent | LiveFlowSummary;
+        if ("event_id" in payload) {
+          if (eventIds.current.has(payload.event_id)) return;
+          eventIds.current.add(payload.event_id);
+          if (eventIds.current.size > 750) eventIds.current.delete(eventIds.current.values().next().value as string);
+          const receivedAt = payload.received_at ? Date.parse(payload.received_at) : Number.NaN;
+          const latency = Number.isFinite(receivedAt) ? Math.max(0, Date.now() - receivedAt) : null;
+          setData((current) => ({ ...current, lastEventLatencyMs: latency, liveFlowEvents: [payload, ...current.liveFlowEvents.filter((event) => event.event_id !== payload.event_id)].slice(0, 100), liveFlow: current.liveFlow ? { ...current.liveFlow, latest_event_at: payload.occurred_at, recent_events: (current.liveFlow.recent_events ?? 0) + 1, active_flows: (current.liveFlow.active_flows ?? 0) + 1 } : current.liveFlow }));
+        } else if ("active_flows" in payload) setData((current) => ({ ...current, liveFlow: payload }));
+      } catch { /* malformed stream data is ignored; API polling remains a degraded fallback. */ }
+    };
+    const startFallback = () => {
+      if (fallbackTimer.current) return;
+      setStreamState("fallback");
+      fallbackTimer.current = window.setInterval(() => { getLiveFlowRecentEvents(30).then((events) => { if (!disposed) setData((current) => ({ ...current, liveFlowEvents: events })); }).catch(() => undefined); }, 1000);
+    };
+    const stopFallback = () => { if (fallbackTimer.current) { window.clearInterval(fallbackTimer.current); fallbackTimer.current = null; } };
+    const clearReconnect = () => { if (reconnectTimer.current) { window.clearTimeout(reconnectTimer.current); reconnectTimer.current = null; } };
+    const connect = (reconnecting = false) => {
+      if (disposed) return;
+      clearReconnect();
+      setStreamState(reconnecting ? "fallback" : "connecting");
+      source?.close();
+      source = new EventSource(liveFlowStreamUrl(), { withCredentials: true });
+      const connected = (event: Event) => { receive((event as MessageEvent).data); reconnectAttempt.current = 0; setStreamState("connected"); stopFallback(); clearReconnect(); };
+      source.addEventListener("snapshot", connected);
+      source.addEventListener("runtime-event", connected);
+      source.addEventListener("service-status", (event) => receive((event as MessageEvent).data));
+      source.onerror = () => {
+        if (disposed) return;
+        startFallback();
+        source?.close();
+        if (!navigator.onLine) return;
+        const delay = Math.min(1000 * 2 ** reconnectAttempt.current, 30_000);
+        reconnectAttempt.current += 1;
+        if (!reconnectTimer.current) reconnectTimer.current = window.setTimeout(() => connect(true), delay);
+      };
+    };
+    const reconnectWhenOnline = () => { if (!disposed && !reconnectTimer.current) connect(true); };
+    window.addEventListener("online", reconnectWhenOnline);
+    connect();
+    return () => { disposed = true; window.removeEventListener("online", reconnectWhenOnline); clearReconnect(); source?.close(); stopFallback(); reconnectAttempt.current = 0; eventIds.current.clear(); };
+  }, [route]);
 
-  useEffect(() => {
-    document.body.classList.toggle("sidebar-open", sidebarOpen);
-    return () => document.body.classList.remove("sidebar-open");
-  }, [sidebarOpen]);
-
-  const healthTone = useMemo(() => {
-    if (data.loading) return "working";
-    const failing = data.endpointHealth?.summary.failed ?? Object.keys(data.errors).length;
-    return failing > 0 ? "warning" : "healthy";
-  }, [data.endpointHealth?.summary.failed, data.errors, data.loading]);
-
-  const page = {
-    overview: <OverviewPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
-    ecosystem: <EcosystemPage data={data} onRefresh={refresh} />,
-    liveflow: <LiveFlowPage data={data} onRefresh={refresh} />,
-    workforce: <WorkforcePage data={data} />,
-    finance: <SettlementGamePage data={data} onRefresh={refresh} />,
-    managed: <ManagedSystemsPage data={data} onRefresh={refresh} onNavigate={setRoute} />,
-    approvals: <LedgerApprovalsPage data={data} onRefresh={refresh} />,
-    agents: <AgentsPage data={data} onRefresh={refresh} />,
-    workflows: <WorkflowsPage data={data} onRefresh={refresh} />,
-    knowledge: <KnowledgePage data={data} />,
-    history: <HistoryPage data={data} />,
-    batch: <BatchPage role={data.auth.role} />,
-    rpa: <RpaPage role={data.auth.role} />,
-    atlas: <AtlasPage data={data} onRefresh={refresh} />,
-    mcp: <McpRegistryPage data={data} />,
-    settings: <SettingsPage data={data} onRefresh={refresh} backendOrigin={configuredBackendUrl} />,
-  }[route];
-
-  return (
-    <div className="app-shell">
-      <Sidebar route={route} open={sidebarOpen} onNavigate={(nextRoute) => { setRoute(nextRoute); setSidebarOpen(false); }} health={healthTone} loading={data.loading} branch={data.runtimeVersion?.branch} commitSha={data.runtimeVersion?.commitSha} role={data.auth.role} />
-      {sidebarOpen ? <button className="sidebar-scrim" type="button" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} /> : null}
-
-      <div className="content-shell">
-        <header className="topbar">
-          <button className="mobile-menu-button" type="button" aria-label="메뉴 열기" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>☰</button>
-          <div><span className="eyebrow">ArchiveOS 관제 센터</span><h1>{navigationItems.find((item) => item.id === route)?.label}</h1></div>
-          <div className="topbar-status">
-            <LanguageSelector value={language} onChange={setLanguage} />
-            <span className="last-sync">갱신 {data.refreshedAt ? new Date(data.refreshedAt).toLocaleTimeString() : "대기 중"}</span>
-            <button className="icon-button" type="button" onClick={refresh} aria-label="운영 데이터 새로고침" title="새로고침"><Icon name="refresh" /></button>
-          </div>
-        </header>
-        <main className="page-host" id="main-content">{page}</main>
-      </div>
-    </div>
-  );
+  const health = useMemo(() => data.ecosystem?.status === "HEALTHY" ? "healthy" : Object.keys(data.errors).length ? "warning" : "waiting", [data.ecosystem?.status, data.errors]);
+  const page = route === "dashboard" ? <ConsoleDashboardPage data={data} onNavigate={navigate} onRefresh={refresh} /> : route === "services" ? <ConsoleServicesPage data={data} /> : route === "operations" ? <ConsoleOperationsPage data={data} onRefresh={refresh} /> : route === "finance" ? <ConsoleFinancePage data={data} onRefresh={refresh} /> : route === "records" ? <ConsoleRecordsPage data={data} /> : <ConsoleSettingsPage data={data} onRefresh={refresh} backendOrigin={configuredBackendUrl} />;
+  return <div className="app-shell"><Sidebar route={route} open={sidebarOpen} onNavigate={navigate} health={health} loading={data.loading} role={data.auth.role} />{sidebarOpen ? <button className="sidebar-scrim" type="button" aria-label={consoleText(locale, "common.closeMenu")} onClick={() => setSidebarOpen(false)} /> : null}<div className="content-shell"><header className="topbar"><button className="mobile-menu-button" type="button" aria-label={consoleText(locale, "common.openMenu")} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>☰</button><div><span className="eyebrow">ARCHIVEOS CONTROL TOWER</span><h1>{consoleText(locale, `nav.${route}`)}</h1></div><div className="topbar-status">{route === "dashboard" ? <span className={`stream-state stream-${streamState}`}>{streamState === "connected" ? `${consoleText(locale, "common.live")}${data.lastEventLatencyMs === null ? "" : ` · ${data.lastEventLatencyMs}ms`}` : streamState === "fallback" ? consoleText(locale, "common.reconnecting") : consoleText(locale, "common.connecting")}</span> : null}<LanguagePopover locale={locale} setLocale={setLocale} /><span className="last-sync">{data.refreshedAt ? `${consoleText(locale, "common.updated")} ${new Date(data.refreshedAt).toLocaleTimeString()}` : consoleText(locale, "common.loading")}</span><button className="icon-button" type="button" onClick={refresh} aria-label={consoleText(locale, "common.refresh")} title={consoleText(locale, "common.refresh")}><Icon name="refresh" /></button></div></header><main className="page-host" id="main-content">{page}</main></div></div>;
 }
 
-function LanguageSelector({ value, onChange }: { value: Locale; onChange: (value: Locale) => void }) {
-  return (
-    <label className="language-selector" title="표시 언어">
-      <svg className="language-globe" aria-hidden="true" viewBox="0 0 24 24" focusable="false">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9M12 3C9.6 5.5 8.4 8.5 8.4 12s1.2 6.5 3.6 9" />
-      </svg>
-      <select value={value} aria-label="표시 언어" onChange={(event) => onChange(event.target.value as Locale)}>
-        {i18nLanguageOptions.map((option) => <option key={option.code} value={option.code}>{t(option.labelKey, value)}</option>)}
-      </select>
-    </label>
-  );
+function LanguagePopover({ locale, setLocale }: { locale: Locale; setLocale: (locale: Locale) => void }) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+  const close = (returnFocus = false) => { setOpen(false); if (returnFocus) window.setTimeout(() => triggerRef.current?.focus(), 0); };
+  useEffect(() => { const dismiss = (event: PointerEvent) => { const target = event.target as Node; if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) close(false); }; const escape = (event: KeyboardEvent) => { if (event.key === "Escape") close(true); }; window.addEventListener("pointerdown", dismiss); window.addEventListener("keydown", escape); return () => { window.removeEventListener("pointerdown", dismiss); window.removeEventListener("keydown", escape); }; }, []);
+  useEffect(() => { if (open) menuRef.current?.querySelector<HTMLButtonElement>("[aria-checked='true']")?.focus(); }, [open]);
+  return <div className="language-popover"><button ref={triggerRef} type="button" className="language-trigger" aria-label={consoleText(locale, "common.language")} aria-expanded={open} aria-haspopup="menu" aria-controls={open ? menuId : undefined} onClick={() => setOpen((value) => !value)}><span aria-hidden="true">◎</span><b>{locale === "zh-CN" ? "ZH" : locale.toUpperCase()}</b></button>{open ? <div ref={menuRef} id={menuId} className="language-menu" role="menu">{languageOptions.map((option) => <button type="button" role="menuitemradio" aria-checked={locale === option.code} key={option.code} onClick={() => { setLocale(option.code); close(true); }}>{t(option.labelKey, locale)}</button>)}</div> : null}</div>;
 }
 
-export function AppShell() {
-  return (
-    <ThemeProvider>
-      <AppShellInner />
-    </ThemeProvider>
-  );
+function loadersFor(route: CoreRoute): Array<[keyof AppData, () => Promise<unknown>]> {
+  const auth: [keyof AppData, () => Promise<unknown>] = ["auth", getAuthSession];
+  if (route === "dashboard") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["liveFlowTopology", getLiveFlowTopology], ["liveFlowEvents", () => getLiveFlowRecentEvents(30)], ["balance", getEcosystemBalanceSummary], ["balanceRecommendations", getEcosystemBalanceRecommendations]];
+  if (route === "services") return [auth, ["ecosystem", getEcosystemSummary], ["ecosystemTopology", getEcosystemTopology], ["atlas", getAtlasOverview]];
+  if (route === "operations") return [auth, ["mesh", getMeshOverview], ["workforce", getWorkforceOverview], ["queue", getQueueSummary], ["tasks", getPmTasks]];
+  if (route === "finance") return [auth, ["ecosystem", getEcosystemSummary], ["balance", getEcosystemBalanceSummary], ["gameFinance", getGameFinanceSummary], ["externalApprovals", () => getExternalApprovals(50)]];
+  if (route === "records") return [auth, ["liveFlowEvents", () => getLiveFlowRecentEvents(100)], ["knowledge", getKnowledgeOverview], ["historian", getHistorianStatus], ["timeline", () => getRuntimeTimeline(100)]];
+  return [auth, ["mcpRegistry", getMcpRegistry]];
 }
+function routeFromLocation(): CoreRoute { const hash = window.location.hash.replace(/^#\/?/, ""); const path = window.location.pathname.split("/").filter(Boolean).pop(); return normalizeRoute(hash || path); }
+export function AppShell() { return <ThemeProvider><I18nProvider><AppShellInner /></I18nProvider></ThemeProvider>; }

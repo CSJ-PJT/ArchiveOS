@@ -33,24 +33,24 @@ export function BatchPage({ role }: { role: PlatformRole }) {
 
   return (
     <div className="page-stack">
-      <header className="page-heading"><div><span className="eyebrow">Spring Batch operations</span><h2>Batch Jobs</h2><p>Job 실행 상태와 step 단위 증거를 확인하고 허용된 작업만 수동 실행합니다.</p></div><button className="button button-secondary" type="button" onClick={refresh}>Refresh</button></header>
-      {error ? <div className="empty-state error-state">Batch service is unreachable. {error}</div> : null}
+      <header className="page-heading"><div><span className="eyebrow">SPRING BATCH OPERATIONS</span><h2>배치 작업</h2><p>Job 실행 상태와 step 단위 기록을 확인하고 허용된 작업만 수동 실행합니다.</p></div><button className="button button-secondary" type="button" onClick={refresh}>새로고침</button></header>
+      {error ? <div className="empty-state error-state">Batch 서비스에 연결할 수 없습니다. {error}</div> : null}
       <section className="batch-job-grid">
         {jobs.map((job) => (
           <article className="batch-job-card" key={job.name}>
-            <div className="batch-job-header"><div><strong>{job.name}</strong><p>{job.description}</p></div><StatusBadge status={job.manualRunAllowed ? "healthy" : "waiting"}>{job.manualRunAllowed ? "Ready" : "Dedicated flow"}</StatusBadge></div>
-            <div className="batch-job-meta"><span>{job.recentExecutions.length} recent runs</span><span>{job.launchable ? "Launchable" : "Read only"}</span></div>
-            <button className="button button-primary" type="button" disabled={!job.manualRunAllowed || busy === job.name || role !== "ADMIN"} onClick={() => run(job.name)}>{busy === job.name ? "Running…" : role === "ADMIN" ? "Run job" : "Admin required"}</button>
+            <div className="batch-job-header"><div><strong>{job.name}</strong><p>{job.description}</p></div><StatusBadge status={job.manualRunAllowed ? "healthy" : "waiting"}>{job.manualRunAllowed ? "실행 가능" : "전용 흐름"}</StatusBadge></div>
+            <div className="batch-job-meta"><span>최근 실행 {job.recentExecutions.length}건</span><span>{job.launchable ? "실행 가능" : "조회 전용"}</span></div>
+            <button className="button button-primary" type="button" disabled={!job.manualRunAllowed || busy === job.name || role !== "ADMIN"} onClick={() => run(job.name)}>{busy === job.name ? "실행 중…" : role === "ADMIN" ? "작업 실행" : "관리자 권한 필요"}</button>
           </article>
         ))}
-        {!jobs.length && !error ? <div className="empty-state">Waiting for the Spring Batch catalog.</div> : null}
+        {!jobs.length && !error ? <div className="empty-state">Spring Batch 카탈로그를 불러오는 중입니다.</div> : null}
       </section>
       <section className="workflows-layout">
-        <SectionCard title="Executions" eyebrow="Newest first">
+        <SectionCard title="실행 이력" eyebrow="최신순">
           <div className="execution-list">{executions.map((item) => <button className={`execution-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id} type="button" onClick={() => inspect(item)}><div><strong>{item.jobName || `Execution ${item.id}`}</strong><span>{formatTimeAgo(item.startTime || item.createTime)}</span></div><StatusBadge status={item.status}>{item.status}</StatusBadge></button>)}</div>
         </SectionCard>
-        <SectionCard title="Execution Detail" eyebrow="Step and context evidence">
-          {selected ? <ExecutionDetail execution={selected} /> : <div className="empty-state">Select an execution to inspect its evidence.</div>}
+        <SectionCard title="실행 상세" eyebrow="Step 및 실행 기록">
+          {selected ? <ExecutionDetail execution={selected} /> : <div className="empty-state">실행 항목을 선택하면 기록을 확인할 수 있습니다.</div>}
         </SectionCard>
       </section>
     </div>

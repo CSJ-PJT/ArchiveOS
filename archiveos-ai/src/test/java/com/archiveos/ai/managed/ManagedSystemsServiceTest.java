@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 class ManagedSystemsServiceTest {
-    @Test void overviewAggregatesArchiveOsNexusAtlasAndDeepStake() {
+    @Test void overviewAggregatesOnlyArchiveCoreSystemsByDefault() {
         ManagedSystemsRepository repository = Mockito.mock(ManagedSystemsRepository.class);
         ExternalApprovalRepository approvals = baseApprovalRepository();
         when(repository.pmTasks()).thenReturn(List.of());
@@ -42,11 +42,9 @@ class ManagedSystemsServiceTest {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> systems = (List<Map<String, Object>>) overview.get("systems");
         assertThat(systems).extracting(system -> system.get("systemId"))
-                .containsExactly("archiveos", "archive-market", "archive-nexus", "archive-logitics", "atlas-platform", "archive-ledger", "deepstake-placeholder");
-        assertThat(systems).anySatisfy(system -> {
-            assertThat(system).containsEntry("systemId", "deepstake-placeholder");
-            assertThat(system).containsEntry("status", "not_connected");
-        });
+                .containsExactly("archiveos", "archive-market", "archive-nexus", "archive-logitics", "archive-ledger");
+        assertThat(systems).extracting(system -> system.get("systemId"))
+                .doesNotContain("atlas-platform", "deepstake-placeholder");
         assertThat(systems).anySatisfy(system -> {
             assertThat(system).containsEntry("systemId", "archive-ledger");
             assertThat(system).containsEntry("type", "FINANCIAL_OPERATIONS_BACKEND");
