@@ -1,8 +1,10 @@
 import type { SemanticStatus } from "./StatusBadge";
 import { StatusBadge } from "./StatusBadge";
 import { Icon } from "./Icon";
-import { navigationItems, type AppRoute } from "../../app/navigation";
+import { navigationItems, type CoreRoute } from "../../app/navigation";
 import type { PlatformRole } from "../../lib/backendApi";
+import { useI18n } from "../../i18n/I18nProvider";
+import { consoleText } from "../../i18n/console";
 
 export function Sidebar({
   route,
@@ -14,15 +16,16 @@ export function Sidebar({
   commitSha,
   role,
 }: {
-  route: AppRoute;
+  route: CoreRoute;
   open: boolean;
-  onNavigate: (route: AppRoute) => void;
+  onNavigate: (route: CoreRoute) => void;
   health: SemanticStatus;
   loading: boolean;
   branch?: string | null;
   commitSha?: string | null;
   role: PlatformRole;
 }) {
+  const { locale } = useI18n();
   const displayedCommit = commitSha ? commitSha.slice(0, 7) : "local";
   const displayedBranch = branch || "main";
 
@@ -43,7 +46,7 @@ export function Sidebar({
         </div>
       </div>
       <nav className="sidebar-nav" aria-label="ArchiveOS 메뉴">
-        {navigationItems.filter((item) => item.id !== "mcp" || role !== "PUBLIC").map((item) => (
+        {navigationItems.map((item) => (
           <button
             className={`sidebar-link ${route === item.id ? "active" : ""}`}
             key={item.id}
@@ -53,7 +56,7 @@ export function Sidebar({
             title={item.description}
           >
             <Icon name={item.icon} />
-            <span>{item.label}</span>
+            <span>{consoleText(locale, `nav.${item.id}`)}</span>
             <i aria-hidden="true" />
           </button>
         ))}

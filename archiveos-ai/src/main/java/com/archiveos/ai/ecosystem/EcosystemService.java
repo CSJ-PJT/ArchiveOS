@@ -115,7 +115,7 @@ public class EcosystemService {
     private Map<String, Object> checkAll(String traceId) {
         Map<String, Object> services = new LinkedHashMap<>();
         services.put("market", checkMarket());
-        services.put("nexus", check("NEXUS", nexus.config(), nexus.health(), nexus.outboxSummary()));
+        services.put("nexus", checkNexus());
         services.put("logitics", check("LOGITICS", logitics.config(), logitics.health(), logitics.operationsSummary()));
         services.put("ledger", check("LEDGER", ledger.config(), ledger.health(), ledger.operationsSummary()));
         return services;
@@ -154,6 +154,25 @@ public class EcosystemService {
         String error = firstError(health, operations, economy, outbox);
         Map<String, Object> snapshot = repository.recordHealth("MARKET", config.getName(), config.getBaseUrl(), status.name(),
                 firstHttpStatus(economy, operations, outbox, health), body, error);
+        return serviceMap(config, status.name(), snapshot.get("checked_at"), body, error);
+    }
+
+    private Map<String, Object> checkNexus() {
+        EcosystemProperties.ServiceConfig config = nexus.config();
+        if (config == null || !config.isEnabled()) return disabled(config);
+        IntegrationResult health = nexus.health();
+        IntegrationResult operations = nexus.operationsSummary();
+        IntegrationResult outbox = nexus.outboxSummary();
+        EcosystemServiceStatus status = aggregateServiceStatus(List.of(health, operations, outbox));
+        Map<String, Object> operationsData = responseData(operations.body());
+        Map<String, Object> outboxData = responseData(outbox.body());
+        Map<String, Object> body = new LinkedHashMap<>(operationsData);
+        body.put("operations", operationsData);
+        body.put("outbox", outboxData);
+        body.put("health", health.body());
+        body.put("capabilities", Map.of("operations", capability(operations), "outbox", capability(outbox)));
+        String error = firstError(health, operations, outbox);
+        Map<String, Object> snapshot = repository.recordHealth("NEXUS", config.getName(), config.getBaseUrl(), status.name(), firstHttpStatus(operations, outbox, health), body, error);
         return serviceMap(config, status.name(), snapshot.get("checked_at"), body, error);
     }
 

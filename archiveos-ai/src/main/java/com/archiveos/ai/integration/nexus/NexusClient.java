@@ -19,6 +19,7 @@ public class NexusClient {
 
     public IntegrationResult health() { return get(config().getHealthPath()); }
     public IntegrationResult outboxSummary() { return get(config().getSummaryPath()); }
+    public IntegrationResult operationsSummary() { return get(config().getOperationsSummaryPath()); }
     public IntegrationResult outboxEvents() { return get("/api/outbox/events"); }
     public IntegrationResult workforceSummary() { return get(config().getWorkforceSummaryPath()); }
     public IntegrationResult productivitySummary() { return get(config().getProductivitySummaryPath()); }

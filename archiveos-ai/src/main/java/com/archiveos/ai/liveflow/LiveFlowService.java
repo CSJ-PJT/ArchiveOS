@@ -13,18 +13,23 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class LiveFlowService {
+    @Value("${archive.live-flow.collector-enabled:true}")
+    private boolean collectorEnabled;
+
     private final LiveFlowRepository repository;
     private final EcosystemService ecosystem;
     private final ExternalApprovalRepository approvals;
     private final ApprovalCallbackOutboxRepository callbacks;
     private final AuditLogService audit;
     private volatile Instant lastAutoRefreshAt = Instant.EPOCH;
-    private static final Duration AUTO_REFRESH_INTERVAL = Duration.ofSeconds(15);
+    private static final Duration AUTO_REFRESH_INTERVAL = Duration.ofSeconds(1);
     private static final long LIVE_THRESHOLD_SECONDS = 60;
     private static final long STALE_THRESHOLD_SECONDS = 300;
 
@@ -43,6 +48,23 @@ public class LiveFlowService {
         return summarySnapshot();
     }
 
+    /** SSE connection establishment must not wait for a new external collector pass. */
+    public Map<String, Object> streamSnapshot() {
+        Map<String, Object> value = new LinkedHashMap<>(repository.summary());
+        List<Map<String, Object>> recent = repository.recent(12);
+        Instant latest = parseInstant(value.get("latest_event_at"));
+        if (latest == null) latest = latestByNode(recent).values().stream().max(Instant::compareTo).orElse(null);
+        value.put("mode", "LIVE");
+        value.put("dataPolicy", "Synthetic Runtime Events");
+        value.put("recent", recent);
+        Map<String, Object> runtime = new LinkedHashMap<>();
+        runtime.put("latestEventAt", latest == null ? null : latest.toString());
+        runtime.put("freshnessStatus", freshness(latest));
+        runtime.put("pipelineStatus", freshness(latest).equals("LIVE") ? "LIVE" : "STALE");
+        value.put("runtime", runtime);
+        return value;
+    }
+
     private Map<String, Object> summarySnapshot() {
         Map<String, Object> value = new LinkedHashMap<>(repository.summary());
         List<Map<String, Object>> recent = repository.recent(12);
@@ -50,28 +72,40 @@ public class LiveFlowService {
         value.put("dataPolicy", "Synthetic Runtime Events");
         value.put("warning", "No real customer, payment, account, or financial data.");
         value.put("recent", recent);
-        value.put("runtime", runtimeSummary(value, recent));
+        Map<String, Object> runtime = runtimeSummary(value, recent);
+        value.put("runtime", runtime);
+        Map<String, Object> approvalSummary = approvals.summary();
+        value.put("approvalBacklog", approvalSummary.containsKey("pending") ? number(approvalSummary.get("pending")) : null);
+        value.put("approvalBacklogSource", "current synthetic approval queue");
+        value.put("processingBacklog", processingBacklog(runtime));
+        value.put("processingBacklogSource", "current service outbox and processing backlog");
         return value;
     }
 
     public Map<String, Object> topology() {
         return Map.of(
                 "nodes", List.of(
-                        node("market", "Archive-Market", "source", 10, 38),
-                        node("logistics", "Archive-Logistics", "flow", 34, 30),
-                        node("nexus", "Archive-Nexus", "factory", 34, 68),
-                        node("ledger", "Archive-Ledger", "financial", 62, 38),
-                        node("archiveos", "ArchiveOS Control Tower", "control", 84, 38),
+                        node("market", "Archive-Market", "source", 10, 22),
+                        node("nexus", "Archive-Nexus", "factory", 42, 22),
+                        node("logistics", "Archive-Logistics", "flow", 76, 22),
+                        node("ledger", "Archive-Ledger", "financial", 22, 70),
+                        node("archiveos", "ArchiveOS Control Tower", "control", 52, 70),
                         node("settlement", "Settlement", "batch", 84, 70)),
-                "lanes", List.of("Market", "Logistics", "Factory", "Ledger", "Control", "Settlement"),
+                "lanes", List.of("Demand", "Manufacturing", "Logistics", "Finance", "Control", "Settlement"),
                 "edges", List.of(
-                        edge("market", "logistics", "shipment request"),
+                        edge("market", "nexus", "production / shipment request"),
                         edge("market", "ledger", "sales / refund / claim"),
+                        edge("nexus", "logistics", "shipment / route"),
                         edge("logistics", "ledger", "logistics cost"),
                         edge("nexus", "ledger", "manufacturing cost"),
                         edge("ledger", "archiveos", "approval request"),
                         edge("archiveos", "ledger", "approval callback"),
-                        edge("ledger", "settlement", "daily settlement")));
+                        edge("ledger", "settlement", "daily settlement"),
+                        edge("archiveos", "settlement", "settlement control"),
+                        edge("market", "archiveos", "health / summary"),
+                        edge("nexus", "archiveos", "health / summary"),
+                        edge("logistics", "archiveos", "health / summary"),
+                        edge("ledger", "archiveos", "health / summary")));
     }
 
     public Map<String, Object> recent(int limit) {
@@ -84,12 +118,27 @@ public class LiveFlowService {
 
     @Transactional
     public Map<String, Object> refresh() {
+        return refresh(true);
+    }
+
+    /** Read-only external collector used when upstream systems do not expose a push/cursor feed yet. */
+    @Scheduled(fixedDelayString = "${archive.live-flow.collector-interval-ms:1000}")
+    public void collectRealtime() {
+        if (!collectorEnabled) return;
+        try {
+            refresh(false);
+        } catch (RuntimeException ignored) {
+            // The collector records degraded events inside refresh; scheduler threads must remain alive.
+        }
+    }
+
+    private Map<String, Object> refresh(boolean auditEnabled) {
         String traceId = "flow-" + UUID.randomUUID().toString().substring(0, 8);
-        audit.recordEvent("live_flow_refresh_requested", "live_flow", traceId, traceId, Map.of("mode", "LIVE"));
+        if (auditEnabled) audit.recordEvent("live_flow_refresh_requested", "live_flow", traceId, traceId, Map.of("mode", "LIVE"));
         List<Map<String, Object>> saved = new ArrayList<>();
         try {
             try {
-                Map<String, Object> ecosystemSummary = ecosystem.summary();
+                Map<String, Object> ecosystemSummary = ecosystem.refresh();
                 Map<String, Object> services = map(ecosystemSummary.get("services"));
                 collectServiceSnapshots(saved, services);
             } catch (RuntimeException collectorError) {
@@ -97,7 +146,7 @@ public class LiveFlowService {
                         "FLOW_COLLECTOR_DEGRADED", "audit", traceId, "archiveos", "archiveos", "unavailable", "warning",
                         "Live Flow collector degraded: " + collectorError.getClass().getSimpleName(),
                         null, Map.of("riskLevel", "WARNING", "syntheticData", true))));
-                audit.recordEvent("flow_collector_degraded", "live_flow", traceId, traceId,
+                if (auditEnabled) audit.recordEvent("flow_collector_degraded", "live_flow", traceId, traceId,
                         Map.of("error", collectorError.getClass().getSimpleName()));
             }
             collectApprovals(saved);
@@ -105,11 +154,11 @@ public class LiveFlowService {
             Map<String, Object> result = new LinkedHashMap<>(summarySnapshot());
             result.put("traceId", traceId);
             result.put("collected", saved.size());
-            audit.recordEvent("live_flow_refresh_completed", "live_flow", traceId, traceId,
+            if (auditEnabled) audit.recordEvent("live_flow_refresh_completed", "live_flow", traceId, traceId,
                     Map.of("collected", saved.size(), "status", result.get("active_flows")));
             return result;
         } catch (RuntimeException error) {
-            audit.recordEvent("live_flow_refresh_failed", "live_flow", traceId, traceId,
+            if (auditEnabled) audit.recordEvent("live_flow_refresh_failed", "live_flow", traceId, traceId,
                     Map.of("error", error.getClass().getSimpleName()));
             throw error;
         }
@@ -172,6 +221,24 @@ public class LiveFlowService {
         value.put("reason", runtimeReason(freshness, stalledServices));
         value.put("services", serviceStates);
         return value;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Long processingBacklog(Map<String, Object> runtime) {
+        Object values = runtime.get("services");
+        if (!(values instanceof List<?> services)) return null;
+        long total = 0;
+        boolean available = false;
+        for (Object item : services) {
+            if (!(item instanceof Map<?, ?> state)) continue;
+            Object status = state.get("serviceStatus");
+            if ("UNAVAILABLE".equalsIgnoreCase(String.valueOf(status)) || "DISABLED".equalsIgnoreCase(String.valueOf(status))) continue;
+            Object backlog = state.get("backlogCount");
+            if (backlog == null) continue;
+            total += number(backlog);
+            available = true;
+        }
+        return available ? total : null;
     }
 
     private Map<String, Object> runtimeServiceState(String key, Map<String, Object> service, Instant latestNodeEventAt) {
@@ -309,7 +376,7 @@ public class LiveFlowService {
             long total = number(orders.get("total"));
             if (total > 0) {
                 saved.add(repository.upsert(event("market-orders-" + total, "market-orders", "archive-market", "market",
-                        "MARKET_ORDERS_OBSERVED", "order", "market-orders", "market", "logistics", "created", "info",
+                        "MARKET_ORDERS_OBSERVED", "order", "market-orders", "market", "nexus", "created", "info",
                         "Market orders observed: " + total, bucket(summary.get("totalRevenue")),
                         Map.of("orderId", "market-orders", "orderCount", total, "riskLevel", string(summary.get("bankruptcyRisk"), "UNKNOWN"), "syntheticData", true))));
             }
@@ -331,7 +398,7 @@ public class LiveFlowService {
             long pending = number(summary.get("pending"));
             if (pending > 0) {
                 saved.add(repository.upsert(event("nexus-outbox-pending-" + pending, "nexus-outbox", "archive-nexus", "nexus",
-                        "NEXUS_OUTBOX_PENDING", "factory", "nexus-outbox", "nexus", "ledger", "waiting", "info",
+                        "NEXUS_OUTBOX_PENDING", "factory", "nexus-outbox", "nexus", "logistics", "waiting", "info",
                         "Nexus outbox pending: " + pending, null, Map.of("factoryId", "nexus-factory", "syntheticData", true))));
             }
         }

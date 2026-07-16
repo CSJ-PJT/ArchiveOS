@@ -1,6 +1,7 @@
 package com.archiveos.ai.liveflow;
 
 import com.archiveos.ai.obsidian.Json;
+import com.archiveos.ai.world.WorldEventBroadcaster;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -15,13 +16,17 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class LiveFlowRepository {
     private final JdbcTemplate jdbc;
+    private final LiveFlowEventBroadcaster broadcaster;
+    private final WorldEventBroadcaster worldBroadcaster;
 
-    public LiveFlowRepository(JdbcTemplate jdbc) {
+    public LiveFlowRepository(JdbcTemplate jdbc, LiveFlowEventBroadcaster broadcaster, WorldEventBroadcaster worldBroadcaster) {
         this.jdbc = jdbc;
+        this.broadcaster = broadcaster;
+        this.worldBroadcaster = worldBroadcaster;
     }
 
     public Map<String, Object> upsert(LiveFlowEvent event) {
-        return jdbc.queryForObject("""
+        List<Map<String, Object>> changed = jdbc.query("""
                 insert into public.ecosystem_flow_event(
                   event_id, correlation_id, source_system_id, source_service_id, domain, event_type,
                   entity_type, entity_id, from_node, to_node, status, severity, display_label,
@@ -35,16 +40,45 @@ public class LiveFlowRepository {
                   occurred_at = excluded.occurred_at,
                   metadata = excluded.metadata,
                   received_at = now()
+                where ecosystem_flow_event.status is distinct from excluded.status
+                   or ecosystem_flow_event.severity is distinct from excluded.severity
+                   or ecosystem_flow_event.display_label is distinct from excluded.display_label
+                   or ecosystem_flow_event.amount_bucket is distinct from excluded.amount_bucket
+                   or ecosystem_flow_event.metadata is distinct from excluded.metadata
                 returning *
                 """, this::row,
                 event.eventId(), event.correlationId(), event.sourceSystemId(), event.sourceServiceId(), event.domain(), event.eventType(),
                 event.entityType(), event.entityId(), event.fromNode(), event.toNode(), event.status(), event.severity(), event.displayLabel(),
                 event.amountBucket(), Timestamp.from(event.occurredAt()), Json.write(event.metadata() == null ? Map.of() : event.metadata()));
+        Map<String, Object> saved = changed.stream().findFirst().orElseGet(() -> jdbc.queryForObject(
+                "select * from public.ecosystem_flow_event where event_id = ?", this::row, event.eventId()));
+        if (!changed.isEmpty()) {
+            broadcaster.publish(saved);
+            worldBroadcaster.publishRuntimeEvent(saved);
+        }
+        return saved;
     }
 
     public List<Map<String, Object>> recent(int limit) {
         return jdbc.query("select * from public.ecosystem_flow_event order by occurred_at desc, received_at desc limit ?",
                 this::row, clamp(limit));
+    }
+
+    public boolean existsEventId(String eventId) {
+        Integer count = jdbc.queryForObject("select count(*) from public.ecosystem_flow_event where event_id = ?", Integer.class, eventId);
+        return count != null && count > 0;
+    }
+
+    /** Returns persisted events strictly after a Last-Event-ID in receive order. */
+    public List<Map<String, Object>> findAfterEventId(String eventId, int limit) {
+        return jdbc.query("""
+                select current_event.* from public.ecosystem_flow_event current_event
+                join public.ecosystem_flow_event checkpoint on checkpoint.event_id = ?
+                 where current_event.received_at > checkpoint.received_at
+                    or (current_event.received_at = checkpoint.received_at and current_event.id > checkpoint.id)
+                 order by current_event.received_at asc, current_event.id asc
+                 limit ?
+                """, this::row, eventId, clampReplayLimit(limit));
     }
 
     public List<Map<String, Object>> replay(String from, String to, int limit) {
@@ -116,6 +150,7 @@ public class LiveFlowRepository {
     }
 
     private int clamp(int limit) { return Math.min(Math.max(limit, 1), 500); }
+    private int clampReplayLimit(int limit) { return Math.min(Math.max(limit, 1), 250); }
     private String instant(ResultSet rs, String name) throws SQLException {
         Timestamp timestamp = rs.getTimestamp(name);
         return timestamp == null ? null : timestamp.toInstant().toString();

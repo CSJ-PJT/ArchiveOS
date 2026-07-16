@@ -32,6 +32,7 @@ public class EcosystemProperties {
         private String baseUrl;
         private String healthPath = "/actuator/health";
         private String summaryPath;
+        private String operationsSummaryPath;
         private String outboxSummaryPath;
         private String routeSummaryPath;
         private String approvalRequiredPath;
@@ -55,6 +56,8 @@ public class EcosystemProperties {
         public void setHealthPath(String healthPath) { this.healthPath = healthPath; }
         public String getSummaryPath() { return summaryPath; }
         public void setSummaryPath(String summaryPath) { this.summaryPath = summaryPath; }
+        public String getOperationsSummaryPath() { return operationsSummaryPath; }
+        public void setOperationsSummaryPath(String operationsSummaryPath) { this.operationsSummaryPath = operationsSummaryPath; }
         public String getOutboxSummaryPath() { return outboxSummaryPath; }
         public void setOutboxSummaryPath(String outboxSummaryPath) { this.outboxSummaryPath = outboxSummaryPath; }
         public String getRouteSummaryPath() { return routeSummaryPath; }

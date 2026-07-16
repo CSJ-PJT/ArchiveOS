@@ -1,0 +1,29 @@
+import { useEffect, useMemo, useState } from "react";
+import type { AppData } from "../app/AppShell";
+import { HistoryPage } from "./HistoryPage";
+import { KnowledgePage } from "./KnowledgePage";
+import { ConsoleTabs, PageHeader } from "./ConsoleServicesPage";
+import { useI18n } from "../i18n/I18nProvider";
+import { consoleText } from "../i18n/console";
+import { getCorrelationTimeline, type CorrelationTimeline } from "../lib/backendApi";
+
+export function ConsoleRecordsPage({ data }: { data: AppData }) {
+  const [tab, setTab] = useState<"events" | "audit" | "knowledge">("events");
+  const [query, setQuery] = useState(() => window.sessionStorage.getItem("archiveos.records.correlation") || "");
+  const { locale } = useI18n();
+  return <div className="console-page records-v4"><PageHeader title={consoleText(locale, "page.records.title")} description={consoleText(locale, "page.records.description")} /><ConsoleTabs value={tab} onChange={setTab} items={[["events", "실시간 이벤트"], ["audit", "감사 기록"], ["knowledge", "운영 지식"]]} />
+    <label className="record-search"><span>기록 검색</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="eventId, correlationId, entityId, 서비스, eventType" /></label>
+    {tab === "events" ? <EventList data={data} query={query} /> : null}{tab === "audit" ? <HistoryPage data={data} /> : null}{tab === "knowledge" ? <KnowledgePage data={data} /> : null}
+  </div>;
+}
+
+function EventList({ data, query }: { data: AppData; query: string }) {
+  const { locale } = useI18n(); const [selected, setSelected] = useState<string | null>(() => window.sessionStorage.getItem("archiveos.records.correlation")); const [timeline, setTimeline] = useState<CorrelationTimeline | null>(null); const [error, setError] = useState("");
+  const events = useMemo(() => { const needle = query.trim().toLowerCase(); if (!needle) return data.liveFlowEvents.slice(0, 50); return data.liveFlowEvents.filter((event) => [event.event_id, event.correlation_id, event.entity_id, event.from_node, event.to_node, event.event_type, event.source_system_id].some((value) => String(value || "").toLowerCase().includes(needle))).slice(0, 50); }, [data.liveFlowEvents, query]);
+  useEffect(() => { const id=selected || events.find((event) => event.correlation_id)?.correlation_id || null; if (!id) { setTimeline(null); return; } setError(""); void getCorrelationTimeline(id).then(setTimeline).catch(() => { setTimeline(null); setError("Timeline을 불러오지 못했습니다."); }); }, [selected, events]);
+  return <><section className="record-event-card"><header className="record-event-header"><div><span className="eyebrow">RUNTIME EVENT</span><h2>{consoleText(locale, "records.recentEvents")}</h2></div><small>{events.length}건 표시</small></header>{events.length ? <ol>{events.map((event) => <li key={event.event_id}><time>{new Date(event.occurred_at).toLocaleTimeString()}</time><strong title={event.event_type}>{event.event_type}</strong><span>{event.from_node} → {event.to_node}</span><button type="button" className="correlation-link" disabled={!event.correlation_id} onClick={() => { if(event.correlation_id){window.sessionStorage.setItem("archiveos.records.correlation",event.correlation_id);setSelected(event.correlation_id);} }}>{event.correlation_id ? `${event.correlation_id.slice(0,16)}…` : "연결 정보 없음"}</button><small>{event.status}</small></li>)}</ol> : <p className="empty-copy">{query ? "검색 조건에 맞는 기록이 없습니다." : consoleText(locale, "records.emptyEvents")}</p>}</section>
+  {timeline ? <TimelineDetail timeline={timeline} /> : error ? <p className="empty-copy">{error}</p> : null}</>;
+}
+
+function TimelineDetail({ timeline }: { timeline: CorrelationTimeline }) { const services=[...new Set(timeline.events.flatMap((event) => [event.source,event.target]).filter(Boolean))]; const expected=["market","nexus","logistics","ledger","archiveos"]; const normalized=services.map((value) => value.toLowerCase()); const missing=expected.filter((value) => !normalized.some((actual) => actual.includes(value))); const lastEvent=timeline.events[timeline.events.length - 1];
+  const partial=missing.length>0; const runCount=timeline.lineage?.simulationRunIdDistinctCount ?? 0; const runIds=timeline.lineage?.simulationRunIds ?? []; return <section className="record-event-card correlation-timeline-detail"><header className="record-event-header"><div><span className="eyebrow">CORRELATION TIMELINE</span><h2>{timeline.correlationId}</h2></div><strong className={partial?"status-warning":"status-healthy"}>{partial?"PARTIAL_CHAIN":"COMPLETE_CHAIN"}</strong></header><p>{partial?"INCOMPLETE_LINEAGE: 외부 서비스가 공통 correlationId를 발행하지 않아 확인된 이벤트만 표시합니다.":"전체 서비스 lineage가 확인되었습니다."}</p><div className="timeline-lineage"><span>연결 서비스 {services.length}</span><span>시작 {timeline.events[0]?.source || "없음"}</span><span>마지막 {lastEvent?.target || "없음"}</span><span>실행 Run {runCount ? `${runCount}개` : "미수집"}</span><span>누락 예상 단계 {missing.length?missing.join(", "):"없음"}</span></div>{runIds.length>0&&<p className="timeline-run-id" title={runIds.join(", ")}>simulationRunId {runIds.join(", ")}</p>}<div className="timeline-table" role="table"><div role="row" className="timeline-head"><span>발생 시각</span><span>Source → Target</span><span>Event Type</span><span>Event ID</span><span>지연</span></div>{timeline.events.map((event) => <div role="row" key={event.eventId}><time>{new Date(event.occurredAt).toLocaleString()}</time><span>{event.source} → {event.target}</span><strong>{event.eventType}</strong><code>{event.eventId}</code><span>{event.latencyFromPrevious == null?"-":`${event.latencyFromPrevious}ms`}</span></div>)}</div><div className="timeline-anomalies"><strong>중복·누락·비정상 순서</strong><span>{timeline.anomalies.length ? timeline.anomalies.map((item) => String(item.type)).join(", ") : "감지된 이상 없음"}</span></div></section>; }

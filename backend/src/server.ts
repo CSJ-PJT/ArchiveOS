@@ -131,6 +131,9 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Ecosystem Summary", method: "GET", path: "/api/ecosystem/summary", service: "runtime", description: "Market, Nexus, Logistics, Ledger integrated operations status." },
   { name: "Ecosystem Topology", method: "GET", path: "/api/ecosystem/topology", service: "runtime", description: "Control Tower topology nodes and edges." },
   { name: "Ecosystem Timeline", method: "GET", path: "/api/ecosystem/timeline", service: "runtime", description: "Cross-service timeline events." },
+  { name: "Ecosystem Balance Summary", method: "GET", path: "/api/ecosystem/balance/summary", service: "runtime", description: "Read-only synthetic service balance analysis." },
+  { name: "Ecosystem Balance Recommendations", method: "GET", path: "/api/ecosystem/balance/recommendations", service: "runtime", description: "Read-only synthetic balance recommendations." },
+  { name: "Ecosystem Balance Simulation", method: "POST", path: "/api/ecosystem/balance/simulate", service: "runtime", description: "Admin safe dry-run balance simulation." },
   { name: "Refresh Ecosystem", method: "POST", path: "/api/ecosystem/refresh", service: "runtime", description: "Read-only external service health refresh." },
   { name: "Ecosystem Demo Dry-run", method: "POST", path: "/api/ecosystem/demo/dry-run", service: "runtime", description: "Safe dry-run ecosystem scenario." },
   { name: "Ecosystem Demo Run", method: "POST", path: "/api/ecosystem/demo/run", service: "runtime", description: "Blocked unless external writes are explicitly enabled." },
@@ -155,10 +158,16 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Live Flow Summary", method: "GET", path: "/api/live-flow/summary", service: "runtime", description: "Operational Twin summary from runtime flow events." },
   { name: "Live Flow Topology", method: "GET", path: "/api/live-flow/topology", service: "runtime", description: "Operational Twin node and lane topology." },
   { name: "Live Flow Recent Events", method: "GET", path: "/api/live-flow/events/recent", service: "runtime", description: "Recent normalized runtime flow events." },
+  { name: "Live Flow Stream", method: "GET", path: "/api/live-flow/stream", service: "runtime", description: "Unbuffered SSE stream of persisted normalized flow events." },
   { name: "Live Flow Replay", method: "GET", path: "/api/live-flow/replay", service: "runtime", description: "Replay normalized runtime flow events by time window." },
   { name: "Live Flow Correlation", method: "GET", path: "/api/live-flow/correlation/:id", service: "runtime", description: "Trace one runtime correlation chain." },
   { name: "Live Flow Entity", method: "GET", path: "/api/live-flow/entity/:id", service: "runtime", description: "Trace one entity through the flow." },
   { name: "Live Flow Refresh", method: "POST", path: "/api/live-flow/refresh", service: "runtime", description: "Admin-only read-only collection from Archive services." },
+  { name: "World Assets", method: "GET", path: "/api/world/assets", service: "runtime", description: "Read-only Archive-World manifest adapter." },
+  { name: "World Layout", method: "GET", path: "/api/world/layout", service: "runtime", description: "Digital Twin district and route DTO." },
+  { name: "World Events", method: "GET", path: "/api/world/events", service: "runtime", description: "Timeline-derived viewer event DTO." },
+  { name: "World State", method: "GET", path: "/api/world/state", service: "runtime", description: "Read-only Digital Twin adapter status." },
+  { name: "World Stream", method: "GET", path: "/api/world/stream", service: "runtime", description: "SSE viewer event adapter." },
   { name: "Workforce Overview", method: "GET", path: "/api/workforce/overview", service: "runtime", description: "Synthetic workforce, capacity, productivity, and cashflow overview." },
   { name: "Workforce Bottlenecks", method: "GET", path: "/api/workforce/bottlenecks", service: "runtime", description: "Service bottleneck and backlog summary." },
   { name: "Workforce Recommendations", method: "GET", path: "/api/workforce/recommendations", service: "runtime", description: "Recommendation-only workforce actions." },
@@ -276,7 +285,9 @@ app.use("/api", async (request, response, next) => {
     const session = await readJavaSession(request);
     const role = String(session.role ?? "PUBLIC").toUpperCase();
     const pmAction = /^\/api\/(tasks|rpa\/tasks)\/[^/]+\/(decision|retry|approve|reject|hold|request_retry)$/.test(requestPath)
-      || /^\/api\/approvals\/external\/[^/]+\/(approve|reject|hold)$/.test(requestPath);
+      || /^\/api\/approvals\/external\/[^/]+\/(approve|reject|hold)$/.test(requestPath)
+      || /^\/api\/ai\/decisions\/[^/]+\/(approve|reject)$/.test(requestPath)
+      || /^\/api\/memory\/drafts\/[^/]+\/approve$/.test(requestPath);
     if (role === "PUBLIC") {
       response.status(401).json({ error: "Authentication required." });
       return;
@@ -342,6 +353,30 @@ app.post("/api/obsidian/sync", async (request, response) => {
   await relayArchiveOsAi(response, "/api/obsidian/sync", { method: "POST" }, undefined, request);
 });
 
+app.post("/api/ai/decisions/analyze", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ai/decisions/analyze", jsonProxyRequest("POST", request.body), undefined, request);
+});
+app.get("/api/ai/decisions", async (request, response) => {
+  const limit = request.query.limit ? `?limit=${encodeURIComponent(String(request.query.limit))}` : "";
+  await relayArchiveOsAi(response, `/api/ai/decisions${limit}`, undefined, undefined, request);
+});
+app.get("/api/ai/decisions/:id", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/ai/decisions/${encodeURIComponent(request.params.id)}`, undefined, undefined, request);
+});
+app.post("/api/ai/decisions/:id/:action(approve|reject)", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/ai/decisions/${encodeURIComponent(request.params.id)}/${request.params.action}`, jsonProxyRequest("POST", request.body), undefined, request);
+});
+app.post("/api/memory/drafts", async (request, response) => { await relayArchiveOsAi(response, "/api/memory/drafts", jsonProxyRequest("POST", request.body), undefined, request); });
+app.get("/api/memory/records", async (_request, response) => { await relayArchiveOsAi(response, "/api/memory/records"); });
+app.get("/api/memory/:kind/:id", async (request, response) => { await relayArchiveOsAi(response, `/api/memory/${encodeURIComponent(request.params.kind)}/${encodeURIComponent(request.params.id)}`, undefined, undefined, request); });
+app.post("/api/memory/drafts/:id/:action(approve|write)", async (request, response) => { await relayArchiveOsAi(response, `/api/memory/drafts/${encodeURIComponent(request.params.id)}/${request.params.action}`, jsonProxyRequest("POST", request.body), undefined, request); });
+app.get("/api/correlation-timeline/:id", async (request, response) => { await relayArchiveOsAi(response, `/api/correlation-timeline/${encodeURIComponent(request.params.id)}`, undefined, undefined, request); });
+app.post("/api/correlation-timeline/:id/explain", async (request, response) => { await relayArchiveOsAi(response, `/api/correlation-timeline/${encodeURIComponent(request.params.id)}/explain`, jsonProxyRequest("POST", request.body), undefined, request); });
+app.get("/api/pm-attention", async (_request, response) => { await relayArchiveOsAi(response, "/api/pm-attention"); });
+app.get("/api/incidents", async (_request, response) => { await relayArchiveOsAi(response, "/api/incidents"); });
+app.post("/api/incidents/detect", async (request, response) => { await relayArchiveOsAi(response, "/api/incidents/detect", { method: "POST" }, undefined, request); });
+app.post("/api/incidents/:id/:action(analyze|acknowledge|resolve)", async (request, response) => { await relayArchiveOsAi(response, `/api/incidents/${encodeURIComponent(request.params.id)}/${request.params.action}`, jsonProxyRequest("POST", request.body), undefined, request); });
+
 app.get("/api/ai/runtime", async (_request, response) => {
   try {
     response.status(200).json({ data: await proxyArchiveOsAi("/api/ai/runtime") });
@@ -386,10 +421,13 @@ app.post("/api/rag/ask", async (request, response) => {
   }
 
   try {
+    const context = request.body?.context && typeof request.body.context === "object" && !Array.isArray(request.body.context)
+      ? request.body.context
+      : undefined;
     response.status(200).json(await proxyArchiveOsAi("/api/rag/ask", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, ...(context ? { context } : {}) }),
     }));
   } catch (error) {
     sendProxyError(response, error, "RAG ask failed.");
@@ -771,6 +809,18 @@ app.get("/api/ecosystem/timeline", async (request, response) => {
   await relayArchiveOsAi(response, `/api/ecosystem/timeline?limit=${encodeURIComponent(String(limit))}`, undefined, undefined, request);
 });
 
+app.get("/api/ecosystem/balance/summary", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ecosystem/balance/summary", undefined, undefined, request);
+});
+
+app.get("/api/ecosystem/balance/recommendations", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ecosystem/balance/recommendations", undefined, undefined, request);
+});
+
+app.post("/api/ecosystem/balance/simulate", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/ecosystem/balance/simulate", jsonProxyRequest("POST", request.body), undefined, request);
+});
+
 app.post("/api/ecosystem/refresh", async (request, response) => {
   await relayArchiveOsAi(response, "/api/ecosystem/refresh", { method: "POST" }, undefined, request);
 });
@@ -883,6 +933,16 @@ app.get("/api/live-flow/events/recent", async (request, response) => {
   await relayArchiveOsAi(response, `/api/live-flow/events/recent${limit}`, undefined, undefined, request);
 });
 
+// Backward-compatible short alias used by console smoke checks and read-only clients.
+app.get("/api/live-flow/recent", async (request, response) => {
+  const limit = request.query.limit ? `?limit=${encodeURIComponent(String(request.query.limit))}` : "";
+  await relayArchiveOsAi(response, `/api/live-flow/events/recent${limit}`, undefined, undefined, request);
+});
+
+app.get("/api/live-flow/stream", async (request, response) => {
+  await relayArchiveOsAiSse(request, response, "/api/live-flow/stream");
+});
+
 app.get("/api/live-flow/replay", async (request, response) => {
   const params = new URLSearchParams();
   for (const key of ["from", "to", "limit"]) {
@@ -902,6 +962,25 @@ app.get("/api/live-flow/entity/:id", async (request, response) => {
 
 app.post("/api/live-flow/refresh", async (request, response) => {
   await relayArchiveOsAi(response, "/api/live-flow/refresh", { method: "POST" }, undefined, request);
+});
+
+app.get("/api/world/assets", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/world/assets", undefined, undefined, request);
+});
+app.get("/api/world/layout", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/world/layout", undefined, undefined, request);
+});
+app.get("/api/world/events", async (request, response) => {
+  const params = new URLSearchParams();
+  if (request.query.limit) params.set("limit", String(request.query.limit));
+  if (request.query.correlationId) params.set("correlationId", String(request.query.correlationId));
+  await relayArchiveOsAi(response, `/api/world/events${params.size ? `?${params.toString()}` : ""}`, undefined, undefined, request);
+});
+app.get("/api/world/state", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/world/state", undefined, undefined, request);
+});
+app.get("/api/world/stream", async (request, response) => {
+  await relayArchiveOsAiSse(request, response, "/api/world/stream");
 });
 
 app.get("/api/workforce/overview", async (request, response) => {
@@ -2040,6 +2119,39 @@ async function relayArchiveOsAi(
       error: error instanceof Error ? error.message : "ArchiveOS AI module is unavailable.",
       details: "ArchiveOS AI module is unavailable or not configured.",
     });
+  }
+}
+
+async function relayArchiveOsAiSse(request: any, response: any, path: string) {
+  const baseUrl = process.env.ARCHIVEOS_AI_BASE_URL?.trim() || "http://localhost:4100";
+  const headers = new Headers({ accept: "text/event-stream" });
+  const cookie = request?.header?.("cookie");
+  const lastEventId = request?.header?.("last-event-id");
+  if (cookie) headers.set("cookie", cookie);
+  if (lastEventId) headers.set("Last-Event-ID", lastEventId);
+  try {
+    const upstream = await fetch(`${baseUrl}${path}`, { headers });
+    if (!upstream.ok || !upstream.body) {
+      response.status(upstream.status || 503).json({ error: "Live Flow stream is unavailable." });
+      return;
+    }
+    response.status(200);
+    response.setHeader("content-type", "text/event-stream; charset=utf-8");
+    response.setHeader("cache-control", "no-cache, no-transform");
+    response.setHeader("connection", "keep-alive");
+    response.setHeader("x-accel-buffering", "no");
+    response.flushHeaders?.();
+    const reader = upstream.body.getReader();
+    request.on("close", () => reader.cancel().catch(() => undefined));
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      response.write(Buffer.from(value));
+    }
+    response.end();
+  } catch {
+    if (!response.headersSent) response.status(503).json({ error: "Live Flow stream is unavailable." });
+    else response.end();
   }
 }
 

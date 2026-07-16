@@ -330,7 +330,11 @@ public class ExternalApprovalService {
                     .timeout(Duration.ofSeconds(5))
                     .header("content-type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(Json.write(body)));
-            if (!ledgerCallbackToken.isBlank()) builder.header("X-Archive-Ledger-Callback-Token", ledgerCallbackToken);
+            if (!ledgerCallbackToken.isBlank()) {
+                builder.header("Authorization", "Bearer " + ledgerCallbackToken)
+                        .header("X-Archive-Source-System", "archive-os")
+                        .header("X-Archive-Service-Scope", "ledger:approval-callback");
+            }
             HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
                 boolean recovered = "CALLBACK_FAILED".equals(request.get("callback_status"));
