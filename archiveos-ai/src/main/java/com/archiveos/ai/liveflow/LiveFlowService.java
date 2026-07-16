@@ -13,12 +13,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class LiveFlowService {
+    @Value("${archive.live-flow.collector-enabled:true}")
+    private boolean collectorEnabled;
+
     private final LiveFlowRepository repository;
     private final EcosystemService ecosystem;
     private final ExternalApprovalRepository approvals;
@@ -120,6 +124,7 @@ public class LiveFlowService {
     /** Read-only external collector used when upstream systems do not expose a push/cursor feed yet. */
     @Scheduled(fixedDelayString = "${archive.live-flow.collector-interval-ms:1000}")
     public void collectRealtime() {
+        if (!collectorEnabled) return;
         try {
             refresh(false);
         } catch (RuntimeException ignored) {

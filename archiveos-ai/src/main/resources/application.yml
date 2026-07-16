@@ -104,6 +104,7 @@ archiveos:
 
 archive:
   live-flow:
+    collector-enabled: ${ARCHIVE_LIVE_FLOW_COLLECTOR_ENABLED:true}
     collector-interval-ms: ${ARCHIVE_LIVE_FLOW_COLLECTOR_INTERVAL_MS:1000}
   ecosystem:
     enabled: ${ARCHIVE_ECOSYSTEM_ENABLED:true}
