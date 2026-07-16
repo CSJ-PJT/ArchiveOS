@@ -8,7 +8,7 @@ The top-level navigation is reduced to five areas:
 
 1. **Overview** - 5-second PM operations summary.
 2. **Workflows** - task queue, pipeline stages, agent ownership, and PM decisions.
-3. **Knowledge** - operational memory, graph, RAG, and Obsidian status.
+3. **Knowledge** - human-reviewed Decision Records, graph, RAG, and Obsidian status. It is not an automatic learning or model-training area.
 4. **History** - timeline, commands, decisions, errors, and KPI detail.
 5. **Settings** - runtime, integrations, public access, security, theme, and build information.
 
