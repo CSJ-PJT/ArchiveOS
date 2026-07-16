@@ -27,6 +27,12 @@ References retain only title, heading, excerpt, score, and source type. The UI i
 
 Search is a read action. Asking is a user-submitted read action and does not write to an external service. Sync is explicit and permission-gated because it can cause embedding work. There is no auto-sync, auto-ask, or automatic long-term-memory write in this phase.
 
+Search and ask have separate per-principal fixed-window limits (default `60/min` and `12/min`). The service does not trust `X-Forwarded-For` as a limiter identity. This in-process guard is intentionally scoped to one ArchiveOS AI instance; horizontally scaled deployments require an edge or shared distributed limiter.
+
+## Decision records, not automatic learning
+
+Memory entries are **Human-reviewed operational records** created from approved Decision Records with evidence. They may show an outcome as pending, but there is no automatic outcome feedback loop, model training, self-learning, or model update. The API marks this explicitly with `recordMode=HUMAN_REVIEWED_DECISION_RECORD` and `automaticModelTraining=false`.
+
 ## Accessibility and failure isolation
 
 The result panel uses a modal drawer with focus trapping, Escape/backdrop close, and focus return to the search input. On small screens it becomes a bottom sheet. RAG errors stay inside the copilot; they do not prevent Dashboard KPI, mesh, or SSE rendering.

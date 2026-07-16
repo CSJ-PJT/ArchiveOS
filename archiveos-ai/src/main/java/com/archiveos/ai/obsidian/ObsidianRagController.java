@@ -4,6 +4,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.io.IOException;
 import java.util.Map;
+import java.security.Principal;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,9 +20,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class ObsidianRagController {
     private final ObsidianRagService ragService;
+    private final RagRateLimitService rateLimit;
 
-    public ObsidianRagController(ObsidianRagService ragService) {
+    public ObsidianRagController(ObsidianRagService ragService, RagRateLimitService rateLimit) {
         this.ragService = ragService;
+        this.rateLimit = rateLimit;
     }
 
     @PostMapping("/api/obsidian/sync")
@@ -36,16 +40,35 @@ public class ObsidianRagController {
     @GetMapping("/api/rag/search")
     public ResponseEntity<Map<String, Object>> search(
             @RequestParam String query,
-            @RequestParam(defaultValue = "10") int limit) {
+            @RequestParam(defaultValue = "10") int limit,
+            Principal principal,
+            HttpServletRequest request) {
         if (query == null || query.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "query is required."));
         }
+        ResponseEntity<Map<String, Object>> blocked = limited("search", principal, request);
+        if (blocked != null) return blocked;
         return ResponseEntity.ok(Map.of("data", ragService.search(query, limit), "status", "SEARCH_ONLY"));
     }
 
     @PostMapping("/api/rag/ask")
-    public ResponseEntity<Map<String, Object>> ask(@Valid @RequestBody RagAskRequest request) {
+    public ResponseEntity<Map<String, Object>> ask(@Valid @RequestBody RagAskRequest request,
+                                                    Principal principal,
+                                                    HttpServletRequest httpRequest) {
+        ResponseEntity<Map<String, Object>> blocked = limited("ask", principal, httpRequest);
+        if (blocked != null) return blocked;
         return ResponseEntity.ok(Map.of("data", ragService.answer(request.question(), request.context())));
+    }
+
+    private ResponseEntity<Map<String, Object>> limited(String operation, Principal principal, HttpServletRequest request) {
+        String key = principal != null && principal.getName() != null && !principal.getName().isBlank()
+                ? "principal:" + principal.getName()
+                : "remote:" + request.getRemoteAddr();
+        RagRateLimitService.Decision decision = rateLimit.check(operation, key);
+        if (decision.allowed()) return null;
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", Long.toString(decision.retryAfterSeconds()))
+                .body(Map.of("error", "RAG request rate limit exceeded.", "retryAfterSeconds", decision.retryAfterSeconds()));
     }
 
     @ExceptionHandler(AiUnavailableException.class)
