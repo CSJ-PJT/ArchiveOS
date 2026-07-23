@@ -55,3 +55,14 @@ The request body is limited to 64 KiB. Malformed JSON and contract failures retu
 - `408/429/5xx`: retry with bounded backoff.
 
 `eventId` is the idempotency key. The `ecosystem_flow_event.event_id` unique constraint and the application duplicate response both prevent duplicate rows.
+
+## INVALID_CAUSATION 판정 기준
+
+`INVALID_CAUSATION`은 상위 이벤트 연결 정합성 위반 건수다.
+
+- `causationId`가 비어있지 않은 이벤트는 동일 correlation 내 부모 이벤트를 찾아야 한다.
+- 부모 이벤트가 없으면 `EXTERNAL_PARENT_NOT_INGESTED`로 분류하고, `INVALID_CAUSATION`으로 집계하지 않는다.
+- 부모가 존재함에도 `correlationId`, `source`, `orderId`, `simulationRunId` 등의 관계가 타임라인 규칙을 벗어나면 `INVALID_CAUSATION`.
+- 동일한 `eventId` 재전달/중복 수신은 `duplicate eventId`로 별도 분류한다.
+- `occurredAt` 정렬은 내림차순 정렬을 기준으로 하며, 동시간 eventId 기준 deterministic tie-break로 정합성을 유지한다.
+- 회귀/재조회 검증에서 `INVALID_CAUSATION`은 0이어야 한다.

@@ -2063,6 +2063,50 @@ function jsonProxyRequest(method: "POST" | "PATCH", body: unknown): RequestInit 
   };
 }
 
+const AUTHENTICATED_READ_SCOPE = new Set(["authenticated:read", "authenticated_read", "ledger:read", "runtime:read"]);
+const ALLOWED_AUTH_READ_SOURCE = new Set(["archive-os"]);
+const ALLOWED_AI_PROXY_PATHS_FOR_RUNTIME_AUTH = [
+  "/api/live-flow/correlation/",
+  "/api/correlation-timeline/",
+  "/api/runtime/timeline",
+];
+
+function extractHeader(request: any, canonical: string, legacy: string) {
+  const canonicalValue = request?.header?.(canonical);
+  const legacyValue = request?.header?.(legacy);
+  if (canonicalValue && legacyValue && String(canonicalValue).trim().toLowerCase() !== String(legacyValue).trim().toLowerCase()) return null;
+  return canonicalValue ?? legacyValue ?? null;
+}
+
+function normalizeServiceHeader(value: unknown) {
+  return value == null ? "" : String(value).trim().toLowerCase();
+}
+
+function normalizeScopeHeader(value: unknown) {
+  return value == null ? "" : String(value).trim().toLowerCase();
+}
+
+function isArchiveOsAiAllowedAuthPath(path: string) {
+  return (
+    path === "/api/runtime/timeline" ||
+    ALLOWED_AI_PROXY_PATHS_FOR_RUNTIME_AUTH.some((prefix) => path === prefix || path.startsWith(prefix))
+  );
+}
+
+function shouldForwardAuthenticatedReadHeaders(path: string, request: any) {
+  if (!isArchiveOsAiAllowedAuthPath(path)) return false;
+  const authorization = request?.header?.("authorization");
+  if (!authorization || !authorization.startsWith("Bearer ")) return false;
+  const sourceRaw = extractHeader(request, "X-Archive-Source-System", "X-ArchiveOS-Source-System");
+  const scopeRaw = extractHeader(request, "X-Archive-Service-Scope", "X-ArchiveOS-Service-Scope");
+  const source = normalizeServiceHeader(sourceRaw);
+  const scope = normalizeScopeHeader(scopeRaw);
+  if (!source || !scope) return false;
+  if (!ALLOWED_AUTH_READ_SOURCE.has(source)) return false;
+  if (!AUTHENTICATED_READ_SCOPE.has(scope)) return false;
+  return true;
+}
+
 async function readJavaSession(request: any) {
   const baseUrl = process.env.ARCHIVEOS_AI_BASE_URL?.trim() || "http://localhost:4100";
   const headers = new Headers();
@@ -2103,6 +2147,15 @@ async function relayArchiveOsAi(
     const cookie = request?.header?.("cookie");
     const correlationId = request?.header?.("x-correlation-id");
     const integrationToken = request?.header?.("x-archiveos-integration-token");
+    const shouldForwardAuthHeaders = shouldForwardAuthenticatedReadHeaders(path, request);
+    if (shouldForwardAuthHeaders) {
+      const authorization = request?.header?.("authorization");
+      const sourceHeader = extractHeader(request, "X-Archive-Source-System", "X-ArchiveOS-Source-System");
+      const scopeHeader = extractHeader(request, "X-Archive-Service-Scope", "X-ArchiveOS-Service-Scope");
+      if (authorization) headers.set("Authorization", authorization);
+      if (sourceHeader) headers.set("X-Archive-Source-System", sourceHeader);
+      if (scopeHeader) headers.set("X-Archive-Service-Scope", scopeHeader);
+    }
     if (cookie) headers.set("cookie", cookie);
     if (correlationId) headers.set("x-correlation-id", correlationId);
     if (integrationToken) headers.set("x-archiveos-integration-token", integrationToken);
