@@ -13,6 +13,7 @@
 | ROOT_EVENT | 1 |
 | EXTERNAL_PARENT_NOT_INGESTED | 0 |
 | INVALID_CAUSATION | 0 |
+- INVALID_CAUSATION 판정: `causationId`가 있는 이벤트에서 동일 correlation 내 부모 미해결은 external parent로, 잘못된 parent 링크(상관성/소스/순서 위반)는 invalid로 집계
 | duplicate eventId | 0 |
 | simulationRunId/orderId distinct | 각각 1 |
 | background count 증가 | 60초 관찰에서 0 |
