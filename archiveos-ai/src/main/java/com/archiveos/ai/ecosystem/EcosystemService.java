@@ -69,16 +69,16 @@ public class EcosystemService {
                 "nodes", List.of(
                         node("archive-market", "Archive-Market", "MARKET", serviceStatus(services, "market")),
                         node("archive-nexus", "Archive-Nexus", "DOMAIN", serviceStatus(services, "nexus")),
-                        node("archive-logitics", "Archive-Logistics", "LOGISTICS", serviceStatus(services, "logitics")),
+                        node("archive-logistics", "Archive-Logistics", "LOGISTICS", serviceStatus(services, "logitics")),
                         node("archive-ledger", "Archive-Ledger", "FINANCE", serviceStatus(services, "ledger")),
                         node("archive-os", "ArchiveOS", "CONTROL_TOWER", "HEALTHY")),
                 "edges", List.of(
                         edge("archive-market", "archive-nexus", "production / shipment request"),
                         edge("archive-market", "archive-ledger", "sales / payment / refund event"),
                         edge("archive-market", "archive-os", "market economy summary"),
-                        edge("archive-nexus", "archive-logitics", "shipment event"),
+                        edge("archive-nexus", "archive-logistics", "shipment event"),
                         edge("archive-nexus", "archive-ledger", "direct cost event"),
-                        edge("archive-logitics", "archive-ledger", "logistics cost event"),
+                        edge("archive-logistics", "archive-ledger", "logistics cost event"),
                         edge("archive-ledger", "archive-os", "approval request"),
                         edge("archive-os", "archive-ledger", "approval callback")));
     }

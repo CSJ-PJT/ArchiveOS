@@ -57,7 +57,7 @@ class EcosystemServiceTest {
         List<Map<String, Object>> edges = (List<Map<String, Object>>) topology.get("edges");
         assertThat(edges).anySatisfy(edge -> assertThat(edge).containsEntry("from", "archive-market").containsEntry("to", "archive-nexus"));
         assertThat(edges).anySatisfy(edge -> assertThat(edge).containsEntry("from", "archive-market").containsEntry("to", "archive-ledger"));
-        assertThat(edges).anySatisfy(edge -> assertThat(edge).containsEntry("from", "archive-nexus").containsEntry("to", "archive-logitics"));
+        assertThat(edges).anySatisfy(edge -> assertThat(edge).containsEntry("from", "archive-nexus").containsEntry("to", "archive-logistics"));
         assertThat(edges).anySatisfy(edge -> assertThat(edge).containsEntry("from", "archive-os").containsEntry("to", "archive-ledger"));
     }
 

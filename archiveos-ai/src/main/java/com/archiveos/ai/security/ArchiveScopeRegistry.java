@@ -30,6 +30,11 @@ public final class ArchiveScopeRegistry {
         return source == null ? "" : source.trim().toLowerCase();
     }
 
+    public static String canonicalScope(String scope) {
+        String normalized = scope == null ? "" : scope.trim().toLowerCase();
+        return LEGACY_SCOPE_ALIASES.getOrDefault(normalized, normalized);
+    }
+
     public static boolean isRuntimeIngestSource(String source) {
         return Set.of("archive-market", "archive-nexus", "archive-logistics", "archive-ledger").contains(canonicalService(source));
     }
