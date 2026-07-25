@@ -255,15 +255,15 @@ public class SettlementAgencyGameService {
                 money(nested(response, "services", "nexus", "revenue")), "Nexus exports synthetic manufacturing output revenue.",
                 Map.of("flow", "Nexus manufactures", "syntheticData", true));
         finance.insertTrade(prefix + "logistics-service-export", run, cycle, tick, day, correlation,
-                "archive-logitics", "archive-nexus", "LOGISTICS_SERVICE_EXPORT",
+                "archive-logistics", "archive-nexus", "LOGISTICS_SERVICE_EXPORT",
                 money(nested(response, "services", "logistics", "revenue")), "Logistics exports route, delivery, and daily settlement service to Nexus.",
                 Map.of("flow", "Logistics fulfills and charges Nexus", "syntheticData", true));
         finance.insertTrade(prefix + "ledger-settlement-export", run, cycle, tick, day, correlation,
-                "archive-ledger", "archive-logitics", "LEDGER_DAILY_SETTLEMENT_EXPORT",
+                "archive-ledger", "archive-logistics", "LEDGER_DAILY_SETTLEMENT_EXPORT",
                 money(nested(response, "services", "ledger", "revenue")), "Ledger exports transaction processing, daily settlement, reconciliation, and approval review services.",
                 Map.of("flow", "Ledger settles daily for Logistics", "syntheticData", true));
         finance.insertTrade(prefix + "logistics-cost-back", run, cycle, tick, day, correlation,
-                "archive-logitics", "archive-nexus", "MANUFACTURING_COST_SETTLEMENT_EXPORT",
+                "archive-logistics", "archive-nexus", "MANUFACTURING_COST_SETTLEMENT_EXPORT",
                 money(nested(response, "services", "nexus", "cost")), "Logistics charges Nexus for manufacturing-linked logistics and settlement costs.",
                 Map.of("flow", "Logistics returns manufacturing cost settlement to Nexus", "syntheticData", true));
     }
@@ -272,7 +272,7 @@ public class SettlementAgencyGameService {
         return switch (key) {
             case "market" -> "archive-market";
             case "nexus" -> "archive-nexus";
-            case "logistics", "logitics" -> "archive-logitics";
+            case "logistics", "logitics", "archive-logitics" -> "archive-logistics";
             case "ledger" -> "archive-ledger";
             case "archiveos", "archive-os" -> "archiveos";
             default -> key;

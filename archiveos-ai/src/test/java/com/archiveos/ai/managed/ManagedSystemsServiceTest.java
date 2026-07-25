@@ -42,9 +42,10 @@ class ManagedSystemsServiceTest {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> systems = (List<Map<String, Object>>) overview.get("systems");
         assertThat(systems).extracting(system -> system.get("systemId"))
-                .containsExactly("archiveos", "archive-market", "archive-nexus", "archive-logitics", "archive-ledger");
+                .containsExactly("archive-os", "archive-market", "archive-nexus", "archive-logistics", "archive-ledger");
         assertThat(systems).extracting(system -> system.get("systemId"))
                 .doesNotContain("atlas-platform", "deepstake-placeholder");
+        assertThat(overview.toString()).doesNotContain("archive-logitics");
         assertThat(systems).anySatisfy(system -> {
             assertThat(system).containsEntry("systemId", "archive-ledger");
             assertThat(system).containsEntry("type", "FINANCIAL_OPERATIONS_BACKEND");
@@ -56,8 +57,8 @@ class ManagedSystemsServiceTest {
 
     @Test void ecosystemHealthSnapshotMarksLogisticsAndLedgerConnected() {
         ManagedSystemsRepository repository = baseRepository();
-        when(repository.latestEcosystemHealth("LOGITICS")).thenReturn(Map.of(
-                "service_type", "LOGITICS",
+        when(repository.latestEcosystemHealth("LOGISTICS")).thenReturn(Map.of(
+                "service_type", "LOGISTICS",
                 "service_name", "Archive-Logistics",
                 "base_url", "http://localhost:8092",
                 "status", "HEALTHY",
@@ -87,7 +88,7 @@ class ManagedSystemsServiceTest {
             assertThat(system).containsKey("marketSummary");
         });
         assertThat(systems).anySatisfy(system -> {
-            assertThat(system).containsEntry("systemId", "archive-logitics");
+            assertThat(system).containsEntry("systemId", "archive-logistics");
             assertThat(system).containsEntry("name", "Archive-Logistics");
             assertThat(system).containsEntry("status", "normal");
             assertThat(system).containsEntry("healthSource", "ecosystem_health_snapshot");
@@ -149,17 +150,69 @@ class ManagedSystemsServiceTest {
 
     @Test void acknowledgeAndResolvePersistInboxStateAndTimeline() {
         ManagedSystemsRepository repository = baseRepository();
-        when(repository.updateInboxState(eq("item-1"), eq("acknowledged"), any()))
-                .thenReturn(Map.of("id", "item-1", "status", "acknowledged"));
-        when(repository.updateInboxState(eq("item-1"), eq("resolved"), any()))
-                .thenReturn(Map.of("id", "item-1", "status", "resolved"));
+        when(repository.latestDailyReport()).thenReturn(Map.of(
+                "id", "report-1", "target_date", "2026-07-24", "created_at", "2026-07-24T00:00:00Z"));
+        when(repository.updateInboxState(eq("daily-report-report-1"), eq("acknowledged"), any()))
+                .thenReturn(Map.of("id", "daily-report-report-1", "status", "acknowledged"));
+        when(repository.updateInboxState(eq("daily-report-report-1"), eq("resolved"), any()))
+                .thenReturn(Map.of("id", "daily-report-report-1", "status", "resolved"));
         ManagedSystemsService service = new ManagedSystemsService(repository, baseApprovalRepository());
 
-        assertThat(service.acknowledge("item-1")).containsEntry("status", "acknowledged");
-        assertThat(service.resolve("item-1")).containsEntry("status", "resolved");
+        assertThat(service.acknowledge("daily-report-report-1")).containsEntry("status", "acknowledged");
+        assertThat(service.resolve("daily-report-report-1")).containsEntry("status", "resolved");
 
-        verify(repository).recordTimeline(eq("approval"), eq("success"), eq("PM inbox item acknowledged"), eq("item-1"), eq("archiveos"), eq("item-1"), any());
-        verify(repository).recordTimeline(eq("approval"), eq("success"), eq("PM inbox item resolved"), eq("item-1"), eq("archiveos"), eq("item-1"), any());
+        verify(repository).recordTimeline(eq("approval"), eq("success"), eq("PM inbox item acknowledged"),
+                eq("daily-report-report-1"), eq("archive-os"), eq("daily-report-report-1"), any());
+        verify(repository).recordTimeline(eq("approval"), eq("success"), eq("PM inbox item resolved"),
+                eq("daily-report-report-1"), eq("archive-os"), eq("daily-report-report-1"), any());
+    }
+
+    @Test void legacyLogisticsAliasResolvesToCanonicalOutputForAllReadViews() {
+        ManagedSystemsRepository repository = baseRepository();
+        ManagedSystemsService service = new ManagedSystemsService(repository, baseApprovalRepository());
+
+        assertThat(service.system("archive-logitics")).containsEntry("systemId", "archive-logistics");
+        assertThat(service.systemEvents("archive-logitics")).isEmpty();
+        assertThat(service.systemWorkflows("archive-logitics")).isEmpty();
+        assertThat(service.systemWorkLogs("archive-logitics")).isEmpty();
+    }
+
+    @Test void repeatedInboxTransitionsAreIdempotentAndDoNotDuplicateTimeline() {
+        ManagedSystemsRepository repository = baseRepository();
+        when(repository.latestDailyReport()).thenReturn(Map.of(
+                "id", "report-1", "target_date", "2026-07-24", "created_at", "2026-07-24T00:00:00Z"));
+        when(repository.inboxState("daily-report-report-1"))
+                .thenReturn(Map.of("id", "daily-report-report-1", "status", "resolved"));
+        ManagedSystemsService service = new ManagedSystemsService(repository, baseApprovalRepository());
+
+        assertThat(service.acknowledge("daily-report-report-1")).containsEntry("status", "resolved");
+        assertThat(service.resolve("daily-report-report-1")).containsEntry("status", "resolved");
+
+        Mockito.verify(repository, Mockito.never()).updateInboxState(eq("daily-report-report-1"), any(), any());
+        Mockito.verify(repository, Mockito.never()).recordTimeline(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test void rejectsUnknownInboxItemWithoutWritingStateOrTimeline() {
+        ManagedSystemsRepository repository = baseRepository();
+        ManagedSystemsService service = new ManagedSystemsService(repository, baseApprovalRepository());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.acknowledge("missing-item"))
+                .isInstanceOf(ManagedSystemsValidationException.class)
+                .hasMessage("PM inbox item not found.");
+
+        Mockito.verify(repository, Mockito.never()).updateInboxState(any(), any(), any());
+        Mockito.verify(repository, Mockito.never()).recordTimeline(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test void atlasFailuresDoNotEnterCorePmInbox() {
+        ManagedSystemsRepository repository = baseRepository();
+        when(repository.atlasWorkLogs(20)).thenReturn(List.of(Map.of(
+                "id", "atlas-failure-1", "failure_reason", "external failure", "work_title", "Atlas task",
+                "created_at", "2026-07-24T00:00:00Z")));
+        ManagedSystemsService service = new ManagedSystemsService(repository, baseApprovalRepository());
+
+        assertThat(service.pmInbox()).extracting(item -> item.get("sourceSystemId"))
+                .doesNotContain("atlas-platform");
     }
 
     private ManagedSystemsRepository baseRepository() {
@@ -172,6 +225,7 @@ class ManagedSystemsServiceTest {
         when(repository.atlasWorkLogs(1)).thenReturn(List.of());
         when(repository.atlasWorkLogs(20)).thenReturn(List.of());
         when(repository.latestEcosystemHealth("LOGITICS")).thenReturn(null);
+        when(repository.latestEcosystemHealth("LOGISTICS")).thenReturn(null);
         when(repository.latestEcosystemHealth("LEDGER")).thenReturn(null);
         when(repository.latestEcosystemHealth("MARKET")).thenReturn(null);
         when(repository.latestDailyReport()).thenReturn(null);

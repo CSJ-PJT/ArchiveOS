@@ -17,6 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ManagedSystemsService {
     private static final List<String> SEVERITY_ORDER = List.of("critical", "high", "medium", "low", "info");
+    private static final String ARCHIVE_OS = "archive-os";
+    private static final String ARCHIVE_MARKET = "archive-market";
+    private static final String ARCHIVE_NEXUS = "archive-nexus";
+    private static final String ARCHIVE_LOGISTICS = "archive-logistics";
+    private static final String ARCHIVE_LEDGER = "archive-ledger";
     private final ManagedSystemsRepository repository;
     private final ExternalApprovalRepository approvals;
     private LiveFlowRepository liveFlowRepository;
@@ -64,33 +69,34 @@ public class ManagedSystemsService {
     public List<Map<String, Object>> systems() {
         List<Map<String, Object>> tasks = repository.pmTasks();
         Map<String, Object> queue = repository.queueSummary();
-        List<Map<String, Object>> systems = new ArrayList<>(List.of(
-                archiveOsSystem(queue), archiveMarketSystem(), archiveNexusSystem(tasks), archiveLogiticsSystem(), archiveLedgerSystem()));
-        if (deepStakeEnabled) systems.add(deepStakePlaceholder());
-        return systems;
+        return new ArrayList<>(List.of(
+                archiveOsSystem(queue), archiveMarketSystem(), archiveNexusSystem(tasks), archiveLogisticsSystem(), archiveLedgerSystem()));
     }
 
     public Map<String, Object> system(String systemId) {
-        return systems().stream().filter(system -> systemId.equals(system.get("systemId"))).findFirst()
+        String canonicalId = canonicalManagedSystemId(systemId);
+        return systems().stream().filter(system -> canonicalId.equals(system.get("systemId"))).findFirst()
                 .orElseThrow(() -> new ManagedSystemsValidationException("Managed system not found."));
     }
 
     public List<Map<String, Object>> systemEvents(String systemId) {
+        String canonicalId = String.valueOf(system(systemId).get("systemId"));
         return repository.recentAuditLogs(100).stream()
-                .filter(event -> systemId.equals(systemIdForEvent(event)))
+                .filter(event -> canonicalId.equals(systemIdForEvent(event)))
                 .limit(30)
                 .toList();
     }
 
     public List<Map<String, Object>> systemWorkflows(String systemId) {
+        String canonicalId = String.valueOf(system(systemId).get("systemId"));
         return repository.pmTasks().stream()
-                .filter(task -> systemId.equals(systemIdForTask(task)))
+                .filter(task -> canonicalId.equals(systemIdForTask(task)))
                 .limit(50)
                 .toList();
     }
 
     public List<Map<String, Object>> systemWorkLogs(String systemId) {
-        if ("atlas-platform".equals(systemId)) return repository.atlasWorkLogs(50);
+        system(systemId);
         return List.of();
     }
 
@@ -102,7 +108,6 @@ public class ManagedSystemsService {
         items.addAll(ledgerApprovalItems());
         items.addAll(ledgerCallbackFailedItems());
         items.addAll(liveFlowItems());
-        items.addAll(workLogFailureItems());
         addIfNotNull(items, securityBlockedItem("public_cud_blocked", "medium", "Public CUD blocked repeatedly",
                 "Public session attempted protected write operations more than once.", "Review public access and confirm this is expected."));
         addIfNotNull(items, securityBlockedItem("admin_unlock_failed", "high", "Admin unlock failed repeatedly",
@@ -117,17 +122,23 @@ public class ManagedSystemsService {
 
     @Transactional
     public Map<String, Object> acknowledge(String id) {
+        requireInboxItem(id);
+        Map<String, Object> current = repository.inboxState(id);
+        if (current != null && ("acknowledged".equals(current.get("status")) || "resolved".equals(current.get("status")))) return current;
         Map<String, Object> state = repository.updateInboxState(id, "acknowledged", Map.of("action", "pm_inbox_item_acknowledged"));
-        repository.recordTimeline("approval", "success", "PM inbox item acknowledged", id, "archiveos", id,
-                Map.of("systemId", "archiveos", "action", "pm_inbox_item_acknowledged"));
+        repository.recordTimeline("approval", "success", "PM inbox item acknowledged", id, ARCHIVE_OS, id,
+                Map.of("systemId", ARCHIVE_OS, "action", "pm_inbox_item_acknowledged"));
         return state;
     }
 
     @Transactional
     public Map<String, Object> resolve(String id) {
+        requireInboxItem(id);
+        Map<String, Object> current = repository.inboxState(id);
+        if (current != null && "resolved".equals(current.get("status"))) return current;
         Map<String, Object> state = repository.updateInboxState(id, "resolved", Map.of("action", "pm_inbox_item_resolved"));
-        repository.recordTimeline("approval", "success", "PM inbox item resolved", id, "archiveos", id,
-                Map.of("systemId", "archiveos", "action", "pm_inbox_item_resolved"));
+        repository.recordTimeline("approval", "success", "PM inbox item resolved", id, ARCHIVE_OS, id,
+                Map.of("systemId", ARCHIVE_OS, "action", "pm_inbox_item_resolved"));
         return state;
     }
 
@@ -137,22 +148,31 @@ public class ManagedSystemsService {
         String status = failed > 0 ? "degraded" : "normal";
         String reason = failed > 0 ? "ArchiveOS has failed workflow records that need review." : "ArchiveOS runtime and PM workflow aggregation are available.";
         Map<String, Object> latestAudit = repository.latestAuditEvent();
-        return system("archiveos", "ArchiveOS", "PLATFORM", "local", "local", status, reason, Instant.now().toString(),
+        Map<String, Object> system = system(ARCHIVE_OS, "ArchiveOS", "PLATFORM", "local", "local", status, reason, Instant.now().toString(),
                 4, status.equals("normal") ? 4 : 3, status.equals("degraded") ? 1 : 0, 0, (int) pending, failed > 0 ? 1 : 0,
-                null, string(latestAudit, "id"), null, "http://localhost:5173", "CSJ-PJT/ArchiveOS", "archiveos");
+                null, string(latestAudit, "id"), null, "http://localhost:5173", "CSJ-PJT/ArchiveOS", ARCHIVE_OS);
+        system.put("healthSource", "archiveos_runtime_repository_query");
+        system.put("secrets", "hidden");
+        return system;
     }
 
     private Map<String, Object> archiveNexusSystem(List<Map<String, Object>> tasks) {
-        List<Map<String, Object>> nexusTasks = tasks.stream().filter(task -> "archive-nexus".equals(systemIdForTask(task))).toList();
+        List<Map<String, Object>> nexusTasks = tasks.stream().filter(task -> ARCHIVE_NEXUS.equals(systemIdForTask(task))).toList();
         long pending = nexusTasks.stream().filter(task -> "pm_decision_required".equals(task.get("status"))).count();
         long failed = nexusTasks.stream().filter(task -> "failed".equals(task.get("status"))).count();
-        String status = failed > 0 ? "degraded" : pending > 0 ? "degraded" : "normal";
-        String reason = pending > 0 ? "Nexus workflow is waiting for PM approval." : failed > 0 ? "Nexus workflow failure needs review." : "Nexus workflow contract integration has no pending PM action.";
+        String status = nexusTasks.isEmpty() ? "not_connected" : failed > 0 ? "degraded" : pending > 0 ? "degraded" : "normal";
+        String reason = nexusTasks.isEmpty() ? "No Nexus workflow evidence has been recorded."
+                : pending > 0 ? "Nexus workflow is waiting for PM approval."
+                : failed > 0 ? "Nexus workflow failure needs review."
+                : "Nexus workflow contract integration has no pending PM action.";
         Map<String, Object> latest = nexusTasks.isEmpty() ? null : nexusTasks.get(0);
-        return system("archive-nexus", "Archive-Nexus", "INDUSTRY_APP", "local", "local", status, reason,
-                string(latest, "updated_at", Instant.now().toString()), 1, status.equals("normal") ? 1 : 0,
+        Map<String, Object> system = system(ARCHIVE_NEXUS, "Archive-Nexus", "INDUSTRY_APP", "local", "local", status, reason,
+                string(latest, "updated_at", null), 1, status.equals("normal") ? 1 : 0,
                 status.equals("degraded") ? 1 : 0, 0, (int) pending, failed > 0 ? 1 : 0,
-                string(latest, "id"), null, null, null, "CSJ-PJT/Archive-Nexus", "nexus");
+                string(latest, "id"), null, null, null, "CSJ-PJT/Archive-Nexus", ARCHIVE_NEXUS);
+        system.put("healthSource", latest == null ? "not_checked" : "workflow_repository");
+        system.put("secrets", "hidden");
+        return system;
     }
 
     private Map<String, Object> archiveMarketSystem() {
@@ -160,11 +180,11 @@ public class ManagedSystemsService {
         Map<String, Object> summary = map(stringMap(health, "summary"));
         String status = managedStatus(health, "not_connected");
         String reason = managedReason(health, "Archive-Market has not been checked by the Ecosystem Control Tower yet.");
-        Map<String, Object> system = system("archive-market", "Archive-Market", "SYNTHETIC_COMMERCE_BACKEND", "development", "local", status,
+        Map<String, Object> system = system(ARCHIVE_MARKET, "Archive-Market", "SYNTHETIC_COMMERCE_BACKEND", "development", "local", status,
                 reason, string(health, "checked_at", null), 1, "normal".equals(status) ? 1 : 0,
                 "degraded".equals(status) ? 1 : 0, "down_candidate".equals(status) ? 1 : 0,
                 highRiskOrders(summary), "normal".equals(status) ? 0 : 1, null, null, null,
-                string(health, "base_url", "http://localhost:8094"), "CSJ-PJT/Archive-Market", "archiveos");
+                string(health, "base_url", "http://localhost:8094"), "CSJ-PJT/Archive-Market", ARCHIVE_MARKET);
         system.put("role", "Demand / Order / Revenue Source");
         system.put("baseUrlConfigured", string(health, "base_url", null) != null);
         system.put("healthSource", health == null ? "not_checked" : "ecosystem_health_snapshot");
@@ -205,15 +225,16 @@ public class ManagedSystemsService {
                 0, 0, 0, 0, 0, 0, null, null, null, null, null, "manual");
     }
 
-    private Map<String, Object> archiveLogiticsSystem() {
-        Map<String, Object> health = repository.latestEcosystemHealth("LOGITICS");
+    private Map<String, Object> archiveLogisticsSystem() {
+        Map<String, Object> health = repository.latestEcosystemHealth("LOGISTICS");
+        if (health == null) health = repository.latestEcosystemHealth("LOGITICS");
         String status = managedStatus(health, "not_connected");
         String reason = managedReason(health, "Archive-Logistics has not been checked by the Ecosystem Control Tower yet.");
-        Map<String, Object> system = system("archive-logitics", "Archive-Logistics", "LOGISTICS_OPERATIONS_BACKEND", "development", "local", status,
+        Map<String, Object> system = system(ARCHIVE_LOGISTICS, "Archive-Logistics", "LOGISTICS_OPERATIONS_BACKEND", "development", "local", status,
                 reason, string(health, "checked_at", null), 1, "normal".equals(status) ? 1 : 0,
                 "degraded".equals(status) ? 1 : 0, "down_candidate".equals(status) ? 1 : 0,
                 0, "normal".equals(status) ? 0 : 1, null, null, null,
-                string(health, "base_url", "http://localhost:8092"), "CSJ-PJT/Archive-Logistics", "archiveos");
+                string(health, "base_url", "http://localhost:8092"), "CSJ-PJT/Archive-Logistics", ARCHIVE_LOGISTICS);
         system.put("role", "Synthetic Logistics Operations Backend");
         system.put("baseUrlConfigured", string(health, "base_url", null) != null);
         system.put("healthSource", health == null ? "not_checked" : "ecosystem_health_snapshot");
@@ -245,10 +266,10 @@ public class ManagedSystemsService {
                     : configured
                         ? managedReason(health, "Archive-Ledger endpoint is configured, but no healthy read snapshot has been recorded yet. Run ecosystem refresh.")
                         : managedReason(health, "Archive-Ledger integration endpoint is not configured yet.");
-        Map<String, Object> system = system("archive-ledger", "Archive-Ledger", "FINANCIAL_OPERATIONS_BACKEND", "development", "local", status, reason,
+        Map<String, Object> system = system(ARCHIVE_LEDGER, "Archive-Ledger", "FINANCIAL_OPERATIONS_BACKEND", "development", "local", status, reason,
                 string(health, "checked_at", string(latest, "updated_at", null)), 1, "not_connected".equals(status) || "down_candidate".equals(status) ? 0 : 1,
                 "degraded".equals(status) ? 1 : 0, "down_candidate".equals(status) ? 1 : 0, pending, callbackFailed,
-                string(latest, "approval_request_id"), null, null, null, "CSJ-PJT/Archive-Ledger", "archiveos");
+                string(latest, "approval_request_id"), null, null, null, "CSJ-PJT/Archive-Ledger", ARCHIVE_LEDGER);
         system.put("role", "Synthetic Financial Operations Backend");
         system.put("baseUrlConfigured", ledgerBaseUrl != null && !ledgerBaseUrl.isBlank() || string(health, "base_url", null) != null);
         system.put("approvalCallbackConfigured", ledgerCallbackToken != null && !ledgerCallbackToken.isBlank());
@@ -313,7 +334,7 @@ public class ManagedSystemsService {
 
     private List<Map<String, Object>> nexusApprovalItems() {
         return repository.pmTasks().stream()
-                .filter(task -> "archive-nexus".equals(systemIdForTask(task)))
+                .filter(task -> ARCHIVE_NEXUS.equals(systemIdForTask(task)))
                 .filter(task -> "pm_decision_required".equals(task.get("status")))
                 .map(task -> inboxItem("nexus-approval-" + task.get("id"), "high", "archive-nexus", "workflow",
                         "Nexus workflow waiting approval",
@@ -350,7 +371,7 @@ public class ManagedSystemsService {
     private Map<String, Object> dailyReportItem() {
         Map<String, Object> report = repository.latestDailyReport();
         if (report == null) return null;
-        return inboxItem("daily-report-" + report.get("id"), "info", "archiveos", "daily_report",
+        return inboxItem("daily-report-" + report.get("id"), "info", ARCHIVE_OS, "daily_report",
                 "Daily report generated",
                 "ArchiveOS daily report for " + report.get("target_date") + " is available.",
                 "Review the latest Daily Report if planning operational follow-up.",
@@ -406,12 +427,12 @@ public class ManagedSystemsService {
         int delayedShipments = integer(summary.get("delayed_shipments"));
         int degradedSystems = integer(summary.get("degraded_systems"));
         String latest = String.valueOf(summary.getOrDefault("latest_event_at", Instant.now().toString()));
-        if (failedCallbacks > 0) rows.add(inboxItem("live-flow-callback-failed", "high", "archiveos", "live_flow",
+        if (failedCallbacks > 0) rows.add(inboxItem("live-flow-callback-failed", "high", ARCHIVE_OS, "live_flow",
                 "Live Flow detected callback failures",
                 "Live Flow has " + failedCallbacks + " callback failure events.",
                 "Open Live Flow, inspect the callback chain, and retry only after checking Ledger availability.",
                 latest, null, null, null, null, null));
-        if (pendingApprovals > 0) rows.add(inboxItem("live-flow-approval-required", "high", "archiveos", "live_flow",
+        if (pendingApprovals > 0) rows.add(inboxItem("live-flow-approval-required", "high", ARCHIVE_OS, "live_flow",
                 "Live Flow detected pending approvals",
                 "Live Flow has " + pendingApprovals + " approval-required events.",
                 "Open Ledger Approval Queue and clear high-risk pending approvals.",
@@ -421,7 +442,7 @@ public class ManagedSystemsService {
                 "Live Flow has " + delayedShipments + " delayed logistics events.",
                 "Open Live Flow and inspect affected logistics correlations.",
                 latest, null, null, null, null, null));
-        if (degradedSystems > 0) rows.add(inboxItem("live-flow-degraded-systems", "high", "archiveos", "live_flow",
+        if (degradedSystems > 0) rows.add(inboxItem("live-flow-degraded-systems", "high", ARCHIVE_OS, "live_flow",
                 "Live Flow detected degraded systems",
                 "Live Flow has " + degradedSystems + " degraded or unavailable source systems.",
                 "Run a read-only ecosystem refresh and check the affected service health.",
@@ -434,14 +455,14 @@ public class ManagedSystemsService {
                 .filter(log -> matchesSecurityRule(key, log))
                 .count();
         if (count < 2) return null;
-        return inboxItem("security-" + key, severity, "archiveos", "security", title,
+        return inboxItem("security-" + key, severity, ARCHIVE_OS, "security", title,
                 summary + " Count: " + count + ".", action, Instant.now().toString(), null, null, null, null, null);
     }
 
     private Map<String, Object> archiveOsHealthItem() {
         Map<String, Object> queue = repository.queueSummary();
         if (number(queue.get("failedCount")) <= 0) return null;
-        return inboxItem("archiveos-health-degraded", "high", "archiveos", "integration",
+        return inboxItem("archiveos-health-degraded", "high", ARCHIVE_OS, "integration",
                 "ArchiveOS internal health degraded", "ArchiveOS has failed workflow records.",
                 "Review failed workflow records and runtime timeline.", Instant.now().toString(), null, null, null, null, null);
     }
@@ -477,6 +498,13 @@ public class ManagedSystemsService {
         return merged;
     }
 
+    private Map<String, Object> requireInboxItem(String id) {
+        return pmInbox().stream()
+                .filter(item -> id != null && id.equals(item.get("id")))
+                .findFirst()
+                .orElseThrow(() -> new ManagedSystemsValidationException("PM inbox item not found."));
+    }
+
     private Map<String, Object> recommendedAction(List<Map<String, Object>> inbox) {
         Map<String, Object> item = inbox.stream().filter(row -> "open".equals(row.get("status"))).findFirst().orElse(null);
         if (item == null) return Map.of("title", "No urgent action required", "reason", "Managed systems are either normal or informational only.");
@@ -488,16 +516,25 @@ public class ManagedSystemsService {
         String project = string(task, "target_project", "").toLowerCase(Locale.ROOT);
         String source = String.valueOf(metadata.getOrDefault("source", "")).toLowerCase(Locale.ROOT);
         String projectId = String.valueOf(metadata.getOrDefault("project_id", "")).toLowerCase(Locale.ROOT);
-        if (project.contains("nexus") || source.contains("nexus") || projectId.contains("nexus")) return "archive-nexus";
-        if (project.contains("archiveos") || source.contains("archiveos")) return "archiveos";
-        return "archive-nexus";
+        if (project.contains("nexus") || source.contains("nexus") || projectId.contains("nexus")) return ARCHIVE_NEXUS;
+        if (project.contains("archiveos") || source.contains("archiveos") || source.contains("archive-os")) return ARCHIVE_OS;
+        return ARCHIVE_NEXUS;
     }
 
     private String systemIdForEvent(Map<String, Object> event) {
         String path = string(event, "request_path", "");
         if (path.contains("/atlas")) return "atlas-platform";
-        if (path.contains("/tasks") || path.contains("/contracts")) return "archive-nexus";
-        return "archiveos";
+        if (path.contains("/tasks") || path.contains("/contracts")) return ARCHIVE_NEXUS;
+        return ARCHIVE_OS;
+    }
+
+    private String canonicalManagedSystemId(String systemId) {
+        String normalized = systemId == null ? "" : systemId.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "archiveos", "archive-os" -> ARCHIVE_OS;
+            case "archive-logitics", "archive-logistics" -> ARCHIVE_LOGISTICS;
+            default -> normalized;
+        };
     }
 
     private Object stringMap(Map<String, Object> value, String key) {
