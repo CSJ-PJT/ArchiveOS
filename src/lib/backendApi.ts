@@ -645,6 +645,26 @@ export async function getManagedSystems() {
   return response.data;
 }
 
+export async function getManagedSystem(systemId: string) {
+  const response = await request<ApiEnvelope<ManagedSystemSummary>>(`/api/managed-systems/${encodeURIComponent(systemId)}`);
+  return response.data;
+}
+
+export async function getManagedSystemEvents(systemId: string) {
+  const response = await request<ApiEnvelope<Array<Record<string, unknown>>>>(`/api/managed-systems/${encodeURIComponent(systemId)}/events`);
+  return response.data;
+}
+
+export async function getManagedSystemWorkflows(systemId: string) {
+  const response = await request<ApiEnvelope<Array<Record<string, unknown>>>>(`/api/managed-systems/${encodeURIComponent(systemId)}/workflows`);
+  return response.data;
+}
+
+export async function getManagedSystemWorkLogs(systemId: string) {
+  const response = await request<ApiEnvelope<Array<Record<string, unknown>>>>(`/api/managed-systems/${encodeURIComponent(systemId)}/work-logs`);
+  return response.data;
+}
+
 export async function getPmInbox() {
   const response = await request<ApiEnvelope<PmInboxItem[]>>("/api/pm-inbox");
   return response.data;

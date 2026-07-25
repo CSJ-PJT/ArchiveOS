@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import {
   configuredBackendUrl, getAtlasOverview, getAuthSession, getEcosystemBalanceRecommendations, getEcosystemBalanceSummary, getEcosystemSummary, getEcosystemTopology,
   getExternalApprovals, getGameFinanceSummary, getHistorianStatus, getKnowledgeOverview, getLiveFlowRecentEvents, getLiveFlowSummary,
-  getLiveFlowTopology, getMcpRegistry, getMeshOverview, getPmTasks, getQueueSummary, getRuntimeTimeline, getWorkforceOverview, liveFlowStreamUrl,
+  getLiveFlowTopology, getManagedSystemsOverview, getMcpRegistry, getMeshOverview, getPmTasks, getQueueSummary, getRuntimeTimeline, getWorkforceOverview, liveFlowStreamUrl,
   type AuthSession, type AtlasOverview, type EcosystemBalanceSummary, type EcosystemSummary, type EcosystemTopology, type ExternalApprovalRequest,
   type GameFinanceSummary, type HistorianStatus, type KnowledgeOverview, type LiveFlowEvent, type LiveFlowSummary, type LiveFlowTopology,
   type McpRegistryEntry, type MeshOverview, type QueueSummary, type RuntimeTimelineEntry, type WorkforceOverview,
@@ -11,7 +11,7 @@ import {
   type PublicAccessStatus, type RuntimeEvent, type RuntimeVersion, type SecurityStatus, type SettlementAgencyGameSummary,
 } from "../lib/backendApi";
 import type { CommandRun, DailyReport, PmTask } from "../types/database";
-import { navigationItems, normalizeRoute, type CoreRoute } from "./navigation";
+import { navigationItems, parseConsoleLocation, servicesHash, type CoreRoute, type ServicesSubview } from "./navigation";
 import { Sidebar } from "../components/shared/Sidebar";
 import { Icon } from "../components/shared/Icon";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -45,7 +45,8 @@ type Result = { key: keyof AppData; value: unknown; error: string | null };
 async function settle(key: keyof AppData, fn: () => Promise<unknown>): Promise<Result> { try { return { key, value: await fn(), error: null }; } catch (error) { return { key, value: null, error: error instanceof Error ? error.message : String(error) }; } }
 
 function AppShellInner() {
-  const [route, setRouteState] = useState<CoreRoute>(() => routeFromLocation());
+  const [location, setLocation] = useState(() => locationFromWindow());
+  const route = location.route;
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [data, setData] = useState<AppData>(emptyData);
   const [streamState, setStreamState] = useState<"connecting" | "connected" | "fallback">("connecting");
@@ -55,18 +56,41 @@ function AppShellInner() {
   const eventIds = useRef(new Set<string>());
   const { locale, setLocale } = useI18n();
 
-  const navigate = useCallback((next: CoreRoute) => { window.history.pushState({}, "", `#/${next}`); setRouteState(next); setSidebarOpen(false); }, []);
-  useEffect(() => {
-    const requested = (window.location.hash.replace(/^#\/?/, "") || window.location.pathname.split("/").filter(Boolean).pop() || "").toLowerCase();
-    const canonical = normalizeRoute(requested);
-    if (requested && requested !== canonical) window.history.replaceState({}, "", `#/${canonical}`);
+  const navigate = useCallback((next: CoreRoute) => {
+    const nextLocation = parseConsoleLocation(`#/${next}`);
+    window.history.pushState({}, "", nextLocation.canonicalHash);
+    setLocation(nextLocation);
+    setSidebarOpen(false);
   }, []);
-  useEffect(() => { const onPopState = () => setRouteState(routeFromLocation()); window.addEventListener("popstate", onPopState); window.addEventListener("hashchange", onPopState); return () => { window.removeEventListener("popstate", onPopState); window.removeEventListener("hashchange", onPopState); }; }, []);
+  const navigateServices = useCallback((view: ServicesSubview, systemId?: string | null) => {
+    const nextLocation = parseConsoleLocation(servicesHash(view, systemId));
+    window.history.pushState({}, "", nextLocation.canonicalHash);
+    setLocation(nextLocation);
+    setSidebarOpen(false);
+  }, []);
+  useEffect(() => {
+    const initial = locationFromWindow();
+    if (window.location.hash !== initial.canonicalHash) window.history.replaceState({}, "", initial.canonicalHash);
+    setLocation(initial);
+  }, []);
+  useEffect(() => {
+    const onLocationChange = () => {
+      const nextLocation = locationFromWindow();
+      if (window.location.hash !== nextLocation.canonicalHash) window.history.replaceState({}, "", nextLocation.canonicalHash);
+      setLocation(nextLocation);
+    };
+    window.addEventListener("popstate", onLocationChange);
+    window.addEventListener("hashchange", onLocationChange);
+    return () => {
+      window.removeEventListener("popstate", onLocationChange);
+      window.removeEventListener("hashchange", onLocationChange);
+    };
+  }, []);
   useEffect(() => { document.body.classList.toggle("sidebar-open", sidebarOpen); return () => document.body.classList.remove("sidebar-open"); }, [sidebarOpen]);
 
   const refresh = useCallback(async () => {
     setData((current) => ({ ...current, loading: true }));
-    const loaders = loadersFor(route);
+    const loaders = loadersFor(route, location.servicesView);
     const results = await Promise.all(loaders.map(([key, fn]) => settle(key, fn)));
     setData((current) => {
       const next: AppData = { ...current, loading: false, refreshedAt: new Date().toISOString(), errors: {} };
@@ -74,7 +98,7 @@ function AppShellInner() {
       if (!next.auth) next.auth = publicAuth;
       return next;
     });
-  }, [route]);
+  }, [location.servicesView, route]);
   useEffect(() => { refresh(); }, [refresh]);
 
   useEffect(() => {
@@ -128,7 +152,23 @@ function AppShellInner() {
   }, [route]);
 
   const health = useMemo(() => data.ecosystem?.status === "HEALTHY" ? "healthy" : Object.keys(data.errors).length ? "warning" : "waiting", [data.ecosystem?.status, data.errors]);
-  const page = route === "dashboard" ? <ConsoleDashboardPage data={data} onNavigate={navigate} onRefresh={refresh} /> : route === "services" ? <ConsoleServicesPage data={data} /> : route === "operations" ? <ConsoleOperationsPage data={data} onRefresh={refresh} /> : route === "finance" ? <ConsoleFinancePage data={data} onRefresh={refresh} /> : route === "records" ? <ConsoleRecordsPage data={data} /> : <ConsoleSettingsPage data={data} onRefresh={refresh} backendOrigin={configuredBackendUrl} />;
+  const page = route === "dashboard"
+    ? <ConsoleDashboardPage data={data} onNavigate={navigate} onRefresh={refresh} />
+    : route === "services"
+      ? <ConsoleServicesPage
+          data={data}
+          view={location.servicesView}
+          managedSystemId={location.managedSystemId}
+          onViewChange={navigateServices}
+          onRefresh={refresh}
+        />
+      : route === "operations"
+        ? <ConsoleOperationsPage data={data} onRefresh={refresh} />
+        : route === "finance"
+          ? <ConsoleFinancePage data={data} onRefresh={refresh} />
+          : route === "records"
+            ? <ConsoleRecordsPage data={data} />
+            : <ConsoleSettingsPage data={data} onRefresh={refresh} backendOrigin={configuredBackendUrl} />;
   return <div className="app-shell"><Sidebar route={route} open={sidebarOpen} onNavigate={navigate} health={health} loading={data.loading} role={data.auth.role} />{sidebarOpen ? <button className="sidebar-scrim" type="button" aria-label={consoleText(locale, "common.closeMenu")} onClick={() => setSidebarOpen(false)} /> : null}<div className="content-shell"><header className="topbar"><button className="mobile-menu-button" type="button" aria-label={consoleText(locale, "common.openMenu")} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>☰</button><div><span className="eyebrow">ARCHIVEOS CONTROL TOWER</span><h1>{consoleText(locale, `nav.${route}`)}</h1></div><div className="topbar-status">{route === "dashboard" ? <span className={`stream-state stream-${streamState}`}>{streamState === "connected" ? `${consoleText(locale, "common.live")}${data.lastEventLatencyMs === null ? "" : ` · ${data.lastEventLatencyMs}ms`}` : streamState === "fallback" ? consoleText(locale, "common.reconnecting") : consoleText(locale, "common.connecting")}</span> : null}<LanguagePopover locale={locale} setLocale={setLocale} /><span className="last-sync">{data.refreshedAt ? `${consoleText(locale, "common.updated")} ${new Date(data.refreshedAt).toLocaleTimeString()}` : consoleText(locale, "common.loading")}</span><button className="icon-button" type="button" onClick={refresh} aria-label={consoleText(locale, "common.refresh")} title={consoleText(locale, "common.refresh")}><Icon name="refresh" /></button></div></header><main className="page-host" id="main-content">{page}</main></div></div>;
 }
 
@@ -143,14 +183,16 @@ function LanguagePopover({ locale, setLocale }: { locale: Locale; setLocale: (lo
   return <div className="language-popover"><button ref={triggerRef} type="button" className="language-trigger" aria-label={consoleText(locale, "common.language")} aria-expanded={open} aria-haspopup="menu" aria-controls={open ? menuId : undefined} onClick={() => setOpen((value) => !value)}><span aria-hidden="true">◎</span><b>{locale === "zh-CN" ? "ZH" : locale.toUpperCase()}</b></button>{open ? <div ref={menuRef} id={menuId} className="language-menu" role="menu">{languageOptions.map((option) => <button type="button" role="menuitemradio" aria-checked={locale === option.code} key={option.code} onClick={() => { setLocale(option.code); close(true); }}>{t(option.labelKey, locale)}</button>)}</div> : null}</div>;
 }
 
-function loadersFor(route: CoreRoute): Array<[keyof AppData, () => Promise<unknown>]> {
+function loadersFor(route: CoreRoute, servicesView: ServicesSubview = "status"): Array<[keyof AppData, () => Promise<unknown>]> {
   const auth: [keyof AppData, () => Promise<unknown>] = ["auth", getAuthSession];
   if (route === "dashboard") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["liveFlowTopology", getLiveFlowTopology], ["liveFlowEvents", () => getLiveFlowRecentEvents(30)], ["balance", getEcosystemBalanceSummary], ["balanceRecommendations", getEcosystemBalanceRecommendations]];
-  if (route === "services") return [auth, ["ecosystem", getEcosystemSummary], ["ecosystemTopology", getEcosystemTopology], ["atlas", getAtlasOverview]];
+  if (route === "services" && servicesView === "managed") return [auth, ["managedSystems", getManagedSystemsOverview]];
+  if (route === "services" && servicesView === "external") return [auth, ["atlas", getAtlasOverview]];
+  if (route === "services") return [auth, ["ecosystem", getEcosystemSummary], ["ecosystemTopology", getEcosystemTopology]];
   if (route === "operations") return [auth, ["mesh", getMeshOverview], ["workforce", getWorkforceOverview], ["queue", getQueueSummary], ["tasks", getPmTasks]];
   if (route === "finance") return [auth, ["ecosystem", getEcosystemSummary], ["balance", getEcosystemBalanceSummary], ["gameFinance", getGameFinanceSummary], ["externalApprovals", () => getExternalApprovals(50)]];
   if (route === "records") return [auth, ["liveFlowEvents", () => getLiveFlowRecentEvents(100)], ["knowledge", getKnowledgeOverview], ["historian", getHistorianStatus], ["timeline", () => getRuntimeTimeline(100)]];
   return [auth, ["mcpRegistry", getMcpRegistry]];
 }
-function routeFromLocation(): CoreRoute { const hash = window.location.hash.replace(/^#\/?/, ""); const path = window.location.pathname.split("/").filter(Boolean).pop(); return normalizeRoute(hash || path); }
+function locationFromWindow() { return parseConsoleLocation(window.location.hash, window.location.pathname); }
 export function AppShell() { return <ThemeProvider><I18nProvider><AppShellInner /></I18nProvider></ThemeProvider>; }
