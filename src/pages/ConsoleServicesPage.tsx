@@ -1,27 +1,55 @@
-import { useState } from "react";
+import type { KeyboardEvent } from "react";
 import type { AppData } from "../app/AppShell";
+import type { ServicesSubview } from "../app/navigation";
 import type { EcosystemServiceView } from "../lib/backendApi";
 import { StatusBadge, normalizeStatus } from "../components/shared/StatusBadge";
 import { DataState } from "../components/shared/DataState";
 import { useI18n } from "../i18n/I18nProvider";
 import { consoleText } from "../i18n/console";
+import { ManagedSystemsPage } from "./ManagedSystemsPage";
 
 const serviceRoles: Record<string, string> = { market: "수요·주문·매출", nexus: "제조·출하", logitics: "물류·운송비", logistics: "물류·운송비", ledger: "거래·원장·정산" };
 
-export function ConsoleServicesPage({ data }: { data: AppData }) {
+export function ConsoleServicesPage({
+  data,
+  view,
+  managedSystemId,
+  onViewChange,
+  onRefresh,
+}: {
+  data: AppData;
+  view: ServicesSubview;
+  managedSystemId: string | null;
+  onViewChange: (view: ServicesSubview, systemId?: string | null) => void;
+  onRefresh: () => Promise<void>;
+}) {
   const { locale } = useI18n();
-  const [tab, setTab] = useState<"core" | "external">("core");
   const services = Object.entries(data.ecosystem?.services ?? {});
   const healthyCount = services.filter(([, service]) => service.status === "HEALTHY").length;
   return <div className="console-page services-v4">
     <PageHeader title={consoleText(locale, "page.services.title")} description={consoleText(locale, "page.services.description")} />
-    <ConsoleTabs value={tab} onChange={setTab} items={[["core", "핵심 서비스"], ["external", "외부 연동"]]} />
-    {tab === "core" ? <>
+    <ConsoleTabs
+      value={view}
+      onChange={(next) => onViewChange(next)}
+      items={[["status", "서비스 상태"], ["managed", "관리 시스템"], ["external", "외부 연동"]]}
+    />
+    {view === "status" ? <section id="status-panel" role="tabpanel" aria-labelledby="status-tab" tabIndex={0}>
       <div className="service-summary-bar"><span>외부 수집 대상 {services.length} · 정상 수집 {healthyCount}/{services.length}</span><small>ArchiveOS Control Tower는 별도로 정상 동작하며, 외부 장애는 상태로 분리합니다.</small></div>
       {data.loading ? <DataState kind="loading" title="서비스 상태를 수집하는 중입니다." description="각 Archive 서비스의 읽기 전용 요약을 불러오고 있습니다." /> : null}
       {!data.loading && !services.length ? <DataState kind={Object.keys(data.errors).length ? "error" : "empty"} title={Object.keys(data.errors).length ? "서비스 상태를 수집하지 못했습니다." : "등록된 외부 서비스가 없습니다."} description={Object.keys(data.errors).length ? "연결 주소와 외부 서비스 상태를 확인한 뒤 다시 시도하세요." : "Service Registry 설정이 반영되면 서비스 카드가 표시됩니다."} /> : null}
       {services.length ? <div className="service-grid">{services.map(([key, service]) => <ServiceCard key={key} keyName={key} service={service} />)}<ArchiveOsCard /></div> : null}
-    </> : <ExternalSystems data={data} />}
+    </section> : null}
+    {view === "managed" ? <section id="managed-panel" role="tabpanel" aria-labelledby="managed-tab" tabIndex={0}>
+      <ManagedSystemsPage
+        data={data}
+        selectedSystemId={managedSystemId}
+        onSelectSystem={(systemId) => onViewChange("managed", systemId)}
+        onRefresh={onRefresh}
+      />
+    </section> : null}
+    {view === "external" ? <section id="external-panel" role="tabpanel" aria-labelledby="external-tab" tabIndex={0}>
+      <ExternalSystems data={data} />
+    </section> : null}
   </div>;
 }
 
@@ -50,7 +78,33 @@ function ArchiveOsCard() { return <article className="service-card archiveos-car
 function ExternalSystems({ data }: { data: AppData }) { return <div className="external-list external-systems"><article><span className="eyebrow">EXTERNAL / NON-CORE</span><h2>Atlas</h2><p>Archive 핵심 서비스와 분리된 외부 플랫폼 연동입니다. Atlas 상태는 핵심 생태계 상태를 바꾸지 않습니다.</p><dl className="external-definition"><dt>상태</dt><dd><StatusBadge status={data.atlas?.system?.current_status ?? "empty"}>{data.atlas?.system?.current_status ?? "연동 안 됨"}</StatusBadge></dd><dt>마지막 확인</dt><dd>{data.atlas?.system?.updated_at ? new Date(data.atlas.system.updated_at).toLocaleString() : "수집 없음"}</dd><dt>영향 범위</dt><dd>핵심 서비스 상태에 미포함</dd></dl></article><article><span className="eyebrow">LABS / OPTIONAL</span><h2>실험 연동</h2><p>기본값에서는 표시하거나 polling하지 않습니다. 설정에서 명시적으로 활성화한 경우에만 별도 Labs 영역으로 관리합니다.</p><StatusBadge status="empty">기본 비활성</StatusBadge></article></div>; }
 
 export function PageHeader({ title, description }: { title: string; description: string }) { return <section className="console-page-header"><span className="eyebrow">ARCHIVEOS</span><h2>{title}</h2><p>{description}</p></section>; }
-export function ConsoleTabs<T extends string>({ value, onChange, items }: { value: T; onChange: (value: T) => void; items: Array<[T, string]> }) { return <div className="console-tabs" role="tablist">{items.map(([id, label]) => <button key={id} id={`${id}-tab`} className={value === id ? "active" : ""} type="button" onClick={() => onChange(id)} role="tab" aria-selected={value === id} aria-controls={`${id}-panel`}>{label}</button>)}</div>; }
+export function ConsoleTabs<T extends string>({ value, onChange, items }: { value: T; onChange: (value: T) => void; items: Array<[T, string]> }) {
+  function moveFocus(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
+    if (!keys.includes(event.key)) return;
+    event.preventDefault();
+    const last = items.length - 1;
+    const next = event.key === "Home" ? 0
+      : event.key === "End" ? last
+        : event.key === "ArrowRight" ? (index + 1) % items.length
+          : (index - 1 + items.length) % items.length;
+    onChange(items[next][0]);
+    const tabs = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role='tab']");
+    window.requestAnimationFrame(() => tabs?.[next]?.focus());
+  }
+  return <div className="console-tabs" role="tablist" aria-label="서비스 화면 구분">{items.map(([id, label], index) => <button
+    key={id}
+    id={`${id}-tab`}
+    className={value === id ? "active" : ""}
+    type="button"
+    onClick={() => onChange(id)}
+    onKeyDown={(event) => moveFocus(event, index)}
+    role="tab"
+    tabIndex={value === id ? 0 : -1}
+    aria-selected={value === id}
+    aria-controls={`${id}-panel`}
+  >{label}</button>)}</div>;
+}
 function CopyButton({ value, label }: { value: string; label: string }) { return <button type="button" className="copy-button" aria-label={label} title={label} onClick={() => navigator.clipboard?.writeText(value).catch(() => undefined)}>복사</button>; }
 function readValue(source: Record<string, unknown>, paths: string[]) { for (const path of paths) { let value: unknown = source; for (const key of path.split(".")) value = value && typeof value === "object" ? (value as Record<string, unknown>)[key] : undefined; if (value !== undefined && value !== null) return value; } return null; }
 function hasFinanceData(summary: Record<string, unknown>) { return ["recognizedRevenue", "totalRevenue", "operatingProfit", "profit", "cashBalance"].some((key) => readValue(summary, [key, `economy.${key}`, `marketEconomy.${key}`]) != null); }
