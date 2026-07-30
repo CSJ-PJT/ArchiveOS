@@ -104,20 +104,26 @@ public class ManagedSystemsRepository {
 
     public Map<String, Object> updateInboxState(String id, String status, Map<String, Object> metadata) {
         ensureInboxStateTable();
-        String acknowledged = "acknowledged".equals(status) ? "now()" : "acknowledged_at";
-        String resolved = "resolved".equals(status) ? "now()" : "resolved_at";
         return jdbc.queryForObject("""
-                insert into public.pm_inbox_item_states(id, status, acknowledged_at, resolved_at, metadata)
+                insert into public.pm_inbox_item_states as current_state (id, status, acknowledged_at, resolved_at, metadata)
                 values (?, ?, case when ? = 'acknowledged' then now() else null end,
                            case when ? = 'resolved' then now() else null end, ?::jsonb)
                 on conflict (id) do update set
                   status = excluded.status,
-                  acknowledged_at = %s,
-                  resolved_at = %s,
+                  acknowledged_at = case
+                    when excluded.status = 'acknowledged' then now()
+                    else current_state.acknowledged_at
+                  end,
+                  resolved_at = case
+                    when excluded.status = 'resolved' then now()
+                    else current_state.resolved_at
+                  end,
                   updated_at = now(),
-                  metadata = pm_inbox_item_states.metadata || excluded.metadata
-                returning id, status, acknowledged_at, resolved_at, updated_at, metadata::text as metadata_json
-                """.formatted(acknowledged, resolved), this::inboxStateRow, id, status, status, status, Json.write(metadata == null ? Map.of() : metadata));
+                  metadata = current_state.metadata || excluded.metadata
+                returning current_state.id, current_state.status, current_state.acknowledged_at,
+                          current_state.resolved_at, current_state.updated_at,
+                          current_state.metadata::text as metadata_json
+                """, this::inboxStateRow, id, status, status, status, Json.write(metadata == null ? Map.of() : metadata));
     }
 
     public void recordTimeline(String eventType, String status, String title, String summary, String systemId, String referenceId, Map<String, Object> metadata) {
