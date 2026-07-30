@@ -19,14 +19,33 @@ services:
       ARCHIVE_INTEGRATION_SAFE_MODE: "true"
       ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE: "false"
       ARCHIVE_INTEGRATION_CALLBACK_ENABLED: "false"
-      ARCHIVE_WORLD_ADAPTER_MODE: mock
-      ARCHIVE_WORLD_MANIFEST_PATH: ""
+      # Only the World PM's verified handoff manifest is mounted. The World
+      # repository and generated roots are never mounted into ArchiveOS.
+      ARCHIVE_WORLD_ADAPTER_MODE: live
+      ARCHIVE_WORLD_MANIFEST_PATH: /world-handoff/archive-world-assets.json
+      ARCHIVE_WORLD_EVENT_LIMIT: "100"
       ARCHIVE_ECOSYSTEM_SERVICES_MARKET_BASE_URL: ${ARCHIVE_ECOSYSTEM_SERVICES_MARKET_BASE_URL:?Market endpoint is required}
       ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL: ${ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL:?Nexus endpoint is required}
       ARCHIVE_ECOSYSTEM_SERVICES_LOGITICS_BASE_URL: ${ARCHIVE_ECOSYSTEM_SERVICES_LOGISTICS_BASE_URL:?Logistics endpoint is required}
       ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_BASE_URL: ${ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_BASE_URL:?Ledger endpoint is required}
     volumes: !override
       - /srv/archiveos/vault:/vault
+      - /srv/archiveos/world-handoff/archive-world-assets.json:/world-handoff/archive-world-assets.json:ro
+    restart: unless-stopped
+
+  archive-world-mini:
+    image: ${ARCHIVE_WORLD_MINI_IMAGE:?ARCHIVE_WORLD_MINI_IMAGE must be the World PM immutable digest reference}
+    ports: !override []
+    expose:
+      - "4190"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /var/run:rw,noexec,nosuid,size=8m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
 
   backend:
@@ -51,6 +70,13 @@ services:
     build: !reset null
     ports: !override
       - "${ARCHIVEOS_FRONTEND_BIND_ADDRESS:?Private VM address is required}:8080:80"
+    volumes: !override
+      - ./deploy/oci/fullstack/nginx/archiveos-oci.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      archive-world-mini:
+        condition: service_started
     restart: unless-stopped
 
 networks:

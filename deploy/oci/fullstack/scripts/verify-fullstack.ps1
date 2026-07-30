@@ -37,7 +37,7 @@ function Json {
 }
 
 function Test-Sse {
-  param([string]$Path, [hashtable]$Headers, $Session)
+  param([string]$Path, [hashtable]$Headers, $Session, [string]$ExpectedEvent)
   $client = [System.Net.Http.HttpClient]::new()
   $client.Timeout = [TimeSpan]::FromSeconds(10)
   try {
@@ -61,17 +61,45 @@ function Test-Sse {
     }
     $stream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
     $reader = [System.IO.StreamReader]::new($stream)
-    $readTask = $reader.ReadLineAsync()
-    if (-not $readTask.Wait(5000)) { throw "SSE stream did not produce an initial frame in time." }
-    $line = $readTask.Result
-    if ([string]::IsNullOrWhiteSpace($line)) { throw "SSE stream returned no initial frame." }
-    return $true
+    $deadline = (Get-Date).AddSeconds(5)
+    $eventName = $null
+    while ((Get-Date) -lt $deadline) {
+      $readTask = $reader.ReadLineAsync()
+      $remaining = [Math]::Max(1, [int](($deadline - (Get-Date)).TotalMilliseconds))
+      if (-not $readTask.Wait($remaining)) { break }
+      $line = $readTask.Result
+      if ($line -match '^event:\s*(.+)$') { $eventName = $Matches[1].Trim() }
+      if ([string]::IsNullOrWhiteSpace($line) -and $eventName) { break }
+    }
+    if ([string]::IsNullOrWhiteSpace($eventName)) { throw "SSE stream returned no event frame." }
+    if ($ExpectedEvent -and $eventName -ne $ExpectedEvent) { throw "SSE expected $ExpectedEvent but received $eventName." }
+    return $eventName
   } finally {
     $client.Dispose()
   }
 }
 
 ExpectStatus -Path "/" -Method GET -Expected 200
+$miniRoot = Request -Path "/archive-world-mini/"
+if ($miniRoot.StatusCode -ne 200) { throw "Mini World root route failed." }
+ExpectStatus -Path "/archive-world-mini/index.html" -Method GET -Expected 200
+$miniStatusResponse = Request -Path "/archive-world-mini/status.json"
+$miniMapResponse = Request -Path "/archive-world-mini/world-mini-map.json"
+foreach ($response in @($miniStatusResponse, $miniMapResponse)) {
+  if ($response.StatusCode -ne 200 -or $response.Headers['Cache-Control'] -notmatch 'no-store|no-cache') {
+    throw "Mini World live data cache contract failed."
+  }
+  if ($response.Headers['X-Robots-Tag'] -notmatch 'noindex') { throw "Mini World canary indexing policy failed." }
+}
+$miniStatus = $miniStatusResponse.Content | ConvertFrom-Json
+$miniMap = $miniMapResponse.Content | ConvertFrom-Json
+if (@($miniMap.districts).Count -ne 13) { throw "Mini World District count mismatch." }
+if ($miniStatus.technicalStatus -ne 'PASS' -or $miniStatus.visualStatus -ne 'PARTIAL' -or $miniStatus.releaseGate -ne 'PARTIAL') {
+  throw "Mini World status contract failed."
+}
+$miniAsset = [regex]::Match($miniRoot.Content, '/archive-world-mini/assets/[^"''? ]+')
+if (-not $miniAsset.Success) { throw "Mini World HTML has no hashed asset reference." }
+ExpectStatus -Path $miniAsset.Value -Method GET -Expected 200
 $publicSession = Json -Path "/api/auth/session"
 if ($publicSession.data.role -ne "PUBLIC") { throw "Public session contract failed." }
 $health = Json -Path "/api/health"
@@ -116,6 +144,15 @@ if ($inbox.Count) {
 }
 
 $runtime = (Json -Path "/api/ai/runtime" -Session $admin).data
+$worldState = (Json -Path "/api/world/state" -Session $admin).data
+$worldEvents = (Json -Path "/api/world/events?limit=100" -Session $admin).data
+if ($worldState.mode -ne 'LIVE' -or $worldState.readOnly -ne $true -or $worldState.manifestStatus -ne 'READY') {
+  throw "World Adapter live/read-only manifest contract failed."
+}
+if (@($worldEvents.events).Count -lt 1 -or [string]::IsNullOrWhiteSpace([string](@($worldEvents.events)[0].eventId))) {
+  throw "World Adapter has no persisted Runtime event evidence."
+}
+$worldStream = Test-Sse -Path "/api/world/stream" -Headers @{} -Session $admin -ExpectedEvent 'world-state'
 $modelCheck = Json -Path "/api/ai/runtime/check" -Method POST -Session $admin
 if (-not $runtime.vectorStore.databaseConnected -or -not $runtime.vectorStore.extensionInstalled -or -not $runtime.vectorStore.indexReady) {
   throw "pgvector readiness failed."
@@ -231,7 +268,11 @@ if ($timeline.lineage.simulationRunIdDistinctCount -ne 1) {
   BatchJobStatus = $batchRun.status
   RpaApprovalRequired = $rpaData.task.approvalRequired
   RpaDecisionRecorded = ($rpaDecision.decision.action -eq "approve")
-  Sse = $ssePass
+  LiveFlowSseEvent = $ssePass
+  WorldAdapterMode = $worldState.mode
+  WorldEvents = @($worldEvents.events).Count
+  WorldSseEvent = $worldStream
+  WorldDistricts = @($miniMap.districts).Count
   CorrelationEvents = @($timeline.events).Count
   CorrelationSources = @($timeline.lineage.observedServices).Count
   CorrelationStatus = $timeline.lineage.chainStatus

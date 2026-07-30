@@ -23,6 +23,41 @@ Excluded:
 - product UI/backend/AI changes;
 - production DNS changes and production cutover.
 
+## Archive World Mini handoff boundary
+
+ArchiveOS never builds, edits, mounts, or commits the Archive-World repository.
+The only accepted input is a World PM release handoff with an immutable OCIR
+reference (`archive-world/mini@sha256:...`) or an equivalently immutable tar
+artifact. Before a canary deployment, run:
+
+```powershell
+.\deploy\oci\fullstack\scripts\verify-world-handoff.ps1 `
+  -HandoffRoot <verified-handoff-directory> `
+  -MiniArtifactRoot <extracted-immutable-artifact> `
+  -WorldSourceHead <40-character-world-sha> `
+  -ImageDigest <ocir-image@sha256:digest>
+```
+
+The handoff must contain the Mini viewer, `world-mini-map.json`, `status.json`,
+the dated snapshot/current-state evidence, a read-only adapter manifest, and a
+`provenance.json`. The provenance schema is `1.0.0` and must include the
+required source/checksum fields plus additive `bundlePath` and `bundleSha256`
+fields so the immutable viewer bundle can be verified. Its protection flags
+must all remain `false`: `canonical`, `v3Applied`, `runtimeMutation`, and
+`mainMerge`.
+
+The validator rejects missing source SHA, checksum mismatch, non-13-District
+maps, invalid coordinates, negative scales, anchor mismatch, failed technical
+status, or any protection-flag violation. `WORLD_MINI_VISUAL_PARTIAL` and
+`WORLD_MINI_RELEASE_PARTIAL` are intentionally preserved; ArchiveOS runtime
+health never upgrades World visual/release status.
+
+If `runtime-bindings.json` is not supplied by World PM and verified against the
+same World source SHA and manifest SHA, the Mini viewer must show
+`SPATIAL_BINDING_NOT_PROVIDED` and use only a whole-map/runtime-panel pulse.
+ArchiveOS must not infer a mapping from its five logical Runtime areas to the
+World's thirteen physical Districts.
+
 ## Current OCI inventory
 
 The read-only survey on 2026-07-30 found:
@@ -46,15 +81,31 @@ Internet
      -> private Compute VM :8080
         -> frontend Nginx
            -> backend:4000
-              -> archiveos-ai:4100
-                 -> postgres:5432
-                 -> /srv/archiveos/vault
-                 -> OpenAI HTTPS
+               -> archiveos-ai:4100
+                  -> postgres:5432
+                  -> /srv/archiveos/vault
+                  -> /srv/archiveos/world-handoff/archive-world-assets.json (read-only)
+                  -> OpenAI HTTPS
+         -> archive-world-mini:4190 (private only)
 ```
 
 Only frontend port 8080 is published on the VM, and its NSG accepts traffic
 only from the Load Balancer NSG. Backend, AI, and PostgreSQL have no host
-published ports. The Compute VNIC has no public IP.
+published ports. The World Mini container has no host port, database, source
+repository mount, or Generated-root mount. The Compute VNIC has no public IP.
+
+The frontend's OCI-only Nginx configuration keeps `/api/*` on the ArchiveOS
+backend and proxies the independent sibling route without removing its prefix:
+
+- `/archive-world-mini/*` -> `archive-world-mini:4190/archive-world-mini/*`
+- `/archive-world-mini/status.json` and `world-mini-map.json` -> `no-store`
+- hashed Mini assets -> immutable cache
+- `/api/world/stream` -> HTTP/1.1 unbuffered SSE with cache disabled
+
+Canary access must use a private hostname or approved CIDR and returns
+`X-Robots-Tag: noindex, nofollow` for Mini World content. Do not proceed to a
+public production cutover without Load Balancer/WAF allowlisting, VPN, bastion,
+or an approved authentication proxy.
 
 ## Paid default proposal
 
@@ -120,6 +171,12 @@ Create `/etc/archiveos/archiveos.oci.conf` for non-secret values based on
 instance principal and writes `/run/archiveos/archiveos.env` as root:root
 `0600`. It removes the file when the service stops.
 
+The non-secret OCI configuration also requires the immutable World image
+digest, World source HEAD, and adapter manifest SHA. The handoff manifest is
+stored only at `/srv/archiveos/world-handoff/archive-world-assets.json` and
+mounted read-only at `/world-handoff/archive-world-assets.json` into ArchiveOS
+AI.
+
 Never place secret values in Git, Terraform variables/state outputs, cloud-init,
 Docker build arguments, service unit files, or shell history.
 
@@ -180,7 +237,7 @@ The OCI overlay enforces:
 - `ARCHIVE_INTEGRATION_SAFE_MODE=true`
 - `ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE=false`
 - `ARCHIVE_INTEGRATION_CALLBACK_ENABLED=false`
-- `ARCHIVE_WORLD_ADAPTER_MODE=mock`
+- `ARCHIVE_WORLD_ADAPTER_MODE=live`
 
 Runtime service endpoints must be approved private or HTTPS endpoints. Localhost,
 `127.0.0.1`, and `host.docker.internal` are rejected by preflight.
@@ -211,6 +268,13 @@ never against the current production database.
 Browser parity additionally requires manual/automated screenshots at desktop
 and mobile widths for all Console V3 routes, refresh/history behavior, zero
 console errors, and asset checksum equality with the locally built frontend.
+
+World Mini canary smoke additionally requires the sibling route, `index.html`,
+status, map, hashed assets, no stale data cache, pan/zoom/reset/layer/LOD and
+validation UI, desktop/mobile screenshots, `/api/world/state`,
+`/api/world/events`, and `/api/world/stream`. The stream must distinguish
+persisted `world-event` frames from heartbeats and reconnect with bounded
+backoff. It must not create or invent Runtime events.
 
 ### Source-level integration blocker discovered before OCI provisioning
 
@@ -253,6 +317,8 @@ Canary success is not production approval. Report
 - RAG uses real OpenAI models and returns evidence;
 - all UI, auth, PM Inbox, Live Flow/SSE, Runtime, Knowledge, Batch, RPA, and
   Audit gates pass;
+- World source provenance, protection flags, Mini route/data/UI, and read-only
+  World adapter/stream gates pass;
 - backup restore is proven;
 - the existing deployment and OCI cannot both run scheduler/collector writes.
 
