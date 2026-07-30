@@ -40,6 +40,16 @@ variable "management_cidr" {
   default     = ""
 }
 
+variable "canary_allowed_cidrs" {
+  type        = set(string)
+  description = "Approved CIDRs allowed to reach the canary Load Balancer. Public 0.0.0.0/0 is prohibited."
+
+  validation {
+    condition     = length(var.canary_allowed_cidrs) > 0 && !contains(var.canary_allowed_cidrs, "0.0.0.0/0")
+    error_message = "Provide at least one approved canary CIDR; public Internet ingress is prohibited."
+  }
+}
+
 variable "certificate_id" {
   type        = string
   description = "OCI Certificates service certificate OCID for the canary hostname."

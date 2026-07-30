@@ -6,6 +6,7 @@ public_subnet_id     = "ocid1.subnet.oc1.ap-osaka-1.replace"
 compute_image_id     = "ocid1.image.oc1.ap-osaka-1.replace"
 ssh_authorized_keys  = "ssh-ed25519 REPLACE_WITH_APPROVED_PUBLIC_KEY"
 management_cidr      = "203.0.113.10/32"
+canary_allowed_cidrs = ["203.0.113.10/32"]
 certificate_id       = "ocid1.certificate.oc1.ap-osaka-1.replace"
 canary_hostname      = "archiveos-canary.example.invalid"
 backup_bucket_name   = "archiveos-private-backups"

@@ -62,10 +62,11 @@ resource "oci_core_network_security_group" "load_balancer" {
 }
 
 resource "oci_core_network_security_group_security_rule" "lb_https" {
+  for_each                  = var.canary_allowed_cidrs
   network_security_group_id = oci_core_network_security_group.load_balancer.id
   direction                 = "INGRESS"
   protocol                  = "6"
-  source                    = "0.0.0.0/0"
+  source                    = each.value
   source_type               = "CIDR_BLOCK"
   tcp_options {
     destination_port_range {
@@ -76,10 +77,11 @@ resource "oci_core_network_security_group_security_rule" "lb_https" {
 }
 
 resource "oci_core_network_security_group_security_rule" "lb_http" {
+  for_each                  = var.canary_allowed_cidrs
   network_security_group_id = oci_core_network_security_group.load_balancer.id
   direction                 = "INGRESS"
   protocol                  = "6"
-  source                    = "0.0.0.0/0"
+  source                    = each.value
   source_type               = "CIDR_BLOCK"
   tcp_options {
     destination_port_range {
