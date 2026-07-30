@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    ports: !override []
+    volumes: !override
+      - /srv/archiveos/postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  archiveos-ai:
+    image: ${ARCHIVEOS_AI_IMAGE:?ARCHIVEOS_AI_IMAGE must be an OCIR digest reference}
+    build: !reset null
+    ports: !override []
+    environment:
+      SPRING_PROFILES_ACTIVE: rc
+      ARCHIVEOS_PUBLIC_URL: ${ARCHIVEOS_PUBLIC_URL:?ARCHIVEOS_PUBLIC_URL is required}
+      ARCHIVEOS_SECURE_COOKIE: "true"
+      ARCHIVEOS_SCHEDULER_ENABLED: "false"
+      ARCHIVE_LIVE_FLOW_COLLECTOR_ENABLED: "false"
+      ARCHIVE_INTEGRATION_SAFE_MODE: "true"
+      ARCHIVE_INTEGRATION_ALLOW_EXTERNAL_WRITE: "false"
+      ARCHIVE_INTEGRATION_CALLBACK_ENABLED: "false"
+      ARCHIVE_WORLD_ADAPTER_MODE: mock
+      ARCHIVE_WORLD_MANIFEST_PATH: ""
+      ARCHIVE_ECOSYSTEM_SERVICES_MARKET_BASE_URL: ${ARCHIVE_ECOSYSTEM_SERVICES_MARKET_BASE_URL:?Market endpoint is required}
+      ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL: ${ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_BASE_URL:?Nexus endpoint is required}
+      ARCHIVE_ECOSYSTEM_SERVICES_LOGITICS_BASE_URL: ${ARCHIVE_ECOSYSTEM_SERVICES_LOGISTICS_BASE_URL:?Logistics endpoint is required}
+      ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_BASE_URL: ${ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_BASE_URL:?Ledger endpoint is required}
+    volumes: !override
+      - /srv/archiveos/vault:/vault
+    restart: unless-stopped
+
+  backend:
+    image: ${ARCHIVEOS_BACKEND_IMAGE:?ARCHIVEOS_BACKEND_IMAGE must be an OCIR digest reference}
+    build: !reset null
+    ports: !override []
+    environment:
+      ARCHIVEOS_AI_BASE_URL: http://archiveos-ai:4100
+      ARCHIVEOS_PUBLIC_URL: ${ARCHIVEOS_PUBLIC_URL:?ARCHIVEOS_PUBLIC_URL is required}
+      CORS_ALLOWED_ORIGINS: ${ARCHIVEOS_PUBLIC_URL:?ARCHIVEOS_PUBLIC_URL is required}
+      SUPABASE_URL: ""
+      SUPABASE_SERVICE_ROLE_KEY: ""
+      MCP_QUEUE_PATH: /runtime/queue
+      ARCHIVEOS_OBSIDIAN_VAULT_PATH: /vault
+    volumes: !override
+      - /srv/archiveos/runtime/queue:/runtime/queue
+      - /srv/archiveos/vault:/vault:ro
+    restart: unless-stopped
+
+  frontend:
+    image: ${ARCHIVEOS_FRONTEND_IMAGE:?ARCHIVEOS_FRONTEND_IMAGE must be an OCIR digest reference}
+    build: !reset null
+    ports: !override
+      - "${ARCHIVEOS_FRONTEND_BIND_ADDRESS:?Private VM address is required}:8080:80"
+    restart: unless-stopped
+
+networks:
+  archive-runtime:
+    name: ${COMPOSE_PROJECT_NAME:-archiveos-oci}-runtime
