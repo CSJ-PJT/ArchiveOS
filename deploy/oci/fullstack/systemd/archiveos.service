@@ -1,0 +1,20 @@
+[Unit]
+Description=ArchiveOS OCI full-stack
+Requires=docker.service archiveos-secret-loader.service
+After=docker.service network-online.target archiveos-secret-loader.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/archiveos
+Environment=COMPOSE_PROJECT_NAME=archiveos-oci
+ExecStartPre=/opt/archiveos/deploy/oci/fullstack/scripts/preflight.sh
+ExecStart=/usr/bin/docker compose --env-file /run/archiveos/archiveos.env -f docker-compose.yml -f docker-compose.rc.yml -f deploy/oci/fullstack/docker-compose.oci.yml up -d --pull always --wait
+ExecStop=/usr/bin/docker compose --env-file /run/archiveos/archiveos.env -f docker-compose.yml -f docker-compose.rc.yml -f deploy/oci/fullstack/docker-compose.oci.yml down
+ExecStopPost=/usr/bin/rm -f /run/archiveos/archiveos.env
+TimeoutStartSec=900
+TimeoutStopSec=180
+
+[Install]
+WantedBy=multi-user.target
