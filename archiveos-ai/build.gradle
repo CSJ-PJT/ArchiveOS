@@ -42,3 +42,28 @@ dependencies {
 tasks.named("test") {
     useJUnitPlatform()
 }
+
+sourceSets {
+    postgresIntegrationTest {
+        java.srcDir "src/postgresIntegrationTest/java"
+        resources.srcDir "src/postgresIntegrationTest/resources"
+        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+configurations {
+    postgresIntegrationTestImplementation.extendsFrom testImplementation
+    postgresIntegrationTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+tasks.register("postgresIntegrationTest", Test) {
+    description = "Runs PostgreSQL 16 integration tests. Requires -Darchiveos.pgtest.url."
+    group = "verification"
+    testClassesDirs = sourceSets.postgresIntegrationTest.output.classesDirs
+    classpath = sourceSets.postgresIntegrationTest.runtimeClasspath
+    useJUnitPlatform()
+    ["archiveos.pgtest.url", "archiveos.pgtest.user", "archiveos.pgtest.password"].each { key ->
+        if (System.getProperty(key) != null) systemProperty key, System.getProperty(key)
+    }
+}
