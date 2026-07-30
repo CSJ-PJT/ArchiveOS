@@ -306,6 +306,12 @@ cutover.
 services. It does not delete or reset PostgreSQL, Vault, runtime, or backup
 data.
 
+`rollback-world-mini.sh <previous-image@sha256:...>` is intentionally separate.
+It updates only the non-secret Mini image reference and recreates only
+`archive-world-mini`. Dynamic Docker DNS in the OCI Nginx route lets the
+existing ArchiveOS frontend keep proxying to the replacement; backend, AI,
+PostgreSQL, ArchiveOS data, and the World source remain untouched.
+
 ## Cutover gate
 
 Canary success is not production approval. Report
