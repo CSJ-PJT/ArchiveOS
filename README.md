@@ -6,13 +6,13 @@
 
 <br/>
 
-<p align="center">
-  <img src="docs/brand/archiveos-lockup.svg" width="820" alt="ArchiveOS" />
-</p>
-
 # ArchiveOS
 
 > 제조, 물류, 정산, 커머스 서비스를 통합 관제하는 Spring Boot 기반 AI/AX Control Tower
+
+<p align="center">
+  <img src="docs/brand/archiveos-lockup.svg" width="820" alt="ArchiveOS" />
+</p>
 
 ArchiveOS는 Archive Platform Ecosystem의 운영 관제 서비스입니다. Archive-Market, Archive-Nexus, Archive-Logistics, Archive-Ledger를 외부 운영 대상 시스템으로 등록하고, 상태 관제, 실시간 관제, workforce/capacity 관제, 승인 게이트웨이, 정책 근거, callback outbox, 감사 로그를 통합 관리합니다.
 
