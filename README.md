@@ -1,7 +1,7 @@
 # Archive-Project-Architecture
 
 <p align="center">
-  <img src="docs/architecture/archive-project-architecture.webp" width="900" alt="Archive 프로젝트 아키텍처" />
+  <img src="docs/architecture/archive-project-architecture.webp?v=4d74f37" width="900" alt="Archive 프로젝트 아키텍처" />
 </p>
 
 <br/>
