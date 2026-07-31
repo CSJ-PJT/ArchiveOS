@@ -1,3 +1,11 @@
+# Archive-Project-Architecture
+
+<p align="center">
+  <img src="docs/architecture/archive-project-architecture.webp" width="900" alt="Archive 프로젝트 아키텍처" />
+</p>
+
+<br/>
+
 <p align="center">
   <img src="docs/brand/archiveos-lockup.svg" width="820" alt="ArchiveOS" />
 </p>
