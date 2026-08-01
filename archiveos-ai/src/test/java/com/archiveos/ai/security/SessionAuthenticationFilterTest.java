@@ -104,6 +104,40 @@ class SessionAuthenticationFilterTest {
         assertThat(authentication[0]).isNull();
     }
 
+    @Test
+    void acceptsCanonicalAndLegacyAuthenticatedReadScopesAsTheSameNarrowRole() throws Exception {
+        for (String scope : java.util.List.of("authenticated:read", "runtime:read", "ledger:read")) {
+            SessionAuthenticationFilter filter = new SessionAuthenticationFilter(new SessionService(properties()));
+            MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/runtime/timeline");
+            request.addHeader("Authorization", "Bearer read-token");
+            request.addHeader("X-Archive-Source-System", "archive-os");
+            request.addHeader("X-Archive-Service-Scope", scope);
+            final Object[] principal = new Object[1];
+
+            filter.doFilter(request, new MockHttpServletResponse(), (servletRequest, servletResponse) ->
+                    principal[0] = SecurityContextHolder.getContext().getAuthentication().getPrincipal());
+
+            assertThat(principal[0]).isInstanceOf(PlatformSession.class);
+            assertThat(((PlatformSession) principal[0]).role()).isEqualTo(PlatformRole.AUTHENTICATED_READ);
+        }
+    }
+
+    @Test
+    void rejectsConflictingCanonicalAndLegacyReadHeaders() throws Exception {
+        SessionAuthenticationFilter filter = new SessionAuthenticationFilter(new SessionService(properties()));
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/runtime/timeline");
+        request.addHeader("Authorization", "Bearer read-token");
+        request.addHeader("X-Archive-Source-System", "archive-os");
+        request.addHeader("X-ArchiveOS-Source-System", "archive-market");
+        request.addHeader("X-Archive-Service-Scope", "authenticated:read");
+        final Object[] authentication = new Object[1];
+
+        filter.doFilter(request, new MockHttpServletResponse(), (servletRequest, servletResponse) ->
+                authentication[0] = SecurityContextHolder.getContext().getAuthentication());
+
+        assertThat(authentication[0]).isNull();
+    }
+
     private static SecurityProperties properties() {
         return new SecurityProperties("admin", "", "", false,
                 "market-token", "nexus-token", "logistics-token", "ledger-token",

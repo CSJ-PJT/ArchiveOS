@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "node scripts/smoke-test.mjs && node scripts/ui-ia-smoke-test.mjs",
+    "test": "node --test src/app/navigation.test.ts src/features/managedSystems/model.test.ts && node scripts/smoke-test.mjs && node scripts/ui-ia-smoke-test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

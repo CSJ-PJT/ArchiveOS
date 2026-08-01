@@ -1,70 +1,131 @@
-import { useMemo, useState } from "react";
-import type { AppRoute } from "../app/navigation";
+import { useEffect, useMemo, useState } from "react";
 import type { AppData } from "../app/AppShell";
+import { canonicalManagedSystemId } from "../app/navigation";
+import { DataState } from "../components/shared/DataState";
 import { MetricCard } from "../components/shared/MetricCard";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import { acknowledgePmInboxItem, resolvePmInboxItem } from "../lib/backendApi";
-import type { PmInboxItem } from "../lib/backendApi";
+import {
+  acknowledgePmInboxItem,
+  getManagedSystem,
+  getManagedSystemEvents,
+  getManagedSystemWorkflows,
+  getManagedSystemWorkLogs,
+  resolvePmInboxItem,
+  type ManagedSystemSummary,
+  type PmInboxItem,
+} from "../lib/backendApi";
+import {
+  canManagePmInbox,
+  executePmInboxAction,
+  managedSystemsUiState,
+  selectCoreManagedSystems,
+} from "../features/managedSystems/model";
 import { formatTimeAgo } from "./pageUtils";
+
+type DetailEvidence = {
+  system: ManagedSystemSummary;
+  events: Array<Record<string, unknown>>;
+  workflows: Array<Record<string, unknown>>;
+  workLogs: Array<Record<string, unknown>>;
+};
 
 export function ManagedSystemsPage({
   data,
+  selectedSystemId,
+  onSelectSystem,
   onRefresh,
-  onNavigate,
 }: {
   data: AppData;
+  selectedSystemId: string | null;
+  onSelectSystem: (systemId: string) => void;
   onRefresh: () => Promise<void>;
-  onNavigate: (route: AppRoute) => void;
 }) {
   const managed = data.managedSystems;
   const [busyItem, setBusyItem] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const canAct = data.auth.role === "ADMIN";
-  const systemsById = useMemo(() => new Map((managed?.systems || []).map((system) => [system.systemId, system])), [managed?.systems]);
+  const [detail, setDetail] = useState<DetailEvidence | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const canAct = canManagePmInbox(data.auth.role);
+  const coreSystems = useMemo(() => selectCoreManagedSystems(managed?.systems ?? []), [managed?.systems]);
+  const systemsById = useMemo(() => new Map(coreSystems.map((system) => [system.systemId, system])), [coreSystems]);
+  const canonicalSelection = canonicalManagedSystemId(selectedSystemId);
+
+  useEffect(() => {
+    if (!canonicalSelection) {
+      setDetail(null);
+      setDetailError(null);
+      setDetailLoading(false);
+      return;
+    }
+    let active = true;
+    setDetailLoading(true);
+    setDetailError(null);
+    setDetail((current) => current?.system.systemId === canonicalSelection ? current : null);
+    Promise.all([
+      getManagedSystem(canonicalSelection),
+      getManagedSystemEvents(canonicalSelection),
+      getManagedSystemWorkflows(canonicalSelection),
+      getManagedSystemWorkLogs(canonicalSelection),
+    ]).then(([system, events, workflows, workLogs]) => {
+      if (active) setDetail({ system, events, workflows, workLogs });
+    }).catch((error) => {
+      if (active) setDetailError(error instanceof Error ? error.message : "관리 시스템 상세 조회에 실패했습니다.");
+    }).finally(() => {
+      if (active) setDetailLoading(false);
+    });
+    return () => { active = false; };
+  }, [canonicalSelection]);
 
   async function updateInbox(id: string, action: "acknowledge" | "resolve") {
     setBusyItem(`${action}:${id}`);
     setMessage(null);
     try {
-      if (action === "acknowledge") await acknowledgePmInboxItem(id);
-      else await resolvePmInboxItem(id);
-      setMessage(`PM Inbox 항목을 ${action === "acknowledge" ? "확인" : "해결"} 처리했습니다.`);
-      await onRefresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : `PM Inbox 항목 ${action === "acknowledge" ? "확인" : "해결"} 처리에 실패했습니다.`);
+      const result = await executePmInboxAction(id, action, {
+        acknowledge: acknowledgePmInboxItem,
+        resolve: resolvePmInboxItem,
+      }, onRefresh);
+      setMessage(result.message);
     } finally {
       setBusyItem(null);
     }
   }
 
-  if (!managed) {
-    return <div className="empty-state">관리 시스템 관제 정보를 불러오지 못했습니다. archiveos-ai와 migration 상태를 확인하세요.</div>;
+  const uiState = managedSystemsUiState(data.loading, Boolean(managed), data.errors.managedSystems);
+  if (uiState === "loading") {
+    return <DataState kind="loading" title="관리 시스템을 불러오는 중입니다." description="Runtime 5개 시스템과 PM Inbox를 조회하고 있습니다." />;
+  }
+  if (uiState === "error") {
+    return <DataState kind="error" title="관리 시스템을 불러오지 못했습니다." description={data.errors.managedSystems} />;
+  }
+  if (uiState === "empty" || !managed) {
+    return <DataState kind="empty" title="관리 시스템 데이터가 없습니다." description="ArchiveOS 관리 시스템 API의 연결 상태를 확인하세요." />;
   }
 
   const recommended = managed.summary.recommendedPmAction;
   const openInbox = managed.pmInbox.filter((item) => item.status === "open");
 
-  return <div className="page-stack">
+  return <div className="page-stack managed-systems-v3" data-testid="managed-systems-view">
     <header className="page-heading">
       <div>
-        <span className="eyebrow">다중 시스템 운영</span>
+        <span className="eyebrow">RUNTIME 5 SYSTEMS</span>
         <h2>관리 시스템 관제</h2>
-        <p>ArchiveOS, Archive-Market, Archive-Nexus, Archive-Logistics, Archive-Ledger, Atlas 상태를 한 화면에서 확인합니다.</p>
+        <p>ArchiveOS, Market, Nexus, Logistics, Ledger의 상태 근거와 PM Inbox를 조회합니다.</p>
       </div>
       <button className="button button-secondary" type="button" onClick={() => void onRefresh()}>새로고침</button>
     </header>
 
-    <section className="kpi-command-grid" aria-label="Managed systems control tower summary">
-      <MetricCard label="관리 시스템" value={managed.summary.managedSystemsCount} status="healthy" description="등록된 운영 대상" />
+    <section className="kpi-command-grid" aria-label="관리 시스템 관제 요약">
+      <MetricCard label="관리 시스템" value={coreSystems.length} status="healthy" description="Archive Runtime core" />
       <MetricCard label="정상" value={managed.summary.normalCount} status="healthy" description="현재 정상인 시스템" />
       <MetricCard label="주의" value={managed.summary.degradedCount} status={managed.summary.degradedCount ? "degraded" : "healthy"} description="확인이 필요한 시스템" />
-      <MetricCard label="장애 후보" value={managed.summary.downCandidateCount} status={managed.summary.downCandidateCount ? "critical" : "healthy"} description="중요 실패 감지" />
+      <MetricCard label="연결 안 됨" value={managed.summary.notConnectedCount} status={managed.summary.notConnectedCount ? "warning" : "healthy"} description="운영 근거가 없는 시스템" />
       <MetricCard label="승인 대기" value={managed.summary.pendingApprovals} status={managed.summary.pendingApprovals ? "blocked" : "healthy"} description="PM 결정 대기" />
       <MetricCard label="열린 Inbox" value={managed.summary.openPmInboxItems} status={managed.summary.openPmInboxItems ? "warning" : "healthy"} description="권장 PM 조치" />
     </section>
 
-    <SectionCard title="권장 PM 조치" eyebrow="가장 먼저 볼 항목">
+    <SectionCard title="권장 PM 조치" eyebrow="현재 우선순위">
       <div className="healthy-empty">
         <StatusBadge status={recommended.severity || "healthy"}>{recommended.severity || "ready"}</StatusBadge>
         <strong>{recommended.title}</strong>
@@ -73,19 +134,28 @@ export function ManagedSystemsPage({
     </SectionCard>
 
     <section className="overview-layout">
-      <SectionCard title="관리 시스템 목록" eyebrow="상태 카드" className="span-7">
-        <div className="queue-bars">
-          {managed.systems.map((system) => <button key={system.systemId} type="button" onClick={() => navigateSystem(system.systemId, onNavigate)}>
+      <SectionCard title="관리 시스템 목록" eyebrow={`${coreSystems.length}/5 systems`} className="span-7">
+        {coreSystems.length ? <div className="queue-bars managed-system-list">
+          {coreSystems.map((system) => <button
+            key={system.systemId}
+            type="button"
+            data-testid={`managed-system-select-${system.systemId}`}
+            aria-pressed={canonicalSelection === system.systemId}
+            onClick={() => onSelectSystem(system.systemId)}
+          >
             <span>{system.name}</span>
             <strong>{system.status}</strong>
             <StatusBadge status={system.status}>{system.status}</StatusBadge>
-            <small>서비스 {system.normalServiceCount}/{system.serviceCount} · 승인 {system.pendingApprovalCount}건</small>
+            <small>{system.statusReason || "상태 근거 없음"}</small>
+            <small>서비스 {system.normalServiceCount}/{system.serviceCount} · 승인 {system.pendingApprovalCount} · 장애 {system.openIncidentCount}</small>
+            <small>확인 {system.lastCheckedAt ? formatTimeAgo(system.lastCheckedAt) : "데이터 없음"}</small>
           </button>)}
-        </div>
+        </div> : <DataState kind="empty" title="표시할 관리 시스템이 없습니다." description="Archive Runtime core 5개 시스템 응답을 확인하세요." />}
+        {coreSystems.length !== 5 ? <p className="small-note" role="status">예상 5개 중 {coreSystems.length}개만 조회되었습니다.</p> : null}
       </SectionCard>
 
       <SectionCard title="PM Inbox" eyebrow={`열린 항목 ${openInbox.length}건`} className="span-5">
-        {message ? <p className="small-note">{message}</p> : null}
+        {message ? <p className="small-note" role="status" aria-live="polite">{message}</p> : null}
         <div className="history-table">
           {managed.pmInbox.map((item) => <InboxRow
             key={item.id}
@@ -95,60 +165,63 @@ export function ManagedSystemsPage({
             busyItem={busyItem}
             onUpdate={updateInbox}
           />)}
-          {!managed.pmInbox.length ? <div className="empty-state">PM Inbox 항목이 없습니다. 현재 관제 상태는 안정적입니다.</div> : null}
+          {!managed.pmInbox.length ? <DataState kind="empty" title="PM Inbox 항목이 없습니다." description="현재 열린 권장 조치가 없습니다." /> : null}
         </div>
-        {!canAct ? <p className="small-note">Public, Operator, PM 세션은 PM Inbox를 조회할 수 있습니다. 확인/해결 처리는 Admin 권한이 필요합니다.</p> : null}
+        {!canAct ? <p className="small-note">현재 역할은 {data.auth.role}입니다. 목록은 조회할 수 있지만 확인·해결은 Admin만 수행할 수 있습니다.</p> : null}
       </SectionCard>
 
-      <SectionCard title="시스템 상세" eyebrow="시스템별 주요 정보" className="span-7">
-        <div className="history-table">
-          {managed.systems.map((system) => <article className="history-row" key={system.systemId}>
-            <summary>
-              <strong>{system.name}</strong>
-              <StatusBadge status={system.status}>{system.status}</StatusBadge>
-              <span>{system.type} · {system.environment}/{system.provider}</span>
-              <p>{system.statusReason}</p>
-            </summary>
-            <div className="detail-grid">
-              <span>최근 확인<strong>{system.lastCheckedAt ? formatTimeAgo(system.lastCheckedAt) : "데이터 없음"}</strong></span>
-              <span>Repository<strong>{system.repository || "n/a"}</strong></span>
-              <span>최근 workflow<strong>{system.latestWorkflowId || "n/a"}</strong></span>
-              <span>최근 작업 로그<strong>{system.latestWorkLogId || "n/a"}</strong></span>
-              {system.systemId === "archive-ledger" ? <>
-                <span>Role<strong>{system.role || "Synthetic Financial Operations Backend"}</strong></span>
-                <span>Base URL 설정<strong>{system.baseUrlConfigured ? "예" : "아니오"}</strong></span>
-                <span>승인 callback<strong>{system.approvalCallbackConfigured ? "설정됨" : "미설정"}</strong></span>
-                <span>Secret<strong>{system.secrets || "숨김"}</strong></span>
-                <span>Required env<strong>{(system.environmentRequirements || []).map((env) => `${env.name}${env.secret ? " (hidden)" : ""}`).join(", ") || "n/a"}</strong></span>
-              </> : null}
-              {system.systemId === "archive-market" ? <>
-                <span>Role<strong>{system.role || "Demand / Order / Revenue Source"}</strong></span>
-                <span>보유자금<strong>{formatMoney(system.marketSummary?.cashBalance)}</strong></span>
-                <span>수익<strong>{formatMoney(system.marketSummary?.totalRevenue)}</strong></span>
-                <span>비용<strong>{formatMoney(system.marketSummary?.totalCost)}</strong></span>
-                <span>손익<strong>{formatMoney(system.marketSummary?.profit)}</strong></span>
-                <span>재무 위험<strong>{system.marketSummary?.bankruptcyRisk || "UNKNOWN"}</strong></span>
-                <span>반품률<strong>{formatPercent(system.marketSummary?.returnRate)}</strong></span>
-                <span>클레임률<strong>{formatPercent(system.marketSummary?.claimRate)}</strong></span>
-              </> : null}
-            </div>
-          </article>)}
-        </div>
-      </SectionCard>
-
-      <SectionCard title="최근 시스템 간 이벤트" eyebrow="감사 로그와 연결된 운영 근거" className="span-5">
-        <div className="event-list compact">
-          {data.timeline.slice(0, 6).map((event) => <article className="event-row" key={event.id}>
-            <span>{formatTimeAgo(event.occurred_at)}</span>
-            <StatusBadge status={event.status}>{event.event_type}</StatusBadge>
-            <strong>{event.title}</strong>
-            <p>{event.summary || event.project_id || "기록된 요약이 없습니다."}</p>
-          </article>)}
-          {!data.timeline.length ? <div className="empty-state">타임라인 조회에는 Operator, PM 또는 Admin 권한이 필요합니다.</div> : null}
-        </div>
+      <SectionCard title="시스템 상세" eyebrow={canonicalSelection || "시스템을 선택하세요"} className="span-12">
+        {!canonicalSelection ? <DataState kind="empty" title="관리 시스템을 선택하세요." description="목록에서 시스템을 선택하면 상태 근거와 events, workflows, work-logs를 조회합니다." /> : null}
+        {canonicalSelection && detailLoading && !detail ? <DataState kind="loading" title="시스템 상세를 불러오는 중입니다." description={canonicalSelection} /> : null}
+        {detailError ? <DataState kind="error" title="시스템 상세 조회에 실패했습니다." description={detailError} /> : null}
+        {detail ? <SystemDetail evidence={detail} loading={detailLoading} /> : null}
       </SectionCard>
     </section>
   </div>;
+}
+
+function SystemDetail({ evidence, loading }: { evidence: DetailEvidence; loading: boolean }) {
+  const { system, events, workflows, workLogs } = evidence;
+  const publicUrl = safeUrl(system.publicUrl);
+  const repositoryUrl = safeUrl(system.repository);
+  return <div className="managed-system-detail" data-testid={`managed-system-${system.systemId}`}>
+    {loading ? <p className="small-note" role="status">상세 정보를 갱신하고 있습니다.</p> : null}
+    <article className="history-row">
+      <summary>
+        <strong>{system.name}</strong>
+        <StatusBadge status={system.status}>{system.status}</StatusBadge>
+        <span>{system.systemId} · {system.type} · {system.environment}/{system.provider}</span>
+        <p>{system.statusReason || "상태 근거가 없습니다."}</p>
+      </summary>
+      <div className="detail-grid">
+        <span>최근 확인<strong title={system.lastCheckedAt || undefined}>{system.lastCheckedAt ? formatTimeAgo(system.lastCheckedAt) : "데이터 없음"}</strong></span>
+        <span>서비스<strong>{system.normalServiceCount}/{system.serviceCount} 정상</strong></span>
+        <span>승인 대기<strong>{system.pendingApprovalCount}</strong></span>
+        <span>열린 장애/실패<strong>{system.openIncidentCount}</strong></span>
+        <span>Repository<strong>{repositoryUrl ? <a href={repositoryUrl} target="_blank" rel="noreferrer">{system.repository}</a> : system.repository || "n/a"}</strong></span>
+        <span>Public URL<strong>{publicUrl ? <a href={publicUrl} target="_blank" rel="noreferrer">{system.publicUrl}</a> : system.publicUrl || "n/a"}</strong></span>
+        <span>최근 workflow<strong>{system.latestWorkflowId || "n/a"}</strong></span>
+        <span>최근 audit<strong>{system.latestAuditEventId || "n/a"}</strong></span>
+        <span>최근 work-log<strong>{system.latestWorkLogId || "n/a"}</strong></span>
+        <span>Secret<strong>{system.secrets || "hidden"}</strong></span>
+      </div>
+    </article>
+    <div className="managed-evidence-grid">
+      <EvidenceList title="Events" items={events} />
+      <EvidenceList title="Workflows" items={workflows} />
+      <EvidenceList title="Work logs" items={workLogs} />
+    </div>
+  </div>;
+}
+
+function EvidenceList({ title, items }: { title: string; items: Array<Record<string, unknown>> }) {
+  return <section className="history-row" aria-label={title}>
+    <summary><strong>{title}</strong><span>{items.length}건</span></summary>
+    {items.length ? <ul className="managed-evidence-list">{items.slice(0, 10).map((item, index) => <li key={String(item.id ?? item.event_id ?? `${title}-${index}`)}>
+      <strong>{text(item.title ?? item.event_type ?? item.workflow_name ?? item.work_title ?? item.id, "기록")}</strong>
+      <span>{text(item.status ?? item.severity ?? item.created_at, "상태 정보 없음")}</span>
+    </li>)}</ul> : <p className="small-note">기록된 항목이 없습니다.</p>}
+  </section>;
 }
 
 function InboxRow({
@@ -189,22 +262,17 @@ function InboxRow({
   </article>;
 }
 
-function navigateSystem(systemId: string, onNavigate: (route: AppRoute) => void) {
-  if (systemId === "atlas-platform") onNavigate("atlas");
-  else if (systemId === "archive-market") onNavigate("managed");
-  else if (systemId === "archive-nexus" || systemId === "archive-logitics") onNavigate("overview");
-  else if (systemId === "archive-ledger") onNavigate("approvals");
-  else onNavigate("overview");
+function safeUrl(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
-function formatMoney(value: unknown) {
-  const number = typeof value === "number" ? value : Number(String(value ?? "0").replace(/,/g, ""));
-  if (!Number.isFinite(number)) return String(value ?? "0");
-  return new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 }).format(number);
-}
-
-function formatPercent(value: unknown) {
-  const number = typeof value === "number" ? value : Number(value ?? 0);
-  if (!Number.isFinite(number)) return String(value ?? "0");
-  return `${number}%`;
+function text(value: unknown, fallback: string) {
+  if (value == null || value === "") return fallback;
+  return String(value);
 }
