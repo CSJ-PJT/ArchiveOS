@@ -48,7 +48,10 @@ public class SecurityConfiguration {
                             .hasAnyRole("PM", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/batch/**", "/api/batches/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/live-flow/summary", "/api/live-flow/topology", "/api/runtime/public-access").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/**").hasAnyRole("AUTHENTICATED_READ", "OPERATOR", "PM", "ADMIN")
+                        // The public Control Tower is a read-only operational console. More
+                        // sensitive GET routes (security, audit, document/RAG content) are
+                        // matched above and remain role-gated; mutations stay admin-only.
+                        .requestMatchers(HttpMethod.GET, "/api/**").permitAll()
                         .requestMatchers("/api/**").hasRole("ADMIN")
                         .anyRequest().permitAll())
                 .addFilterBefore(sessionFilter, UsernamePasswordAuthenticationFilter.class)
