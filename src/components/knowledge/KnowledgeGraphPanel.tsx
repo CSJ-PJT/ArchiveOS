@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   getKnowledgeGraph,
   getKnowledgeGraphInsights,
@@ -111,8 +111,8 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
     if (!filteredGraph || filteredGraph.nodes.length === 0) {
       return (
         <KnowledgeEmptyState
-          title="아직 Knowledge Graph 데이터가 충분하지 않습니다."
-          body="Daily Report, Nightly Review, Architect Review, Historian Export가 실행되면 노드와 엣지가 생성됩니다."
+          title="지식 그래프 미구성"
+          body="지식 그래프는 별도 생성 경로가 필요하며 현재 노드/관계 데이터가 없습니다. RAG 데이터(문서/청크)는 별도 지표로 확인하세요."
         />
       );
     }

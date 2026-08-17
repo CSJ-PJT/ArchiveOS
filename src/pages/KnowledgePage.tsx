@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import type { AppData } from "../app/AppShell";
 import { MetricCard } from "../components/shared/MetricCard";
 import { SectionCard } from "../components/shared/SectionCard";
@@ -153,8 +153,8 @@ function ObsidianView({ data }: { data: AppData }) {
           <StatusBadge status={data.historian?.enabled ? "healthy" : "offline"}>{data.historian?.enabled ? "yes" : "no"}</StatusBadge>
         </div>
         <div>
-          <span>Last note</span>
-          <strong>{data.historian?.lastExport?.notePath || "No export yet"}</strong>
+          <span>마지막 내보낸 기록</span>
+          <strong>{data.historian?.lastExport?.notePath || "마지막 내보낸 기록 없음"}</strong>
         </div>
       </div>
     </SectionCard>

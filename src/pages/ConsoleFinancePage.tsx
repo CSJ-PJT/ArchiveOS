@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import type { AppData } from "../app/AppShell";
 import { MetricCard } from "../components/shared/MetricCard";
 import { SectionCard } from "../components/shared/SectionCard";
@@ -34,7 +34,7 @@ function EcosystemFinanceView({ data }: { data: AppData }) {
       <MetricCard label="총 비용" value={amount(totals?.cost)} hint="현재 수집된 서비스 기준" status={totals ? "healthy" : "empty"} />
       <MetricCard label="영업이익" value={amount(totals?.profit)} hint="수익 - 비용" status={totals?.profit == null ? "empty" : number(totals.profit) >= 0 ? "healthy" : "warning"} />
       <MetricCard label="보유자금" value={knownCash == null ? "데이터 없음" : amount(knownCash)} hint="현금값을 제공한 서비스 합계" status={knownCash == null ? "empty" : "working"} />
-      <MetricCard label="정산 대기" value={approvals.length ? waitingSettlement.toLocaleString() : "데이터 없음"} hint="승인·콜백 상태 기준" status={waitingSettlement > 0 ? "warning" : approvals.length ? "healthy" : "empty"} />
+      <MetricCard label="미결 승인" value={approvals.length ? waitingSettlement.toLocaleString() : "데이터 없음"} hint="전체 기간 기준 승인·콜백 상태" status={waitingSettlement > 0 ? "warning" : approvals.length ? "healthy" : "empty"} />
       <MetricCard label="균형 상태" value={balanceLabel(data.balance?.balanceStatus)} hint={data.balance?.reviewReason || "마지막 계산 기준"} status={partial ? "empty" : data.balance?.balanceStatus === "COMPLETE_BALANCED" ? "healthy" : "warning"} />
     </section>
     {partial ? <div className="finance-data-note"><strong>부분 수집 상태</strong><span>일부 서비스의 재무 Runtime Mesh가 아직 값을 제공하지 않습니다. 데이터 없음은 실제 0원이 아니며, 전체 균형을 확정하지 않습니다.</span></div> : null}

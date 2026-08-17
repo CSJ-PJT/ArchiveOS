@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import type { AppData } from "../app/AppShell";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
@@ -107,13 +107,13 @@ export function HistoryPage({ data }: { data: AppData }) {
             {Object.entries(data.kpi?.productivity || {}).map(([key, value]) => (
               <div className="kpi-row" key={key}>
                 <span>{key}</span>
-                <strong>{value ?? "insufficient data"}</strong>
+                <strong>{value == null ? "KPI 이력 데이터 없음" : value}</strong>
               </div>
             ))}
             {Object.entries(data.kpi?.quality || {}).map(([key, value]) => (
               <div className="kpi-row" key={key}>
                 <span>{key}</span>
-                <strong>{value ?? "insufficient data"}</strong>
+                <strong>{value == null ? "KPI 이력 데이터 없음" : value}</strong>
               </div>
             ))}
           </div>
@@ -128,7 +128,7 @@ function TimelineRows({
 }: {
   rows: Array<{ id: string; time: string; type: string; status: string; target: string; summary: string }>;
 }) {
-  if (rows.length === 0) return <div className="empty-state">No records available for this filter.</div>;
+  if (rows.length === 0) return <div className="empty-state">해당 필터의 기록이 없습니다.</div>;
   return (
     <div className="history-table">
       {rows.map((row) => (

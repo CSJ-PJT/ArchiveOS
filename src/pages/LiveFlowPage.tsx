@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { AppData } from "../app/AppShell";
 import { MetricCard } from "../components/shared/MetricCard";
@@ -163,9 +163,9 @@ export function LiveFlowPage({ data, onRefresh }: { data: AppData; onRefresh: ()
       {message ? <p className="small-note">{message}</p> : null}
 
       <section className="live-flow-metrics compact-mesh-kpis">
-        <MetricCard label="활성 흐름" value={summary.active_flows ?? 0} status={(summary.active_flows ?? 0) > 0 ? "working" : "idle"} description="최근 구간" />
-        <MetricCard label="최근 이벤트" value={summary.recent_events ?? 0} status={(summary.recent_events ?? 0) > 0 ? "healthy" : "empty"} description={freshnessStatusLabel(freshnessStatus)} />
-        <MetricCard label="승인 대기" value={summary.pending_approvals ?? 0} status={(summary.pending_approvals ?? 0) > 0 ? "blocked" : "healthy"} description="승인 게이트" />
+        <MetricCard label="최근 30분 이벤트" value={summary.active_flows ?? 0} status={(summary.active_flows ?? 0) > 0 ? "working" : "idle"} description="business 이벤트 30분 집계" />
+        <MetricCard label="최근 24시간 이벤트" value={summary.recent_events ?? 0} status={(summary.recent_events ?? 0) > 0 ? "healthy" : "empty"} description="최근 24시간 수신 이벤트" />
+        <MetricCard label="미결 승인" value={summary.pending_approvals ?? 0} status={(summary.pending_approvals ?? 0) > 0 ? "blocked" : "healthy"} description="외부 승인 PENDING 누적" />
         <MetricCard label="지연/병목" value={summary.delayed_shipments ?? 0} status={(summary.delayed_shipments ?? 0) > 0 ? "warning" : (data.workforce?.summary.totalBacklog ?? 0) > 0 ? "warning" : "healthy"} description={workforceWarning} />
         <MetricCard label="오류/실패" value={summary.failed_callbacks ?? 0} status={(summary.failed_callbacks ?? 0) > 0 ? "critical" : "healthy"} description="콜백·수집 실패" />
         <MetricCard label="최근 이벤트 시각" value={latestEvent ? formatTimeAgo(latestEvent) : "없음"} status={freshnessBadgeStatus(freshnessStatus)} description={`파이프라인: ${pipelineStatusLabel(runtime?.pipelineStatus || freshnessStatus)}`} />
