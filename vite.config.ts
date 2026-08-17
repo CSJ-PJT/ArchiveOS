@@ -2,6 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
+  // The OCI edge serves the public console below /archiveos/. Local Docker
+  // continues to use the root path unless the release build opts in.
+  base: process.env.VITE_PUBLIC_BASE ?? "/",
   plugins: [react()],
   define: {
     __ARCHIVEOS_BUILD_TIME__: JSON.stringify(new Date().toISOString()),

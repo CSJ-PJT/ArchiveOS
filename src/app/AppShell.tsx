@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
-  configuredBackendUrl, getAtlasOverview, getAuthSession, getEcosystemBalanceRecommendations, getEcosystemBalanceSummary, getEcosystemSummary, getEcosystemTopology,
-  getExternalApprovals, getGameFinanceSummary, getHistorianStatus, getKnowledgeOverview, getLiveFlowRecentEvents, getLiveFlowSummary,
-  getLiveFlowTopology, getMcpRegistry, getMeshOverview, getPmTasks, getQueueSummary, getRuntimeTimeline, getWorkforceOverview, liveFlowStreamUrl,
+  configuredBackendUrl, getAiRuntime, getAtlasOverview, getAuthSession, getDashboardData, getEcosystemBalanceRecommendations, getEcosystemBalanceSummary, getEcosystemSummary, getEcosystemTopology,
+  getEndpointHealth, getExternalApprovals, getGameFinanceSummary, getHistorianStatus, getKnowledgeOverview, getLatestBatchStatus, getLatestDailyReport, getLiveFlowRecentEvents, getLiveFlowSummary,
+  getLiveFlowTopology, getLocalRuntimeStatus, getMcpRegistry, getMeshOverview, getPlatformReadiness, getPmTasks, getPublicAccessStatus, getQueueSummary, getRuntimeTimeline, getRuntimeVersion, getSecurityStatus, getWorkforceOverview, liveFlowStreamUrl,
   type AuthSession, type AtlasOverview, type EcosystemBalanceSummary, type EcosystemSummary, type EcosystemTopology, type ExternalApprovalRequest,
   type GameFinanceSummary, type HistorianStatus, type KnowledgeOverview, type LiveFlowEvent, type LiveFlowSummary, type LiveFlowTopology,
   type McpRegistryEntry, type MeshOverview, type QueueSummary, type RuntimeTimelineEntry, type WorkforceOverview,
@@ -147,10 +147,24 @@ function loadersFor(route: CoreRoute): Array<[keyof AppData, () => Promise<unkno
   const auth: [keyof AppData, () => Promise<unknown>] = ["auth", getAuthSession];
   if (route === "dashboard") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["liveFlowTopology", getLiveFlowTopology], ["liveFlowEvents", () => getLiveFlowRecentEvents(30)], ["balance", getEcosystemBalanceSummary], ["balanceRecommendations", getEcosystemBalanceRecommendations]];
   if (route === "services") return [auth, ["ecosystem", getEcosystemSummary], ["ecosystemTopology", getEcosystemTopology], ["atlas", getAtlasOverview]];
-  if (route === "operations") return [auth, ["mesh", getMeshOverview], ["workforce", getWorkforceOverview], ["queue", getQueueSummary], ["tasks", getPmTasks]];
+  if (route === "operations") return [auth, ["dashboard", getDashboardData], ["mesh", getMeshOverview], ["workforce", getWorkforceOverview], ["queue", getQueueSummary], ["tasks", getPmTasks]];
   if (route === "finance") return [auth, ["ecosystem", getEcosystemSummary], ["balance", getEcosystemBalanceSummary], ["gameFinance", getGameFinanceSummary], ["externalApprovals", () => getExternalApprovals(50)]];
   if (route === "records") return [auth, ["liveFlowEvents", () => getLiveFlowRecentEvents(100)], ["knowledge", getKnowledgeOverview], ["historian", getHistorianStatus], ["timeline", () => getRuntimeTimeline(100)]];
-  return [auth, ["mcpRegistry", getMcpRegistry]];
+  return [
+    auth,
+    ["endpointHealth", getEndpointHealth],
+    ["platformReadiness", getPlatformReadiness],
+    ["aiRuntime", getAiRuntime],
+    ["knowledge", getKnowledgeOverview],
+    ["historian", getHistorianStatus],
+    ["runtime", getLocalRuntimeStatus],
+    ["mcpRegistry", getMcpRegistry],
+    ["latestBatch", getLatestBatchStatus],
+    ["dailyReport", getLatestDailyReport],
+    ["publicAccess", getPublicAccessStatus],
+    ["security", getSecurityStatus],
+    ["runtimeVersion", getRuntimeVersion],
+  ];
 }
 function routeFromLocation(): CoreRoute { const hash = window.location.hash.replace(/^#\/?/, ""); const path = window.location.pathname.split("/").filter(Boolean).pop(); return normalizeRoute(hash || path); }
 export function AppShell() { return <ThemeProvider><I18nProvider><AppShellInner /></I18nProvider></ThemeProvider>; }

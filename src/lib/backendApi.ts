@@ -1998,7 +1998,10 @@ export async function getKpiOverview(range: KpiRange = "7d") {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${backendUrl}${path}`, { credentials: "include", ...init });
+    // Operational views must not reuse a previously empty or stale API response.
+    // The live console already owns its refresh cadence, so each read should
+    // reflect the current PostgreSQL-backed service state.
+    response = await fetch(`${backendUrl}${path}`, { credentials: "include", cache: "no-store", ...init });
   } catch {
     throw new Error(
       `Backend is unreachable at ${backendUrl}. Start the ArchiveOS backend and refresh the dashboard.`,

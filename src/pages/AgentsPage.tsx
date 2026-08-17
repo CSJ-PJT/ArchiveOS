@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import type { AppData } from "../app/AppShell";
 import { Icon } from "../components/shared/Icon";
 import { SectionCard } from "../components/shared/SectionCard";
@@ -10,6 +10,7 @@ const preferredOrder = ["implementer", "reviewer", "architect", "historian", "lo
 
 export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () => Promise<void> }) {
   const agents = [...(data.mesh?.agents || [])].sort((a, b) => preferredOrder.indexOf(a.id) - preferredOrder.indexOf(b.id));
+  const registeredAgents = data.dashboard?.agents ?? [];
   const active = agents.filter((agent) => ["detected", "working", "clear", "enabled"].includes(agent.status)).length;
   const warning = agents.filter((agent) => ["warning", "blocked"].includes(agent.status)).length;
   const canControl = data.auth.role === "ADMIN";
@@ -42,7 +43,8 @@ export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () =
       </header>
 
       <section className="summary-strip agent-summary">
-        <Summary label="등록 에이전트" value={agents.length} status="healthy" />
+        <Summary label="DB 등록 에이전트" value={registeredAgents.length} status={registeredAgents.length ? "healthy" : "inactive"} />
+        <Summary label="Runtime 에이전트" value={agents.length} status={agents.length ? "healthy" : "inactive"} />
         <Summary label="활성 에이전트" value={active} status={active > 0 ? "working" : "inactive"} />
         <Summary label="주의 필요" value={warning} status={warning > 0 ? "warning" : "healthy"} />
         <Summary label="상호작용" value={data.mesh?.recentInteractions.length || 0} status="healthy" />
@@ -68,7 +70,7 @@ export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () =
       </SectionCard>
 
       <SectionCard title="에이전트 모니터" eyebrow="운영 역할과 활동 기록">
-        {agents.length === 0 ? <div className="empty-state">로컬 에이전트 runtime이 연결되지 않았습니다. runtime을 시작하면 운영 기록을 불러옵니다.</div> : null}
+        {agents.length === 0 ? <div className="empty-state">로컬 에이전트 실행이 감지되지 않았습니다.</div> : null}
         <div className="agent-card-grid">
           {agents.map((agent) => (
             <article className="agent-card" key={agent.id} tabIndex={0}>
@@ -84,6 +86,15 @@ export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () =
             </article>
           ))}
         </div>
+      </SectionCard>
+
+      <SectionCard title="DB 에이전트 레지스트리" eyebrow="ARCHIVEOS POSTGRESQL">
+        {registeredAgents.length ? <div className="agent-card-grid">{registeredAgents.map((agent) => (
+          <article className="agent-card" key={agent.id}>
+            <div className="agent-card-icon"><Icon name="agents" size={20} /></div>
+            <div className="agent-card-main"><div className="agent-card-title"><div><strong>{agent.name}</strong><span>{agent.role}</span></div><StatusBadge status={agent.status === "failed" ? "warning" : agent.status === "working" ? "working" : "waiting"}>{agent.status}</StatusBadge></div><p>{agent.current_task || "현재 배정된 작업이 없습니다."}</p><div className="agent-evidence"><span>ArchiveOS PostgreSQL</span><span>갱신 {formatTimeAgo(agent.updated_at)}</span></div></div>
+          </article>
+        ))}</div> : <div className="empty-state">등록된 DB 에이전트가 없습니다.</div>}
       </SectionCard>
 
       <SectionCard title="최근 Handoff" eyebrow="에이전트 간 운영 기록">
