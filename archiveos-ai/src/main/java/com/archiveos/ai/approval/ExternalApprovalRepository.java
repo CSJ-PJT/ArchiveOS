@@ -156,9 +156,7 @@ public class ExternalApprovalRepository {
         try {
             return jdbc.queryForMap("""
                     select
-                      count(*) filter (where status = 'PENDING')::int as pending,
-                      count(*) filter (where callback_status = 'CALLBACK_FAILED')::int as callback_failed,
-                      count(*)::int as total
+                      count(*) filter (where status = 'PENDING')::int as pending,\n                      count(*) filter (where status = 'PENDING' and callback_status is distinct from 'CALLBACK_COMPLETED' and decided_at is null)::int as actionable_pending,\n                      count(*) filter (where callback_status = 'CALLBACK_FAILED')::int as callback_failed,\n                      count(*)::int as total
                     from public.external_approval_requests
                     """);
         } catch (DataAccessException error) {
@@ -272,3 +270,4 @@ public class ExternalApprovalRepository {
         return timestamp == null ? null : timestamp.toInstant().toString();
     }
 }
+

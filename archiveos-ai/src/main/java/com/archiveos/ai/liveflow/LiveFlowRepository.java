@@ -18,6 +18,17 @@ public class LiveFlowRepository {
     private final JdbcTemplate jdbc;
     private final LiveFlowEventBroadcaster broadcaster;
     private final WorldEventBroadcaster worldBroadcaster;
+    private static final String BUSINESS_EVENT_FILTER = """
+            not (
+              lower(coalesce(event_type, '')) like '%heartbeat%' or
+              lower(coalesce(event_type, '')) like '%health%' or
+              lower(coalesce(event_type, '')) like '%availability%' or
+              lower(coalesce(event_type, '')) like '%collector%' or
+              lower(coalesce(event_type, '')) in ('service_unavailable', 'service_degraded') or
+              lower(coalesce(event_type, '')) like '%system%' or
+              lower(coalesce(metadata->>'eventCategory', '')) in ('heartbeat', 'health', 'availability', 'collector', 'system')
+            )
+            """;
 
     public LiveFlowRepository(JdbcTemplate jdbc, LiveFlowEventBroadcaster broadcaster, WorldEventBroadcaster worldBroadcaster) {
         this.jdbc = jdbc;
@@ -111,18 +122,96 @@ public class LiveFlowRepository {
         try {
             return jdbc.queryForMap("""
                     select
-                      count(*) filter (where occurred_at > now() - interval '30 minutes')::int as active_flows,
-                      count(*) filter (where received_at > now() - interval '24 hours')::int as recent_events,
+                      count(distinct event_id) filter (where occurred_at > now() - interval '30 minutes' and """ + BUSINESS_EVENT_FILTER + """
+                      )::int as active_flows,
+                      count(*) filter (where occurred_at > now() - interval '24 hours'
+                         and """ + BUSINESS_EVENT_FILTER + """
+                      )::int as recent_events,
                       count(*) filter (where status = 'approval_required')::int as pending_approvals,
                       count(*) filter (where status = 'delayed')::int as delayed_shipments,
                       count(*) filter (where event_type in ('CALLBACK_FAILED', 'ledger_callback_failed') or status = 'failed')::int as failed_callbacks,
                       count(distinct source_system_id) filter (where status = 'unavailable')::int as degraded_systems,
-                      max(occurred_at) as latest_event_at
+                      max(occurred_at) filter (where """ + BUSINESS_EVENT_FILTER + """
+                      ) as latest_event_at
                     from public.ecosystem_flow_event
                     """);
         } catch (DataAccessException error) {
             return Map.of("active_flows", 0, "recent_events", 0, "pending_approvals", 0,
                     "delayed_shipments", 0, "failed_callbacks", 0, "degraded_systems", 0);
+        }
+    }
+
+    public Long businessEventCountByNode(String sourceSystem, long minutes) {
+        try {
+            Long value = jdbc.queryForObject("""
+                select count(distinct event_id)
+                  from public.ecosystem_flow_event
+                 where source_system_id = ?
+                   and occurred_at > now() - (?::int || ' minutes')::interval
+                   and """ + BUSINESS_EVENT_FILTER + """
+                """, Long.class, sourceSystem, minutes);
+            return value == null ? 0L : value;
+        } catch (DataAccessException error) {
+            return 0L;
+        }
+    }
+
+    public Instant lastBusinessEventAtByNode(String sourceSystem) {
+        try {
+            return queryInstant("""
+                select max(occurred_at)
+                  from public.ecosystem_flow_event
+                 where source_system_id = ?
+                   and """ + BUSINESS_EVENT_FILTER + """
+                """, sourceSystem);
+        } catch (DataAccessException error) {
+            return null;
+        }
+    }
+
+    public List<Map<String, Object>> latestBusinessEvents(int limit) {
+        try {
+            return jdbc.query("""
+                    select * from public.ecosystem_flow_event
+                     where """ + BUSINESS_EVENT_FILTER + """
+                     order by occurred_at desc, id desc
+                     limit ?
+                """, this::row, Math.max(1, Math.min(limit, 200)));
+        } catch (DataAccessException error) {
+            return List.of();
+        }
+    }
+
+    public Map<String, Instant> latestBusinessEventByNode() {
+        try {
+            List<Map<String, Object>> rows = jdbc.query("""
+                    select node, max(occurred_at) as latest_event_at
+                      from (
+                        select from_node as node, occurred_at
+                          from public.ecosystem_flow_event
+                         where """ + BUSINESS_EVENT_FILTER + """
+                           and nullif(trim(coalesce(from_node, '')), '') is not null
+                        union all
+                        select to_node as node, occurred_at
+                          from public.ecosystem_flow_event
+                         where """ + BUSINESS_EVENT_FILTER + """
+                           and nullif(trim(coalesce(to_node, '')), '') is not null
+                      ) node_events
+                     group by node
+                    """, (rs, index) -> {
+                        Map<String, Object> row = new LinkedHashMap<>();
+                        row.put("node", rs.getString("node"));
+                        row.put("latest_event_at", rs.getTimestamp("latest_event_at").toInstant());
+                        return row;
+                    });
+            Map<String, Instant> value = new LinkedHashMap<>();
+            for (Map<String, Object> row : rows) {
+                Object occurred = row.get("latest_event_at");
+                if (occurred instanceof Instant instant) value.put(String.valueOf(row.get("node")), instant);
+            }
+            return value;
+        } catch (DataAccessException error) {
+            return Map.of();
         }
     }
 
@@ -154,5 +243,17 @@ public class LiveFlowRepository {
     private String instant(ResultSet rs, String name) throws SQLException {
         Timestamp timestamp = rs.getTimestamp(name);
         return timestamp == null ? null : timestamp.toInstant().toString();
+    }
+
+    private Instant queryInstant(String sql, Object... args) {
+        try {
+            Object value = jdbc.queryForObject(sql, Object.class, args);
+            if (value == null) return null;
+            if (value instanceof Timestamp timestamp) return timestamp.toInstant();
+            if (value instanceof Instant instant) return instant;
+            return Instant.parse(String.valueOf(value));
+        } catch (Exception error) {
+            return null;
+        }
     }
 }

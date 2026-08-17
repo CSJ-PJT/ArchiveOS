@@ -55,7 +55,7 @@ public class LiveFlowService {
         Instant latest = parseInstant(value.get("latest_event_at"));
         if (latest == null) latest = latestByNode(recent).values().stream().max(Instant::compareTo).orElse(null);
         value.put("mode", "LIVE");
-        value.put("dataPolicy", "Synthetic Runtime Events");
+        value.put("dataPolicy", "Persisted Runtime Events");
         value.put("recent", recent);
         Map<String, Object> runtime = new LinkedHashMap<>();
         runtime.put("latestEventAt", latest == null ? null : latest.toString());
@@ -69,14 +69,16 @@ public class LiveFlowService {
         Map<String, Object> value = new LinkedHashMap<>(repository.summary());
         List<Map<String, Object>> recent = repository.recent(12);
         value.put("mode", "LIVE");
-        value.put("dataPolicy", "Synthetic Runtime Events");
+        value.put("dataPolicy", "Persisted Runtime Events");
         value.put("warning", "No real customer, payment, account, or financial data.");
         value.put("recent", recent);
-        Map<String, Object> runtime = runtimeSummary(value, recent);
+        Map<String, Object> runtime = runtimeSummary(value);
         value.put("runtime", runtime);
         Map<String, Object> approvalSummary = approvals.summary();
-        value.put("approvalBacklog", approvalSummary.containsKey("pending") ? number(approvalSummary.get("pending")) : null);
-        value.put("approvalBacklogSource", "current synthetic approval queue");
+        if (approvalSummary == null) approvalSummary = Map.of();
+        Long actionablePending = optionalLong(approvalSummary, "actionable_pending", "pending");
+        value.put("approvalBacklog", actionablePending == null ? null : actionablePending);
+        value.put("approvalBacklogSource", "current actionable approvals");
         value.put("processingBacklog", processingBacklog(runtime));
         value.put("processingBacklogSource", "current service outbox and processing backlog");
         return value;
@@ -180,21 +182,25 @@ public class LiveFlowService {
         }
     }
 
-    private Map<String, Object> runtimeSummary(Map<String, Object> summary, List<Map<String, Object>> recent) {
-        Map<String, Instant> latestByNode = latestByNode(recent);
+    private Map<String, Object> runtimeSummary(Map<String, Object> summary) {
+        Map<String, Instant> latestByNode = businessLatestByNode();
         Instant latest = parseInstant(summary.get("latest_event_at"));
         if (latest == null) {
             latest = latestByNode.values().stream().max(Instant::compareTo).orElse(null);
         }
-        String freshness = freshness(latest);
         List<Map<String, Object>> serviceStates = new ArrayList<>();
         List<String> activeServices = new ArrayList<>();
         List<String> stalledServices = new ArrayList<>();
         try {
             Map<String, Object> ecosystemSummary = ecosystem.summary();
+            Map<String, Object> serviceMetrics = map(ecosystemSummary.get("throughput"));
             Map<String, Object> services = map(ecosystemSummary.get("services"));
             for (String key : List.of("market", "nexus", "logitics", "ledger")) {
-                Map<String, Object> state = runtimeServiceState(key, map(services.get(key)), latestByNode.get(nodeOf(key)));
+                Map<String, Object> state = runtimeServiceState(
+                        key,
+                        map(services.get(key)),
+                        latestByNode.get(nodeOf(key)),
+                        map(serviceMetrics.get(key)));
                 serviceStates.add(state);
                 String runtimeStatus = string(state.get("runtimeStatus"), "UNKNOWN");
                 String serviceName = string(state.get("serviceName"), systemId(key));
@@ -208,6 +214,11 @@ public class LiveFlowService {
         } catch (RuntimeException error) {
             stalledServices.add("ArchiveOS collector");
         }
+        for (Map<String, Object> state : serviceStates) {
+            Instant serviceLatest = parseInstant(state.get("lastEventAt"));
+            if (serviceLatest != null && (latest == null || serviceLatest.isAfter(latest))) latest = serviceLatest;
+        }
+        String freshness = freshness(latest);
         String pipelineStatus = "NO_RUNTIME_EVENTS".equals(freshness) ? "NO_RUNTIME_EVENTS"
                 : !stalledServices.isEmpty() ? "DEGRADED"
                 : freshness;
@@ -241,7 +252,7 @@ public class LiveFlowService {
         return available ? total : null;
     }
 
-    private Map<String, Object> runtimeServiceState(String key, Map<String, Object> service, Instant latestNodeEventAt) {
+    private Map<String, Object> runtimeServiceState(String key, Map<String, Object> service, Instant latestNodeEventAt, Map<String, Object> throughputMetrics) {
         String serviceStatus = string(service.get("status"), "UNKNOWN");
         Map<String, Object> summary = map(service.get("summary"));
         Map<String, Object> body = responseData(summary);
@@ -260,7 +271,19 @@ public class LiveFlowService {
         long produced = number(runtime.get("eventsProducedLastTick"));
         long consumed = number(runtime.get("eventsConsumedLastTick"));
         long backlog = number(firstNonNull(runtime.get("backlogCount"), body.get("backlogCount"), outbox.get("pending")));
-        String runtimeStatus = runtimeStatus(serviceStatus, lastEventAt, schedulerStatus, pipelineStatus, runtimeActive, produced, consumed);
+        Long recentThroughput = optionalLong(throughputMetrics, "recentThroughput", "throughput", "recentEvents");
+        String throughputSource = "persisted_business_events_30m";
+        if (recentThroughput == null) {
+            recentThroughput = repository.businessEventCountByNode(systemId(key), 30);
+        } else {
+            throughputSource = "upstream";
+        }
+        if (recentThroughput == null) {
+            throughputSource = "none";
+        }
+        boolean autoRunExplicitlyDisabled = firstNonNull(runtime.get("autoRunEnabled"), body.get("autoRunEnabled")) != null && !autoRunEnabled;
+        String runtimeStatus = runtimeStatus(serviceStatus, lastEventAt, schedulerStatus, pipelineStatus,
+                runtimeActive, autoRunExplicitlyDisabled, produced, consumed);
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("serviceId", systemId(key));
         value.put("serviceName", string(service.get("name"), systemId(key)));
@@ -273,6 +296,8 @@ public class LiveFlowService {
         value.put("eventsProducedLastTick", produced);
         value.put("eventsConsumedLastTick", consumed);
         value.put("backlogCount", backlog);
+        value.put("recentThroughput", recentThroughput);
+        value.put("throughputSource", throughputSource);
         value.put("schedulerStatus", schedulerStatus);
         value.put("pipelineStatus", pipelineStatus);
         value.put("reason", runtimeStatusReason(runtimeStatus, serviceStatus, lastEventAt, schedulerStatus, backlog));
@@ -280,7 +305,7 @@ public class LiveFlowService {
     }
 
     private Map<String, Object> archiveOsRuntimeState(Instant latestNodeEventAt) {
-        String runtimeStatus = runtimeStatus("HEALTHY", latestNodeEventAt, "RUNNING", "LIVE_FLOW_COLLECTING", true, 0, 0);
+        String runtimeStatus = runtimeStatus("HEALTHY", latestNodeEventAt, "RUNNING", "LIVE_FLOW_COLLECTING", true, false, 0, 0);
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("serviceId", "archiveos");
         value.put("serviceName", "ArchiveOS");
@@ -300,15 +325,18 @@ public class LiveFlowService {
     }
 
     private String runtimeStatus(String serviceStatus, Instant lastEventAt, String schedulerStatus, String pipelineStatus,
-                                 boolean runtimeActive, long produced, long consumed) {
+                                 boolean runtimeActive, boolean autoRunExplicitlyDisabled, long produced, long consumed) {
         if ("UNAVAILABLE".equalsIgnoreCase(serviceStatus) || "FAILED".equalsIgnoreCase(serviceStatus)) return "FAILED";
         if ("DEGRADED".equalsIgnoreCase(serviceStatus)) return "WARNING";
         long age = ageSeconds(lastEventAt);
+        if (age < 0) return "HEALTHY";
         boolean explicitRunning = runtimeActive || "RUNNING".equalsIgnoreCase(schedulerStatus) || pipelineStatus.toUpperCase(Locale.ROOT).contains("LIVE");
-        boolean tickMoved = produced > 0 || consumed > 0;
-        if (age >= 0 && age <= LIVE_THRESHOLD_SECONDS) return tickMoved || explicitRunning ? "PROCESSING" : "HEALTHY";
-        if (age >= 0 && age <= STALE_THRESHOLD_SECONDS) return "WAITING";
-        return "STALLED";
+        if (age <= LIVE_THRESHOLD_SECONDS) return "PROCESSING";
+        if (age <= STALE_THRESHOLD_SECONDS) return "WAITING";
+        if (pipelineStatus.toUpperCase(Locale.ROOT).contains("BACKLOG")
+                || schedulerStatus.toUpperCase(Locale.ROOT).contains("BACKLOG")) return "WAITING";
+        boolean runtimeExpected = explicitRunning && !autoRunExplicitlyDisabled;
+        return ("HEALTHY".equalsIgnoreCase(serviceStatus) && runtimeExpected) ? "STALLED" : "HEALTHY";
     }
 
     private String freshness(Instant latest) {
@@ -349,6 +377,11 @@ public class LiveFlowService {
             }
         }
         return value;
+    }
+
+    private Map<String, Instant> businessLatestByNode() {
+        Map<String, Instant> value = repository.latestBusinessEventByNode();
+        return value == null ? Map.of() : value;
     }
 
     private void collectServiceSnapshots(List<Map<String, Object>> saved, Map<String, Object> services) {
@@ -496,6 +529,14 @@ public class LiveFlowService {
         try { return value == null ? BigDecimal.ZERO : new BigDecimal(String.valueOf(value)); }
         catch (NumberFormatException error) { return BigDecimal.ZERO; }
     }
+    private Long optionalLong(Map<String, Object> source, String... keys) {
+        for (String key : keys) {
+            if (!source.containsKey(key) || source.get(key) == null) continue;
+            return Long.valueOf(number(source.get(key)));
+        }
+        return null;
+    }
+
     private long number(Object value) {
         if (value instanceof Number number) return number.longValue();
         try { return value == null ? 0 : Long.parseLong(String.valueOf(value)); }
