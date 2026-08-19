@@ -31,10 +31,10 @@ function ServiceCard({ keyName, service }: { keyName: string; service: Ecosystem
   const error = service.errorMessage;
   const stats: Array<[string, unknown]> = [
     ["응답 지연", readValue(summary, ["latencyMs", "latency", "responseTimeMs", "health.latencyMs"])],
-    ["최근 처리량", readValue(summary, ["recentEvents", "operations.processed", "runtime.eventsProducedLastTick", "outbox.published"])],
-    ["오류율", readValue(summary, ["errorRate", "operations.errorRate", "outbox.failureRate"])],
-    ["처리 적체", readValue(summary, ["backlog", "backlogCount", "outbox.pending", "operations.backlog"])],
-    ["역량 사용률", readValue(summary, ["capacityUtilization", "capacity.utilization", "workforce.capacityUtilization"])],
+    ["처리량", readValue(summary, ["recentEvents", "processedEvents", "transactionsProcessed", "operations.runtime.eventsProducedLastTick", "runtime.eventsProducedLastTick", "operations.processed", "outbox.published"])],
+    ["실패 건수", readValue(summary, ["failedEvents", "failed", "outbox.failed", "operations.outbox.failed", "operations.failedEvents"])],
+    ["처리 적체", readValue(summary, ["backlog", "backlogCount", "runtime.backlogCount", "operations.runtime.backlogCount", "balance.backlogCount", "outbox.pending", "operations.backlog"])],
+    ["역량 사용률", readValue(summary, ["capacityUtilization", "capacity.utilization", "workforce.capacityUtilization", "operations.workforce.capacityUtilization", "balance.capacityUtilization"])],
     ["재무 데이터", hasFinanceData(summary) ? "수집됨" : "데이터 없음"],
   ];
   return <article className={`service-card service-${state.toLowerCase()}`}>

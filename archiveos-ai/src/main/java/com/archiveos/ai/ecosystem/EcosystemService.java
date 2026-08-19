@@ -143,6 +143,7 @@ public class EcosystemService {
         EcosystemServiceStatus status = aggregateServiceStatus(List.of(health, operations, economy, outbox));
         Map<String, Object> body = normalizeMarketSummary(operations, economy, outbox);
         body.put("health", health.body());
+        body.put("latencyMs", operations.latencyMs());
         Map<String, Object> capabilities = new LinkedHashMap<>();
         capabilities.put("operations", capability(operations));
         capabilities.put("marketEconomy", capability(economy));
@@ -170,6 +171,7 @@ public class EcosystemService {
         body.put("operations", operationsData);
         body.put("outbox", outboxData);
         body.put("health", health.body());
+        body.put("latencyMs", operations.latencyMs());
         body.put("capabilities", Map.of("operations", capability(operations), "outbox", capability(outbox)));
         String error = firstError(health, operations, outbox);
         Map<String, Object> snapshot = repository.recordHealth("NEXUS", config.getName(), config.getBaseUrl(), status.name(), firstHttpStatus(operations, outbox, health), body, error);
@@ -183,8 +185,12 @@ public class EcosystemService {
                 : health.status() == EcosystemServiceStatus.UNAVAILABLE || summary.status() == EcosystemServiceStatus.UNAVAILABLE
                     ? EcosystemServiceStatus.UNAVAILABLE
                     : EcosystemServiceStatus.DEGRADED;
-        Map<String, Object> body = new LinkedHashMap<>(summary.body());
+        // External services do not all use the same envelope. Normalize both
+        // direct summaries and {traceId,data:{...}} responses before persisting
+        // the health snapshot so the console reads one stable contract.
+        Map<String, Object> body = new LinkedHashMap<>(responseData(summary.body()));
         body.put("health", health.body());
+        body.put("latencyMs", summary.latencyMs());
         Map<String, Object> snapshot = repository.recordHealth(type, config.getName(), config.getBaseUrl(), status.name(),
                 summary.httpStatus() != null ? summary.httpStatus() : health.httpStatus(), body,
                 summary.errorMessage() != null ? summary.errorMessage() : health.errorMessage());
