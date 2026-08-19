@@ -21,7 +21,9 @@ public class LiveFlowRepository {
     private final JdbcTemplate jdbc;
     private final LiveFlowEventBroadcaster broadcaster;
     private final WorldEventBroadcaster worldBroadcaster;
-    private static final String BUSINESS_EVENT_FILTER = """
+    // Keep explicit boundary spaces: several text-block queries concatenate
+    // this predicate after SQL keywords such as AND and WHERE.
+    private static final String BUSINESS_EVENT_FILTER = " " + """
             not (
               lower(coalesce(event_type, '')) like '%heartbeat%' or
               lower(coalesce(event_type, '')) like '%health%' or
@@ -31,7 +33,7 @@ public class LiveFlowRepository {
               lower(coalesce(event_type, '')) like '%system%' or
               lower(coalesce(metadata->>'eventCategory', '')) in ('heartbeat', 'health', 'availability', 'collector', 'system')
             )
-            """;
+            """ + " ";
 
     public LiveFlowRepository(JdbcTemplate jdbc, LiveFlowEventBroadcaster broadcaster, WorldEventBroadcaster worldBroadcaster) {
         this.jdbc = jdbc;
