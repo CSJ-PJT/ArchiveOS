@@ -18,8 +18,8 @@ export function LiveMeshTopology({ topology, summary, events, onNavigate, onAsk 
   const [selection, setSelection] = useState<Selection>(null);
   const openerRef = useRef<HTMLElement | SVGElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
-  const nodes = topology?.nodes?.length ? topology.nodes : fallbackNodes;
-  const edges = useMemo(() => uniqueMeshEdges(topology?.edges?.length ? topology.edges : fallbackEdges), [topology]);
+  const nodes = useMemo(() => (topology?.nodes?.length ? topology.nodes : fallbackNodes).map((node) => ({ ...node, id: normalizeNode(node.id || node.label) })), [topology]);
+  const edges = useMemo(() => uniqueMeshEdges((topology?.edges?.length ? topology.edges : fallbackEdges).map((edge) => ({ ...edge, from: normalizeNode(edge.from), to: normalizeNode(edge.to) }))), [topology]);
   const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const runtime: RuntimeService[] = summary?.runtime?.services ?? [];
   const visibleEvents = events.slice(0, 30);
