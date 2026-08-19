@@ -123,21 +123,26 @@ public class LiveFlowRepository {
 
     public Map<String, Object> summary() {
         try {
-            return jdbc.queryForMap("""
+            String sql = """
                     select
-                      count(distinct event_id) filter (where occurred_at > now() - interval '30 minutes' and """ + BUSINESS_EVENT_FILTER + """
-                      )::int as active_flows,
+                      count(distinct event_id) filter (where occurred_at > now() - interval '30 minutes' and (
+                        %1$s
+                      ))::int as active_flows,
                       count(*) filter (where occurred_at > now() - interval '24 hours'
-                         and """ + BUSINESS_EVENT_FILTER + """
+                         and (
+                           %1$s
+                         )
                       )::int as recent_events,
                       count(*) filter (where status = 'approval_required')::int as pending_approvals,
                       count(*) filter (where status = 'delayed')::int as delayed_shipments,
                       count(*) filter (where event_type in ('CALLBACK_FAILED', 'ledger_callback_failed') or status = 'failed')::int as failed_callbacks,
                       count(distinct source_system_id) filter (where status = 'unavailable')::int as degraded_systems,
-                      max(occurred_at) filter (where """ + BUSINESS_EVENT_FILTER + """
-                      ) as latest_event_at
+                      max(occurred_at) filter (where (
+                        %1$s
+                      )) as latest_event_at
                     from public.ecosystem_flow_event
-                    """);
+                    """.formatted(BUSINESS_EVENT_FILTER);
+            return jdbc.queryForMap(sql);
         } catch (DataAccessException error) {
             log.warn("Business-event summary query failed; falling back to persisted event totals", error);
             try {
