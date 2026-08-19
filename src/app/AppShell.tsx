@@ -152,7 +152,7 @@ function loadersFor(route: CoreRoute): Array<[keyof AppData, () => Promise<unkno
   if (route === "dashboard") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["liveFlowTopology", getLiveFlowTopology], ["liveFlowEvents", () => getLiveFlowRecentEvents(30)], ["balance", getEcosystemBalanceSummary], ["balanceRecommendations", getEcosystemBalanceRecommendations]];
   if (route === "services") return [auth, ["ecosystem", getEcosystemSummary], ["ecosystemTopology", getEcosystemTopology], ["atlas", getAtlasOverview]];
   if (route === "operations") return [auth, ["dashboard", getDashboardData], ["mesh", getMeshOverview], ["workforce", getWorkforceOverview], ["queue", getQueueSummary], ["tasks", getPmTasks]];
-  if (route === "finance") return [auth, ["ecosystem", getEcosystemSummary], ["balance", getEcosystemBalanceSummary], ["gameFinance", getGameFinanceSummary], ["externalApprovals", () => getExternalApprovals(50)]];
+  if (route === "finance") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["balance", getEcosystemBalanceSummary], ["gameFinance", getGameFinanceSummary], ["externalApprovals", () => getExternalApprovals(50)]];
   if (route === "records") return [auth, ["liveFlowEvents", () => getLiveFlowRecentEvents(100)], ["knowledge", getKnowledgeOverview], ["historian", getHistorianStatus], ["timeline", () => getRuntimeTimeline(100)]];
   return [
     auth,

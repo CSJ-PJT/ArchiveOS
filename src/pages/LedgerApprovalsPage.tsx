@@ -24,6 +24,7 @@ export function LedgerApprovalsPage({ data, onRefresh }: { data: AppData; onRefr
     callbackFailed: approvals.filter((item) => item.callback_status === "CALLBACK_FAILED").length,
     fallback: approvals.filter((item) => item.evidence_type === "RULE_FALLBACK").length,
   }), [approvals]);
+  const totalPending = data.liveFlow?.approvalBacklog ?? summary.pending;
 
   useEffect(() => {
     const id = selectedListItem?.approval_request_id;
@@ -69,10 +70,10 @@ export function LedgerApprovalsPage({ data, onRefresh }: { data: AppData; onRefr
     </header>
 
     <section className="kpi-command-grid">
-      <MetricCard label="Pending" value={summary.pending} status={summary.pending ? "blocked" : "healthy"} description="Awaiting PM/Admin decision" />
-      <MetricCard label="High Risk" value={summary.high} status={summary.high ? "warning" : "healthy"} description="Amount/severity threshold" />
-      <MetricCard label="Callback Failed" value={summary.callbackFailed} status={summary.callbackFailed ? "critical" : "healthy"} description="Ledger callback failures" />
-      <MetricCard label="Fallback Evidence" value={summary.fallback} status={summary.fallback ? "warning" : "healthy"} description="RAG unavailable fallback" />
+      <MetricCard label="Pending" value={totalPending} status={totalPending ? "blocked" : "healthy"} description="Current PostgreSQL approval queue" />
+      <MetricCard label="High Risk" value={summary.high} status={summary.high ? "warning" : "healthy"} description="Loaded 50-item window" />
+      <MetricCard label="Callback Failed" value={summary.callbackFailed} status={summary.callbackFailed ? "critical" : "healthy"} description="Loaded 50-item window" />
+      <MetricCard label="Fallback Evidence" value={summary.fallback} status={summary.fallback ? "warning" : "healthy"} description="Loaded 50-item window" />
     </section>
 
     <section className="workflows-layout">
