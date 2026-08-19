@@ -33,6 +33,7 @@ class LiveFlowRepositoryTest {
         assertThat(sql.getValue().toLowerCase()).doesNotContain("limit");
         assertThat(sql.getValue()).contains("SERVICE_UNAVAILABLE".toLowerCase());
         assertThat(sql.getValue()).contains("SERVICE_DEGRADED".toLowerCase());
+        assertThat(sql.getValue()).doesNotContain("andnot", "wherenot");
     }
 
     @Test
