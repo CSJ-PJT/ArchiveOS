@@ -24,6 +24,10 @@ for (const contract of ["EventSource", "runtime-event", "fallback", "getLiveFlow
 for (const contract of ["Archive-Market", "Archive-Nexus", "Archive-Logistics", "Archive-Ledger", "ArchiveOS", "Settlement", "events.slice(0, 30)"]) {
   if (!liveMesh.includes(contract)) throw new Error(`Mesh topology contract missing: ${contract}`);
 }
+for (const contract of ["nodeEventMetric", "state?.lastEventAt", "최근 창 0건", "최근 수신 대기"]) {
+  if (!liveMesh.includes(contract)) throw new Error(`Mesh zero-window/runtime distinction missing: ${contract}`);
+}
+if (liveMesh.includes(': "이벤트 없음"')) throw new Error("Mesh nodes must not label a finite event window as globally empty.");
 if (appShell.includes("MutationObserver")) throw new Error("DOM MutationObserver translation must not remain in AppShell.");
 for (const contract of ["I18nProvider", "archive.locale", "setLocale"]) {
   if (!i18n.includes(contract)) throw new Error(`I18n provider contract missing: ${contract}`);
