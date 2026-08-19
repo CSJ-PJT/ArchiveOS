@@ -31,6 +31,28 @@ class EcosystemBalanceServiceTest {
         assertThat(summary).containsEntry("balanceStatus", "PARTIAL_DATA");
     }
 
+    @Test void treatsZeroRevenueWithPersistedCostAsPressureInsteadOfMissingData() {
+        EcosystemService ecosystem = Mockito.mock(EcosystemService.class);
+        EcosystemBalanceProperties properties = new EcosystemBalanceProperties();
+        when(ecosystem.summary()).thenReturn(Map.of("services", Map.of(
+                "market", service("Archive-Market", Map.of()),
+                "nexus", service("Archive-Nexus", Map.of("economy", Map.of(
+                        "available", true, "revenue", 0, "totalCost", 200, "profit", -200))),
+                "logitics", service("Archive-Logistics", Map.of()),
+                "ledger", service("Archive-Ledger", Map.of()))));
+
+        Map<String, Object> summary = new EcosystemBalanceService(ecosystem, properties).summary();
+        @SuppressWarnings("unchecked") var rows = (java.util.List<Map<String, Object>>) summary.get("services");
+        Map<String, Object> nexus = rows.stream()
+                .filter(row -> "archive-nexus".equals(row.get("serviceId")))
+                .findFirst().orElseThrow();
+
+        assertThat(nexus).containsEntry("revenue", java.math.BigDecimal.ZERO)
+                .containsEntry("cost", java.math.BigDecimal.valueOf(200))
+                .containsEntry("profit", java.math.BigDecimal.valueOf(-200))
+                .containsEntry("balance", "UNDER_PRESSURE");
+    }
+
     private Map<String, Object> service(String name, Map<String, Object> summary) {
         return Map.of("name", name, "status", "HEALTHY", "summary", summary);
     }

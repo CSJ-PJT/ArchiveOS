@@ -109,6 +109,15 @@ public class EcosystemBalanceService {
         BigDecimal margin = decimal(row.get("operatingMargin"));
         BigDecimal min = decimal(row.get("targetMinMargin"));
         BigDecimal max = decimal(row.get("targetMaxMargin"));
+        BigDecimal revenue = decimal(row.get("revenue"));
+        BigDecimal cost = decimal(row.get("cost"));
+        BigDecimal profit = decimal(row.get("profit"));
+        if (revenue != null && revenue.signum() == 0
+                && ((cost != null && cost.signum() > 0) || (profit != null && profit.signum() < 0))) {
+            row.put("balance", "UNDER_PRESSURE");
+            row.put("balanceReason", "합성 매출은 0이고 운영 비용이 발생해 손익 압박 상태입니다.");
+            return;
+        }
         if (margin == null || min == null || max == null) { row.put("balance", "NO_DATA"); row.put("balanceReason", "손익률을 판단할 수 있는 합성 재무 데이터가 아직 수집되지 않았습니다."); return; }
         if (margin.compareTo(max) > 0) { row.put("balance", "CONCENTRATED"); row.put("balanceReason", "영업이익률이 정책 상한을 초과했습니다."); return; }
         if (margin.compareTo(min) < 0) { row.put("balance", "UNDER_PRESSURE"); row.put("balanceReason", "영업이익률이 정책 하한보다 낮습니다."); return; }
