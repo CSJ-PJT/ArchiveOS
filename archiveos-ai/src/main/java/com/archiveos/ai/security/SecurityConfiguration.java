@@ -31,6 +31,9 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/security/**", "/api/audit/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/obsidian/documents", "/api/rag/search").hasAnyRole("AUTHENTICATED_READ", "OPERATOR", "PM", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/rag/ask").hasAnyRole("OPERATOR", "PM", "ADMIN")
+                        // These endpoints back the public read-only Records/Live Flow views.
+                        // Keep entity/correlation/replay and all mutation routes role-gated.
+                        .requestMatchers(HttpMethod.GET, "/api/runtime/timeline", "/api/live-flow/events/recent", "/api/live-flow/recent").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/mcp/**", "/api/runtime/timeline/**", "/api/live-flow/events/**", "/api/live-flow/replay", "/api/live-flow/correlation/**", "/api/live-flow/entity/**").hasAnyRole("AUTHENTICATED_READ", "OPERATOR", "PM", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/live-flow/events/ingest").hasRole("ARCHIVE_INTERNAL_SERVICE")
                         .requestMatchers(HttpMethod.POST, "/api/live-flow/refresh", "/api/ecosystem/balance/simulate").hasRole("ADMIN")

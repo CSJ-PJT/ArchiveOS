@@ -11,10 +11,13 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 
 @Repository
 public class LiveFlowRepository {
+    private static final Logger log = LoggerFactory.getLogger(LiveFlowRepository.class);
     private final JdbcTemplate jdbc;
     private final LiveFlowEventBroadcaster broadcaster;
     private final WorldEventBroadcaster worldBroadcaster;
@@ -136,8 +139,24 @@ public class LiveFlowRepository {
                     from public.ecosystem_flow_event
                     """);
         } catch (DataAccessException error) {
-            return Map.of("active_flows", 0, "recent_events", 0, "pending_approvals", 0,
-                    "delayed_shipments", 0, "failed_callbacks", 0, "degraded_systems", 0);
+            log.warn("Business-event summary query failed; falling back to persisted event totals", error);
+            try {
+                return jdbc.queryForMap("""
+                        select
+                          count(distinct event_id) filter (where occurred_at > now() - interval '30 minutes')::int as active_flows,
+                          count(*) filter (where occurred_at > now() - interval '24 hours')::int as recent_events,
+                          count(*) filter (where lower(status) = 'approval_required')::int as pending_approvals,
+                          count(*) filter (where lower(status) = 'delayed')::int as delayed_shipments,
+                          count(*) filter (where event_type in ('CALLBACK_FAILED', 'ledger_callback_failed') or lower(status) = 'failed')::int as failed_callbacks,
+                          count(distinct source_system_id) filter (where lower(status) = 'unavailable')::int as degraded_systems,
+                          max(occurred_at) as latest_event_at
+                        from public.ecosystem_flow_event
+                        """);
+            } catch (DataAccessException fallbackError) {
+                log.error("Persisted event summary fallback failed", fallbackError);
+                return Map.of("active_flows", 0, "recent_events", 0, "pending_approvals", 0,
+                        "delayed_shipments", 0, "failed_callbacks", 0, "degraded_systems", 0);
+            }
         }
     }
 
