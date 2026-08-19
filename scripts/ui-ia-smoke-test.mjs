@@ -21,6 +21,9 @@ for (const contract of ["getEcosystemSummary", "getLiveFlowSummary", "getLiveFlo
 for (const contract of ["EventSource", "runtime-event", "fallback", "getLiveFlowRecentEvents(30)", "reconnectAttempt", "30_000", "eventIds.current.size > 750", "window.addEventListener(\"online\""]) {
   if (!appShell.includes(contract)) throw new Error(`Live Flow SSE contract missing: ${contract}`);
 }
+if (!/route === "records"[^\n]+\["aiRuntime", getAiRuntime\]/.test(appShell)) {
+  throw new Error("Records knowledge view must load Spring AI runtime metrics.");
+}
 for (const contract of ["Archive-Market", "Archive-Nexus", "Archive-Logistics", "Archive-Ledger", "ArchiveOS", "Settlement", "events.slice(0, 30)"]) {
   if (!liveMesh.includes(contract)) throw new Error(`Mesh topology contract missing: ${contract}`);
 }
