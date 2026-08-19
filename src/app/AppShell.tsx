@@ -153,7 +153,7 @@ function loadersFor(route: CoreRoute): Array<[keyof AppData, () => Promise<unkno
   if (route === "services") return [auth, ["ecosystem", getEcosystemSummary], ["ecosystemTopology", getEcosystemTopology], ["atlas", getAtlasOverview]];
   if (route === "operations") return [auth, ["dashboard", getDashboardData], ["mesh", getMeshOverview], ["workforce", getWorkforceOverview], ["queue", getQueueSummary], ["tasks", getPmTasks]];
   if (route === "finance") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["balance", getEcosystemBalanceSummary], ["gameFinance", getGameFinanceSummary], ["externalApprovals", () => getExternalApprovals(50)]];
-  if (route === "records") return [auth, ["liveFlowEvents", () => getLiveFlowRecentEvents(100)], ["knowledge", getKnowledgeOverview], ["historian", getHistorianStatus], ["timeline", () => getRuntimeTimeline(100)]];
+  if (route === "records") return [auth, ["liveFlowEvents", () => getLiveFlowRecentEvents(100)], ["aiRuntime", getAiRuntime], ["knowledge", getKnowledgeOverview], ["historian", getHistorianStatus], ["timeline", () => getRuntimeTimeline(100)]];
   return [
     auth,
     ["endpointHealth", getEndpointHealth],
