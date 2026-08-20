@@ -1766,17 +1766,19 @@ dt { color: var(--color-text-subtle); font-size: 0.7rem; } dd { margin: 0; font-
   z-index: 1;
   pointer-events: none;
 }
-.mesh-edge path {
+.mesh-flow-edge {
   fill: none;
-  stroke-width: 0.78;
+  stroke-width: 0.68;
   vector-effect: non-scaling-stroke;
-  opacity: 0.78;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.72;
 }
-.mesh-edge-business path { stroke: #22c55e; }
-.mesh-edge-async path { stroke: #60a5fa; stroke-dasharray: 5 3; }
-.mesh-edge-approval path { stroke: #c084fc; stroke-dasharray: 4 3; }
-.mesh-edge-settlement path { stroke: #f59e0b; }
-.mesh-edge-monitoring path { stroke: #22d3ee; stroke-dasharray: 2 3; opacity: 0.48; }
+.mesh-flow-edge-business .mesh-flow-edge { stroke: #22c55e; }
+.mesh-flow-edge-async .mesh-flow-edge { stroke: #60a5fa; stroke-dasharray: 5 3; }
+.mesh-flow-edge-approval .mesh-flow-edge { stroke: #a855f7; stroke-dasharray: 4 3; }
+.mesh-flow-edge-settlement .mesh-flow-edge { stroke: #d97706; }
+.mesh-flow-edge-monitoring .mesh-flow-edge { stroke: #0891b2; stroke-dasharray: 2 3; opacity: 0.52; }
 .mesh-node-layer,
 .mesh-token-layer {
   position: absolute;
@@ -2712,6 +2714,36 @@ body {
 
 /* Dashboard Phase 1.2 final cascade: restore readable operational scale after shared legacy rules. */
 .dashboard-rework-phase1 .dashboard-kpi-card { min-height:7.92rem; padding:0.74rem 0.82rem; }
+.mesh-edge-time-badge {
+  position:absolute;
+  z-index:4;
+  transform:translate(-50%,-50%);
+  display:inline-flex;
+  align-items:center;
+  gap:0.2rem;
+  min-height:1.34rem;
+  border:1px solid #afc6d9;
+  border-radius:999px;
+  padding:0.16rem 0.38rem;
+  background:#fff;
+  color:#315873;
+  font-size:0.62rem;
+  font-weight:760;
+  font-variant-numeric:tabular-nums;
+  line-height:1;
+  white-space:nowrap;
+  box-shadow:0 2px 7px rgba(41,75,106,0.12);
+  cursor:pointer;
+}
+.mesh-edge-time-badge:hover { border-color:#6ca9c9; color:#174e6c; }
+.mesh-lines #mesh-arrow path { fill:context-stroke; }
+.polished-live-flow .mesh-edge-layer .mesh-flow-edge {
+  fill:none;
+  stroke-width:0.68px;
+  vector-effect:non-scaling-stroke;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
 .dashboard-rework-phase1 .mesh-node { width:clamp(9rem,11.1vw,10.55rem); min-height:4.12rem; padding:0.52rem 0.6rem; gap:0.18rem; border-color:#bcd3e4; }
 .dashboard-rework-phase1 .mesh-node-logistics { width:11.35rem; }
 .dashboard-rework-phase1 .mesh-node-title { font-size:clamp(0.75rem,0.92vw,0.83rem); }

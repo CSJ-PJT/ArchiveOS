@@ -28,8 +28,6 @@ public class LiveFlowService {
     private final ExternalApprovalRepository approvals;
     private final ApprovalCallbackOutboxRepository callbacks;
     private final AuditLogService audit;
-    private volatile Instant lastAutoRefreshAt = Instant.EPOCH;
-    private static final Duration AUTO_REFRESH_INTERVAL = Duration.ofSeconds(1);
     private static final long LIVE_THRESHOLD_SECONDS = 60;
     private static final long STALE_THRESHOLD_SECONDS = 300;
 
@@ -44,7 +42,6 @@ public class LiveFlowService {
     }
 
     public Map<String, Object> summary() {
-        ensureFresh();
         return summarySnapshot();
     }
 
@@ -111,7 +108,6 @@ public class LiveFlowService {
     }
 
     public Map<String, Object> recent(int limit) {
-        ensureFresh();
         return Map.of("data", repository.recent(limit));
     }
     public Map<String, Object> replay(String from, String to, int limit) { return Map.of("mode", "REPLAY", "data", repository.replay(from, to, limit)); }
@@ -163,22 +159,6 @@ public class LiveFlowService {
             if (auditEnabled) audit.recordEvent("live_flow_refresh_failed", "live_flow", traceId, traceId,
                     Map.of("error", error.getClass().getSimpleName()));
             throw error;
-        }
-    }
-
-    private void ensureFresh() {
-        Instant now = Instant.now();
-        if (Duration.between(lastAutoRefreshAt, now).compareTo(AUTO_REFRESH_INTERVAL) < 0) return;
-        synchronized (this) {
-            now = Instant.now();
-            if (Duration.between(lastAutoRefreshAt, now).compareTo(AUTO_REFRESH_INTERVAL) < 0) return;
-            lastAutoRefreshAt = now;
-        }
-        try {
-            refresh();
-        } catch (RuntimeException error) {
-            audit.recordEvent("live_flow_auto_refresh_failed", "live_flow", "auto-refresh", "auto-refresh",
-                    Map.of("error", error.getClass().getSimpleName()));
         }
     }
 

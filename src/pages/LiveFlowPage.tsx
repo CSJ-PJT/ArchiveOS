@@ -9,6 +9,7 @@ import { formatTimeAgo, stringifyMeta } from "./pageUtils";
 
 type FlowNodeId = "market" | "nexus" | "logistics" | "ledger" | "archiveos" | "settlement";
 type FlowEdgeKind = "business" | "async" | "approval" | "settlement" | "monitoring";
+const flowEdgeColors: Record<FlowEdgeKind, string> = { business: "#22c55e", async: "#60a5fa", approval: "#a855f7", settlement: "#d97706", monitoring: "#0891b2" };
 
 const nodes: Array<{
   id: FlowNodeId;
@@ -241,13 +242,14 @@ function MeshFlowBoard({ events, runtimeServices, selected, onSelect }: {
   return (
     <div className="mesh-flow-board">
       <svg className="mesh-edge-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-        {edges.map((edge) => {
-          const from = nodePoint(edge.from);
-          const to = nodePoint(edge.to);
-          const controlY = edge.kind === "monitoring" ? Math.max(from.y, to.y) + 10 : (from.y + to.y) / 2;
+        <defs>
+          {(Object.keys(flowEdgeColors) as FlowEdgeKind[]).map((kind) => <marker key={kind} id={`detail-flow-arrow-${kind}`} markerWidth="3" markerHeight="3" refX="2.65" refY="1.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L3,1.5 L0,3 z" fill={flowEdgeColors[kind]} /></marker>)}
+        </defs>
+        {edges.map((edge, edgeIndex) => {
+          const path = flowEdgePath(edge, edgeIndex);
           return (
-            <g key={`${edge.from}-${edge.to}-${edge.label}`} className={`mesh-edge mesh-edge-${edge.kind}`}>
-              <path d={`M ${from.x} ${from.y} C ${from.x} ${controlY}, ${to.x} ${controlY}, ${to.x} ${to.y}`} />
+            <g key={`${edge.from}-${edge.to}-${edge.label}`} className={`mesh-flow-edge-group mesh-flow-edge-${edge.kind}`}>
+              <path className="mesh-flow-edge" d={path} markerEnd={`url(#detail-flow-arrow-${edge.kind})`} />
             </g>
           );
         })}
@@ -265,7 +267,7 @@ function MeshFlowBoard({ events, runtimeServices, selected, onSelect }: {
               <p>{node.description}</p>
               <div className="mesh-node-footer">
                 <StatusBadge status={stat.status}>{statusLabel(stat.status)}</StatusBadge>
-                <span>이벤트 {stat.count}건</span>
+                <span>현재 처리 {stat.count.toLocaleString()}건</span>
                 <span>대기 {stat.backlog}건</span>
                 {stat.runtimeLabel ? <span>{stat.runtimeLabel}</span> : null}
               </div>
@@ -399,6 +401,7 @@ function buildNodeStats(events: LiveFlowEvent[], runtimeServices: NonNullable<No
     const mapped = runtimeStatusToBadge(service.runtimeStatus);
     stats[node].status = mapped.priority >= statusPriority(stats[node].status) ? mapped.status : stats[node].status;
     stats[node].runtimeLabel = runtimeStatusLabel(service.runtimeStatus);
+    if (typeof service.recentThroughput === "number") stats[node].count = service.recentThroughput;
     if (typeof service.backlogCount === "number" && service.backlogCount > stats[node].backlog) stats[node].backlog = service.backlogCount;
   }
   return stats;
@@ -432,6 +435,24 @@ function nodePoint(node: FlowNodeId) {
     settlement: { x: 84, y: 70 },
   };
   return points[node];
+}
+
+function flowEdgePath(edge: { from: FlowNodeId; to: FlowNodeId; kind: FlowEdgeKind }, edgeIndex: number) {
+  const from = nodePoint(edge.from);
+  const to = nodePoint(edge.to);
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const distance = Math.max(Math.hypot(dx, dy), 1);
+  const inset = Math.min(8, distance / 3);
+  const start = { x: from.x + (dx / distance) * inset, y: from.y + (dy / distance) * inset };
+  const end = { x: to.x - (dx / distance) * inset, y: to.y - (dy / distance) * inset };
+  const hasReverse = edges.some((candidate) => candidate.from === edge.to && candidate.to === edge.from);
+  const parallelEdges = edges.map((candidate, candidateIndex) => ({ candidate, candidateIndex })).filter(({ candidate }) => candidate.from === edge.from && candidate.to === edge.to);
+  const parallelIndex = parallelEdges.findIndex(({ candidateIndex }) => candidateIndex === edgeIndex);
+  const parallelOffset = (parallelIndex - (parallelEdges.length - 1) / 2) * 3.6;
+  const curve = (hasReverse ? 5.8 : edge.kind === "monitoring" ? 3.4 : edge.kind === "settlement" ? 1.8 : 0) + parallelOffset;
+  const control = { x: (start.x + end.x) / 2 - (dy / distance) * curve, y: (start.y + end.y) / 2 + (dx / distance) * curve };
+  return `M ${start.x} ${start.y} Q ${control.x} ${control.y}, ${end.x} ${end.y}`;
 }
 
 function tokenPoint(from: FlowNodeId, to: FlowNodeId, index: number) {

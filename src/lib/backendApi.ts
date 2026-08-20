@@ -268,6 +268,15 @@ export type EcosystemBalanceService = {
   profit: string | number | null;
   cashBalance: string | number | null;
   backlog: string | number | null;
+  backlogExposure?: string | number | null;
+  currency?: string;
+  calculationScope?: string;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  sourceLatestEventAt?: string | null;
+  includedInTotals?: boolean;
+  aggregationStatus?: string;
+  aggregationReason?: string;
   targetMinMargin: string | number;
   targetMaxMargin: string | number;
   operatingMargin: string | number | null;
@@ -288,7 +297,13 @@ export type EcosystemBalanceSummary = {
   syntheticData: true;
   targetMargins: Record<string, string>;
   policy?: { backlogWarning: number; capacityWarningPercent: number; profitConcentrationPercent: number };
-  totals: { revenue: string | number; cost: string | number; profit: string | number };
+  totals: {
+    revenue: string | number;
+    cost: string | number;
+    profit: string | number;
+    scope: string;
+    includedServices: number;
+  };
   services: EcosystemBalanceService[];
   balanceStatus: string;
   reviewReason?: string;
@@ -354,6 +369,8 @@ export type LiveFlowSummary = {
       eventsProducedLastTick?: number;
       eventsConsumedLastTick?: number;
       backlogCount?: number;
+      recentThroughput?: number | null;
+      throughputSource?: string;
       schedulerStatus?: string;
       pipelineStatus?: string;
       reason?: string;
