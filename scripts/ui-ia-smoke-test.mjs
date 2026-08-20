@@ -53,6 +53,10 @@ for (const contract of ["REFRESH_PREFERENCE_VERSION", 'storedValue === "10"', "?
 for (const contract of ["mergeLiveFlowEvents", "MAX_LIVE_FLOW_EVENTS", "loadDashboardDetails", "getLiveFlowRecentEvents(MAX_LIVE_FLOW_EVENTS)", "getWorkforceOverview", "streamConnected", "fallbackInFlight", "routeEpoch", "newestEventTime"]) {
   if (!appShell.includes(contract)) throw new Error(`Race-safe live-flow/lazy-detail contract missing: ${contract}`);
 }
+for (const contract of ["mergeLiveFlowSummary(current.liveFlow, payload)", "approvalBacklog: incoming.approvalBacklog ?? current.approvalBacklog", "processingBacklog: incoming.processingBacklog ?? current.processingBacklog", "services: incoming.runtime.services ?? current.runtime?.services"]) {
+  if (!appShell.includes(contract)) throw new Error(`SSE summary must preserve polled runtime/backlog detail: ${contract}`);
+}
+if (appShell.includes("liveFlow: payload")) throw new Error("Compact SSE snapshots must not replace the detailed live-flow summary.");
 if (appShell.includes("window.setInterval(() => { void refresh()")) throw new Error("Dashboard polling must schedule only after the prior refresh completes.");
 if (appShell.includes("liveFlowEvents: events")) throw new Error("Live-flow polling must merge events instead of replacing newer stream data.");
 if ((appShell.match(/mergeLiveFlowEvents\(/g) ?? []).length < 4) throw new Error("Every live-flow event ingress path must use the shared merge policy.");
