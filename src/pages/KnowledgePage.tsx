@@ -6,6 +6,7 @@ import { StatusBadge } from "../components/shared/StatusBadge";
 import { KnowledgeGraphPanel } from "../components/knowledge/KnowledgeGraphPanel";
 import { askRag, type RagAnswer } from "../lib/backendApi";
 import { formatTimeAgo } from "./pageUtils";
+import { knowledgeNodeTypeLabel } from "../components/knowledge/KnowledgeUi";
 
 type KnowledgeTab = "overview" | "memory" | "graph" | "rag" | "obsidian";
 
@@ -69,9 +70,9 @@ function KnowledgeOverview({ data }: { data: AppData }) {
         <div className="event-list compact">
           {(data.knowledge?.latestNodes || []).slice(0, 6).map((node) => (
             <article className="event-row" key={node.id}>
-              <StatusBadge status="healthy">{node.node_type}</StatusBadge>
+              <StatusBadge status="healthy">{knowledgeNodeTypeLabel(node.node_type)}</StatusBadge>
               <strong>{node.title}</strong>
-              <p>{node.summary || node.external_ref || "No summary"}</p>
+              <p>{node.summary || node.external_ref || "요약 없음"}</p>
             </article>
           ))}
         </div>
@@ -88,7 +89,7 @@ function MemoryView({ data }: { data: AppData }) {
         {nodes.length === 0 ? <div className="empty-state">운영 메모리 투영 데이터가 없습니다.</div> : null}
         {nodes.slice(0, 8).map((node) => (
           <article className="memory-chain-card" key={node.id}>
-            <StatusBadge status="healthy">{node.node_type}</StatusBadge>
+            <StatusBadge status="healthy">{knowledgeNodeTypeLabel(node.node_type)}</StatusBadge>
             <strong>{node.title}</strong>
             <span>{node.source || "archiveos"}</span>
             <p>{node.summary || node.external_ref || "연결된 운영 메모리"}</p>

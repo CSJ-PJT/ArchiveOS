@@ -2806,6 +2806,17 @@ body {
 .rag-answer li span,.rag-answer li small { display:block;overflow-wrap:anywhere }
 .rag-history { display:grid;gap:.35rem;padding-top:.75rem;border-top:1px solid var(--color-border) }
 .rag-history span { color:var(--color-text-muted);font-size:.82rem;overflow-wrap:anywhere }
+.settings-list>div { display:grid;grid-template-columns:minmax(8.5rem,.42fr) minmax(0,1fr);align-items:center;gap:.75rem 1rem;padding:.65rem .75rem;border:1px solid var(--color-border);border-radius:.7rem;background:var(--color-surface-muted) }
+.settings-list>div>span:first-child { color:var(--color-text-muted);font-weight:650 }
+.settings-list>div>:last-child { min-width:0;justify-self:start;overflow-wrap:anywhere }
+.memory-chain-card { display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.35rem .75rem;padding:.85rem }
+.memory-chain-card>strong { min-width:0;overflow-wrap:anywhere }
+.memory-chain-card>p { grid-column:1/-1;margin:0;line-height:1.5 }
+.memory-chain-card>.status-badge { justify-self:start }
+.knowledge-graph-panel .panel-header,.chain-section-header,.constellation-header { align-items:flex-start;gap:.75rem }
+.knowledge-graph-panel .metric-card strong,.graph-insight-grid .metric-card strong { line-height:1.25;overflow-wrap:anywhere }
+.insight-row { min-width:0;gap:.55rem }
+.insight-row span,.insight-row small { min-width:0;overflow-wrap:anywhere }
 .automation-console>.console-tabs { position:sticky;top:0;z-index:2;padding:.45rem;border-radius:.75rem;background:var(--color-background) }
 .runtime-control-panel code,.action-output { overflow-wrap:anywhere;white-space:pre-wrap }
 @media (max-width:760px){
@@ -2813,4 +2824,6 @@ body {
   .dashboard-view-tabs button{flex:1 1 10rem}.integration-contract-grid{grid-template-columns:1fr}
   .graph-filter-bar{grid-template-columns:repeat(2,minmax(0,1fr))}.graph-search{grid-column:1/-1}
   .knowledge-graph-panel .graph-main-layout{grid-template-columns:1fr}
+  .settings-list>div{grid-template-columns:1fr;gap:.35rem}.settings-list>div>:last-child{justify-self:start}
+  .memory-chain-card{grid-template-columns:auto minmax(0,1fr)}.memory-chain-card>span:not(.status-badge){grid-column:2}.memory-chain-card>p{grid-column:1/-1}
 }

@@ -136,7 +136,7 @@ function TimelineRows({
         <details className="history-row" key={row.id}>
           <summary>
             <span>{formatTimeAgo(row.time)}</span>
-            <StatusBadge status={row.status}>{row.type}</StatusBadge>
+            <StatusBadge status={row.status}>{historyTypeLabel(row.type)}</StatusBadge>
             <strong>{row.target}</strong>
             <p>{row.summary}</p>
           </summary>
@@ -145,4 +145,8 @@ function TimelineRows({
       ))}
     </div>
   );
+}
+
+function historyTypeLabel(value: string) {
+  return ({ knowledge: "지식", task: "작업", approval: "승인", agent: "에이전트", batch: "배치", command: "명령", event: "이벤트", warning: "주의", error: "오류", slack_notification: "Slack 알림" } as Record<string, string>)[String(value || "").toLowerCase()] || value.replace(/_/g, " ");
 }

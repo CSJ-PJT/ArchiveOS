@@ -63,11 +63,15 @@ export function Sidebar({
       </nav>
       <div className="sidebar-footer">
         <span>플랫폼 상태</span>
-        <StatusBadge status={health}>{loading ? "초기화 중" : health}</StatusBadge>
+        <StatusBadge status={health}>{loading ? "초기화 중" : platformHealthLabel(health)}</StatusBadge>
         <small>
           {displayedBranch} · {displayedCommit}
         </small>
       </div>
     </aside>
   );
+}
+
+function platformHealthLabel(value: SemanticStatus) {
+  return ({ healthy: "정상", warning: "주의", critical: "긴급", waiting: "대기", working: "진행 중", inactive: "대기", disconnected: "연결 안 됨", degraded: "부분 수집", blocked: "차단됨" } as Record<string, string>)[String(value)] || String(value);
 }

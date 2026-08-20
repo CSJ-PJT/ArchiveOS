@@ -10,6 +10,7 @@ import {
   truncateGraphLabel,
   type ActiveDecisionChain,
 } from "./knowledgeGraphUtils";
+import { knowledgeEdgeTypeLabel, knowledgeNodeTypeLabel } from "./KnowledgeUi";
 
 export function KnowledgeGraphSvg({
   graph,
@@ -34,14 +35,14 @@ export function KnowledgeGraphSvg({
   if (graph.nodes.length === 0) {
     return (
       <div className="graph-empty-canvas">
-        <strong>아직 Knowledge Graph 데이터가 충분하지 않습니다.</strong>
-        <span>Daily Report, Nightly Review, Architect Review, Historian Export가 실행되면 노드와 엣지가 생성됩니다.</span>
+        <strong>아직 지식 그래프 데이터가 충분하지 않습니다.</strong>
+        <span>일일 보고서, 야간 검토, 아키텍처 검토, Historian 내보내기가 실행되면 노드와 연결이 생성됩니다.</span>
       </div>
     );
   }
 
   return (
-    <div className="knowledge-graph-canvas" role="img" aria-label="Operational memory knowledge graph">
+    <div className="knowledge-graph-canvas" role="img" aria-label="운영 메모리 지식 그래프">
       <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
         <defs>
           <filter id="graphGlow" x="-60%" y="-60%" width="220%" height="220%">
@@ -80,7 +81,7 @@ export function KnowledgeGraphSvg({
                   textAnchor="middle"
                   fill="#dbeafe"
                 >
-                  {edge.type}
+                  {knowledgeEdgeTypeLabel(edge.type)}
                 </text>
               ) : null}
             </g>
@@ -123,11 +124,11 @@ export function KnowledgeGraphSvg({
                     {truncateGraphLabel(node.label, 18)}
                   </text>
                   <text y={radius + 33} textAnchor="middle" className="graph-node-type">
-                    {node.type}
+                    {knowledgeNodeTypeLabel(node.type)}
                   </text>
                 </>
               ) : null}
-              <title>{`${node.title}\nimportance: ${node.importanceScore}\n${node.type}`}</title>
+              <title>{`${node.title}\n중요도: ${node.importanceScore}\n${knowledgeNodeTypeLabel(node.type)}`}</title>
             </g>
           );
         })}
