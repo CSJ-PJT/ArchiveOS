@@ -72,7 +72,7 @@ function AppShellInner() {
   const refresh = useCallback(async () => {
     if (refreshInFlight.current) return;
     refreshInFlight.current = true;
-    setData((current) => ({ ...current, loading: true }));
+    setData((current) => current.refreshedAt ? current : ({ ...current, loading: true }));
     try {
       const loaders = loadersFor(route);
       const results = await Promise.all(loaders.map(([key, fn]) => settle(key, fn)));

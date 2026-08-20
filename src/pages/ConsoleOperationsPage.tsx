@@ -27,8 +27,8 @@ export function ConsoleOperationsPage({ data, onRefresh }: { data: AppData; onRe
     {(attention.length || incidents.length) ? <section className="operations-mode-note ai-operations-attention" aria-label="AI operations attention">
       <strong>운영 우선 확인</strong>
       <div className="ai-operations-attention-grid">
-        {attention.map((item) => <span key={item.inboxId} title={item.summary}>{item.type} · {item.service || "ArchiveOS"} · 점수 {item.deterministicScore}</span>)}
-        {incidents.map((item) => <span key={item.incident_id} title={item.title}>INCIDENT · {item.severity} · {item.status}</span>)}
+        {attention.map((item) => <span key={item.inboxId} title={item.summary}>{attentionTypeLabel(item.type)} · {item.service || "ArchiveOS"} · 점수 {item.deterministicScore}</span>)}
+        {incidents.map((item) => <span key={item.incident_id} title={item.title}>장애 · {incidentLabel(item.severity)} · {incidentLabel(item.status)}</span>)}
       </div>
       <small>점수는 결정 규칙으로 산정하며, AI는 명시적으로 요청한 경우에만 근거 설명을 제공합니다.</small>
     </section> : null}
@@ -38,3 +38,6 @@ export function ConsoleOperationsPage({ data, onRefresh }: { data: AppData; onRe
     {tab === "automation" ? <div className="page-stack automation-console"><ConsoleTabs value={automationTab} onChange={setAutomationTab} items={[["batch", "배치 작업"], ["rpa", "RPA 검토"]]} />{automationTab === "batch" ? <BatchPage role={data.auth.role} /> : <RpaPage role={data.auth.role} />}</div> : null}
   </div>;
 }
+
+function attentionTypeLabel(value: string) { return ({ system: "시스템", approval: "승인", incident: "장애", task: "작업", agent: "에이전트" } as Record<string, string>)[String(value || "").toLowerCase()] || value.replace(/_/g, " "); }
+function incidentLabel(value: string) { return ({ low: "낮음", medium: "보통", high: "높음", critical: "매우 높음", open: "발생", investigating: "조사 중", resolved: "해결", closed: "종료" } as Record<string, string>)[String(value || "").toLowerCase()] || value.replace(/_/g, " "); }

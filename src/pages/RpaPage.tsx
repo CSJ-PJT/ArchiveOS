@@ -118,7 +118,7 @@ export function RpaPage({ role }: { role: PlatformRole }) {
     <div className="page-stack">
       <header className="page-heading">
         <div>
-          <span className="eyebrow">APPROVAL-GUARDED AUTOMATION</span>
+          <span className="eyebrow">승인 통제 자동화</span>
           <h2>자동화 검토</h2>
           <p>자동 분류 결과와 PM 승인 이력을 실제 실행 제어와 분리해 추적합니다.</p>
         </div>
@@ -151,7 +151,7 @@ export function RpaPage({ role }: { role: PlatformRole }) {
               <textarea value={description} onChange={(event) => setDescription(event.target.value)} />
             </label>
             <p className="small-note">
-              분류 기록만 생성합니다. shell, MCP 도구, 배포 또는 외부 쓰기를 자동으로 실행하지 않습니다.
+              분류 기록만 생성합니다. 명령 셸, MCP 도구, 배포 또는 외부 쓰기를 자동으로 실행하지 않습니다.
             </p>
             <button className="button button-primary" type="button" onClick={() => void createClassification()} disabled={!canCreate || busy !== null}>
               {busy === "classify" ? "분류 중…" : "RPA 분류 기록"}
@@ -171,10 +171,10 @@ export function RpaPage({ role }: { role: PlatformRole }) {
               >
                 <div>
                   <strong>{task.title}</strong>
-                  <span>{task.category || "미분류"}</span>
+                  <span>{categoryLabel(task.category)}</span>
                 </div>
-                <StatusBadge status={task.status}>{task.status}</StatusBadge>
-                <span>{task.riskLevel || "위험도 미평가"}</span>
+                <StatusBadge status={task.status}>{statusLabel(task.status)}</StatusBadge>
+                <span>{riskLabel(task.riskLevel)}</span>
                 <span>{formatTimeAgo(task.updatedAt)}</span>
               </button>
             ))}
@@ -225,14 +225,14 @@ function RpaDetail({
           <h3>{detail.task.title}</h3>
           <span>{detail.task.targetProject || "ArchiveOS"}</span>
         </div>
-        <StatusBadge status={detail.task.status}>{detail.task.status}</StatusBadge>
+        <StatusBadge status={detail.task.status}>{statusLabel(detail.task.status)}</StatusBadge>
       </div>
       <p className="body-copy">{detail.task.summary || detail.task.description}</p>
       <div className="detail-grid">
-        <span>위험도<strong>{detail.task.riskLevel || "미평가"}</strong></span>
-        <span>권고<strong>{detail.task.recommendation || "추가 권고 없음"}</strong></span>
+        <span>위험도<strong>{riskLabel(detail.task.riskLevel)}</strong></span>
+        <span>권고<strong>{recommendationLabel(detail.task.recommendation)}</strong></span>
         <span>승인<strong>{detail.task.approvalRequired ? "필요" : "불필요"}</strong></span>
-        <span>분류 출처<strong>{detail.task.classificationSource || "규칙 기반"}</strong></span>
+        <span>분류 출처<strong>{classificationSourceLabel(detail.task.classificationSource)}</strong></span>
       </div>
       <label className="form-stack">
         <span>결정 사유</span>
@@ -257,9 +257,9 @@ function RpaDetail({
           <article className="decision-history-row" key={decision.id}>
             <div>
               <strong>{decisionLabel(decision.action)}</strong>
-              <span>{decision.decidedBy || "담당 PM"} · {formatTimeAgo(decision.createdAt)}</span>
+              <span>담당 {decision.decidedBy || "PM"} · {formatTimeAgo(decision.createdAt)}</span>
             </div>
-            <StatusBadge status={decision.nextStatus}>{decision.nextStatus}</StatusBadge>
+            <StatusBadge status={decision.nextStatus}>{statusLabel(decision.nextStatus)}</StatusBadge>
             <p>{decision.reason || "기록된 사유가 없습니다."}</p>
           </article>
         ))}
@@ -275,4 +275,29 @@ function RpaDetail({
 
 function decisionLabel(value: string) {
   return ({ approve: "승인", reject: "반려", hold: "보류", request_retry: "재시도 요청" } as Record<string, string>)[value] || value.replace(/_/g, " ");
+}
+
+function categoryLabel(value: string | null | undefined) {
+  return ({ execution_control: "실행 제어", general_operations: "일반 운영", data_processing: "데이터 처리", infrastructure: "인프라 운영" } as Record<string, string>)[String(value || "").toLowerCase()] || (value ? value.replace(/_/g, " ") : "미분류");
+}
+
+function statusLabel(value: string | null | undefined) {
+  return ({ pending: "대기", classified: "분류 완료", approval_required: "승인 필요", approved: "승인됨", rejected: "반려됨", hold: "보류", retry_requested: "재시도 요청" } as Record<string, string>)[String(value || "").toLowerCase()] || (value ? value.replace(/_/g, " ") : "상태 미수집");
+}
+
+function riskLabel(value: string | null | undefined) {
+  return ({ low: "낮음", medium: "보통", high: "높음", critical: "매우 높음" } as Record<string, string>)[String(value || "").toLowerCase()] || (value ? value.replace(/_/g, " ") : "위험도 미평가");
+}
+
+function classificationSourceLabel(value: string | null | undefined) {
+  const normalized = String(value || "").toLowerCase();
+  if (!normalized) return "규칙 기반";
+  if (normalized.includes("rule")) return "규칙 기반";
+  if (normalized.includes("model") || normalized.includes("ai")) return "AI 분류";
+  if (normalized.includes("manual")) return "수동 분류";
+  return String(value).replace(/_/g, " ");
+}
+
+function recommendationLabel(value: string | null | undefined) {
+  return ({ PM_APPROVAL_REQUIRED: "PM 승인 필요", SAFE_TO_RECORD: "기록 가능", MANUAL_REVIEW: "수동 검토 필요", REJECT_EXECUTION: "실행 차단" } as Record<string, string>)[String(value || "").toUpperCase()] || (value ? value.replace(/_/g, " ") : "추가 권고 없음");
 }

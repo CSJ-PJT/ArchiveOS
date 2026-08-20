@@ -6,6 +6,7 @@ const requiredFiles = [
   "backend/src/obsidian/markdownIndex.ts",
   "backend/src/ax/axReadiness.ts",
   "archiveos-ai/build.gradle",
+  "archiveos-ai/src/main/resources/db/migration/V24__localize_remaining_rpa_verification_task.sql",
   "docker-compose.yml",
 ];
 

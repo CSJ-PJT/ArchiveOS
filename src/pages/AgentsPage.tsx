@@ -35,11 +35,11 @@ export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () =
     <div className="page-stack">
       <header className="page-heading">
         <div>
-          <span className="eyebrow">RUNTIME OWNERSHIP</span>
+          <span className="eyebrow">런타임 소유권</span>
           <h2>에이전트 현황</h2>
           <p>역할별 runtime 상태, handoff 기록, 로컬 큐 제어 권한을 확인합니다.</p>
         </div>
-        <StatusBadge status={data.mesh?.health.status || "disconnected"}>{data.mesh?.health.status || "Disconnected"}</StatusBadge>
+        <StatusBadge status={data.mesh?.health.status || "disconnected"}>{agentStatusLabel(data.mesh?.health.status)}</StatusBadge>
       </header>
 
       <section className="summary-strip agent-summary">
@@ -54,7 +54,7 @@ export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () =
         {registeredAgents.length ? <div className="agent-card-grid">{registeredAgents.map((agent) => (
           <article className="agent-card" key={agent.id}>
             <div className="agent-card-icon"><Icon name="agents" size={20} /></div>
-            <div className="agent-card-main"><div className="agent-card-title"><div><strong>{agent.name}</strong><span>{agent.role}</span></div><StatusBadge status={agent.status === "failed" ? "warning" : agent.status === "working" ? "working" : "waiting"}>{agent.status}</StatusBadge></div><p>{agent.current_task || "현재 배정된 작업이 없습니다."}</p><div className="agent-evidence"><span>ArchiveOS PostgreSQL</span><span>갱신 {formatTimeAgo(agent.updated_at)}</span></div></div>
+            <div className="agent-card-main"><div className="agent-card-title"><div><strong>{agent.name}</strong><span>{agentRoleLabel(agent.role)}</span></div><StatusBadge status={agent.status === "failed" ? "warning" : agent.status === "working" ? "working" : "waiting"}>{agentStatusLabel(agent.status)}</StatusBadge></div><p>{agentTaskLabel(agent.current_task)}</p><div className="agent-evidence"><span>ArchiveOS PostgreSQL</span><span>갱신 {formatTimeAgo(agent.updated_at)}</span></div></div>
           </article>
         ))}</div> : <div className="empty-state">등록된 DB 에이전트가 없습니다.</div>}
       </SectionCard>
@@ -67,8 +67,8 @@ export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () =
               <div className="agent-card-icon"><Icon name="agents" size={20} /></div>
               <div className="agent-card-main">
                 <div className="agent-card-title">
-                  <div><strong>{agent.label}</strong><span>{agent.role}</span></div>
-                  <StatusBadge status={agent.status}>{agent.status.replace(/_/g, " ")}</StatusBadge>
+                  <div><strong>{agent.label}</strong><span>{agentRoleLabel(agent.role)}</span></div>
+                  <StatusBadge status={agent.status}>{agentStatusLabel(agent.status)}</StatusBadge>
                 </div>
                 <p>{agent.summary || "아직 runtime 활동 기록이 없습니다."}</p>
                 <div className="agent-evidence"><span>출처 {agent.source}</span><span>갱신 {formatTimeAgo(data.refreshedAt)}</span></div>
@@ -108,5 +108,18 @@ export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () =
 }
 
 function Summary({ label, value, status }: { label: string; value: number; status: string }) {
-  return <div className="summary-card"><span>{label}</span><strong>{value}</strong><StatusBadge status={status}>{status === "inactive" ? "대기" : status}</StatusBadge></div>;
+  return <div className="summary-card"><span>{label}</span><strong>{value}</strong><StatusBadge status={status}>{agentStatusLabel(status)}</StatusBadge></div>;
+}
+
+function agentStatusLabel(value: string | null | undefined) {
+  return ({ healthy: "정상", normal: "정상", working: "진행 중", waiting: "대기", inactive: "대기", idle: "유휴", reviewing: "검토 중", detected: "감지됨", enabled: "활성", clear: "이상 없음", warning: "주의", blocked: "차단됨", failed: "실패", disconnected: "연결 안 됨" } as Record<string, string>)[String(value || "").toLowerCase()] || (value ? value.replace(/_/g, " ") : "연결 안 됨");
+}
+
+function agentRoleLabel(value: string | null | undefined) {
+  return ({ planner: "기획", reviewer: "검토", logger: "기록", builder: "구현", implementer: "구현", architect: "아키텍처", historian: "이력 관리", bridge: "연동", loop: "반복 운영" } as Record<string, string>)[String(value || "").toLowerCase()] || (value ? value.replace(/_/g, " ") : "역할 미수집");
+}
+
+function agentTaskLabel(value: string | null | undefined) {
+  if (!value) return "현재 배정된 작업이 없습니다.";
+  return ({ "Breaking down onboarding tasks": "온보딩 작업을 세분화하는 중입니다.", "Waiting for schema approval": "스키마 승인을 기다리는 중입니다.", "Checking dashboard data flow": "대시보드 데이터 흐름을 확인하는 중입니다." } as Record<string, string>)[value] || value;
 }

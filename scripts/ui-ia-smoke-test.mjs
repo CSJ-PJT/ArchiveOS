@@ -8,8 +8,18 @@ const api = read("src/lib/backendApi.ts");
 const liveMesh = read("src/components/console/LiveMeshTopology.tsx");
 const dashboard = read("src/pages/ConsoleDashboardPage.tsx");
 const services = read("src/pages/ConsoleServicesPage.tsx");
+const finance = read("src/pages/ConsoleFinancePage.tsx");
+const workforce = read("src/pages/WorkforcePage.tsx");
+const rpa = read("src/pages/RpaPage.tsx");
 const knowledge = read("src/pages/KnowledgePage.tsx");
+const knowledgeUi = read("src/components/knowledge/KnowledgeUi.tsx");
+const knowledgePanel = read("src/components/knowledge/KnowledgeGraphPanel.tsx");
 const operations = read("src/pages/ConsoleOperationsPage.tsx");
+const agents = read("src/pages/AgentsPage.tsx");
+const sidebar = read("src/components/shared/Sidebar.tsx");
+const consoleSettings = read("src/pages/ConsoleSettingsPage.tsx");
+const mcpRegistry = read("src/pages/McpRegistryPage.tsx");
+const pageUtils = read("src/pages/pageUtils.ts");
 const i18n = read("src/i18n/I18nProvider.tsx");
 
 for (const label of ["대시보드", "서비스", "운영", "재무", "기록", "설정"]) {
@@ -37,8 +47,50 @@ for (const contract of ["라이브 토폴로지 상세", "LiveFlowPage"]) {
 for (const contract of ["integrationConnectors", "등록 시스템", "역량 사용률", "시뮬레이터 정지"]) {
   if (!services.includes(contract)) throw new Error(`Service integration/metric contract missing: ${contract}`);
 }
+for (const contract of ["operations.runtimeWorkforce.usedCapacity", "operations.runtimeWorkforce.effectiveCapacity", "외부 쓰기"]) {
+  if (!services.includes(contract)) throw new Error(`Nested service metric/label contract missing: ${contract}`);
+}
+for (const contract of ["runtimeWorkforce.usedCapacity", "runtimeWorkforce.effectiveCapacity", "registeredSystemRole", "environmentLabel"]) {
+  if (!services.includes(contract)) throw new Error(`Runtime workforce/external system display contract missing: ${contract}`);
+}
+if (!finance.includes("modeLabel(item.mode)")) throw new Error("Finance recommendation modes must use localized display labels.");
+for (const contract of ["productivityLabel", "시뮬레이터 정지", "외부 쓰기 차단"]) {
+  if (!workforce.includes(contract)) throw new Error(`Workforce display contract missing: ${contract}`);
+}
+for (const contract of ["roleLabel", "recommendationSeverityLabel", "합성 작업", "안전 모드 유지"]) {
+  if (!workforce.includes(contract)) throw new Error(`Workforce localization contract missing: ${contract}`);
+}
+for (const contract of ["agentStatusLabel", "agentRoleLabel", "agentTaskLabel", "관리자 세션 전용"]) {
+  if (!agents.includes(contract)) throw new Error(`Agent display contract missing: ${contract}`);
+}
+for (const contract of ["attentionTypeLabel", "incidentLabel"]) {
+  if (!operations.includes(contract)) throw new Error(`Operations attention localization missing: ${contract}`);
+}
+if (!sidebar.includes("platformHealthLabel")) throw new Error("Sidebar platform health must use localized labels.");
+for (const contract of ["protectedKeys", "권한 보호 항목", "공개 세션에서 보호됨", "roleLabel"]) {
+  if (!consoleSettings.includes(contract)) throw new Error(`Settings public-protection display missing: ${contract}`);
+}
+for (const contract of ["MCP 도구 레지스트리", "운영자·PM·관리자 세션", "읽기 전용 도구 거버넌스"]) {
+  if (!mcpRegistry.includes(contract)) throw new Error(`MCP registry localization missing: ${contract}`);
+}
+for (const contract of ["방금", "분 전", "시간 전", "알 수 없음"]) {
+  if (!pageUtils.includes(contract)) throw new Error(`Korean time display contract missing: ${contract}`);
+}
+for (const contract of ["categoryLabel", "statusLabel", "riskLabel", "실행 제어", "승인됨", "높음"]) {
+  if (!rpa.includes(contract)) throw new Error(`RPA localization contract missing: ${contract}`);
+}
+if (!appShell.includes("current.refreshedAt ? current")) throw new Error("Background refresh must preserve the loaded UI without resetting global loading state.");
 for (const contract of ["Obsidian 그래프", "KnowledgeGraphPanel", "최근 RAG·지식 기록", "askRag"]) {
   if (!knowledge.includes(contract)) throw new Error(`Knowledge restoration contract missing: ${contract}`);
+}
+for (const contract of ["knowledgeNodeTypeLabel", "knowledgeEdgeTypeLabel", "knowledgeImportanceLabel", "knowledgeStateLabel", "방금", "일 전"]) {
+  if (!knowledgeUi.includes(contract)) throw new Error(`Knowledge graph localization contract missing: ${contract}`);
+}
+for (const contract of ["knowledgeNodeTypeLabel", "knowledgeEdgeTypeLabel", "knowledgeStateLabel", "그래프 집중 필터"]) {
+  if (!knowledgePanel.includes(contract)) throw new Error(`Knowledge graph panel display contract missing: ${contract}`);
+}
+for (const contract of [".settings-list>div", ".memory-chain-card", ".knowledge-graph-panel .panel-header"]) {
+  if (!styles.includes(contract)) throw new Error(`Knowledge layout restoration missing: ${contract}`);
 }
 if (!operations.includes('items={[["batch", "배치 작업"], ["rpa", "RPA 검토"]]}')) throw new Error("Automation must restore separate Batch and RPA tabs.");
 for (const contract of ["Archive-Market", "Archive-Nexus", "Archive-Logistics", "Archive-Ledger", "ArchiveOS", "Settlement", "events.slice(0, 30)"]) {
