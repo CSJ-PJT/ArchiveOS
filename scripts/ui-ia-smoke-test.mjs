@@ -66,7 +66,10 @@ for (const contract of ["agentStatusLabel", "agentRoleLabel", "agentTaskLabel", 
 for (const contract of ["attentionTypeLabel", "incidentLabel"]) {
   if (!operations.includes(contract)) throw new Error(`Operations attention localization missing: ${contract}`);
 }
-if (!sidebar.includes("platformHealthLabel")) throw new Error("Sidebar platform health must use localized labels.");
+for (const contract of ["platformHealthLabel", "import.meta.env.BASE_URL", "archiveos-mark.svg"]) {
+  if (!sidebar.includes(contract)) throw new Error(`Sidebar public-base asset contract missing: ${contract}`);
+}
+if (!services.includes('"archive-logitics": "합성 물류·운송 운영"')) throw new Error("Legacy Logistics system ID must use the localized role label.");
 for (const contract of ["protectedKeys", "권한 보호 항목", "공개 세션에서 보호됨", "roleLabel"]) {
   if (!consoleSettings.includes(contract)) throw new Error(`Settings public-protection display missing: ${contract}`);
 }
