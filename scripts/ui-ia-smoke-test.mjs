@@ -21,6 +21,7 @@ const consoleSettings = read("src/pages/ConsoleSettingsPage.tsx");
 const mcpRegistry = read("src/pages/McpRegistryPage.tsx");
 const pageUtils = read("src/pages/pageUtils.ts");
 const i18n = read("src/i18n/I18nProvider.tsx");
+const dashboardCopilot = read("src/components/console/DashboardRagCopilot.tsx");
 
 for (const label of ["대시보드", "서비스", "운영", "재무", "기록", "설정"]) {
   if (!navigation.includes(`label: "${label}"`)) throw new Error(`Missing Console V3 navigation label: ${label}`);
@@ -76,6 +77,10 @@ for (const contract of ["protectedKeys", "권한 보호 항목", "공개 세션�
 for (const contract of ["const authPromise = getAuthSession()", '["auth", () => authPromise]', "(await authPromise).authenticated ? getMcpRegistry() : []", "(await authPromise).authenticated ? getPublicAccessStatus() : null", "(await authPromise).authenticated ? getSecurityStatus() : null"]) {
   if (!appShell.includes(contract)) throw new Error(`Settings protected-loader auth gate missing: ${contract}`);
 }
+for (const contract of ["searchKnowledgeNodes", 'authenticated ? "ask" : "search"', 'authenticated ? <option value="ask"', 'score: 0', 'ArchiveOS Knowledge']) {
+  if (!dashboardCopilot.includes(contract)) throw new Error(`Public dashboard knowledge-search fallback missing: ${contract}`);
+}
+if (!api.includes('/api/knowledge/search?q=${encodeURIComponent(query)}&limit=${limit}')) throw new Error("Public knowledge-search API contract missing.");
 for (const contract of ["MCP 도구 레지스트리", "운영자·PM·관리자 세션", "읽기 전용 도구 거버넌스"]) {
   if (!mcpRegistry.includes(contract)) throw new Error(`MCP registry localization missing: ${contract}`);
 }
