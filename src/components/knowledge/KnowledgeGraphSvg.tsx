@@ -118,9 +118,7 @@ export function KnowledgeGraphSvg({
           const isCritical = node.importanceLevel === "critical";
           const showLabel =
             selected ||
-            inActiveChain ||
-            node.importanceLevel === "critical" ||
-            node.importanceLevel === "high" ||
+            hovered ||
             node.type === "decision" ||
             node.type === "architecture_review";
           return (
