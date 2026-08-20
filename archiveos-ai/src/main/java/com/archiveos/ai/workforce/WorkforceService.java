@@ -101,6 +101,7 @@ public class WorkforceService {
         BigDecimal effectiveCapacity = firstPositive(
                 first(capacityBody, workforceBody, "effectiveCapacity", "effective_capacity", "capacity", "totalCapacity"),
                 path(operationsBody, "workforce.effectiveCapacity"), path(operationsBody, "runtimeWorkforce.effectiveCapacity"),
+                path(operationsBody, "workforce.capacityEvents"), path(operationsBody, "workforce.totalCapacity"),
                 path(operationsBody, "balance.effectiveCapacity"));
         BigDecimal usedCapacity = firstPositive(
                 first(capacityBody, workforceBody, "usedCapacity", "used_capacity", "used", "load"),
@@ -108,7 +109,7 @@ public class WorkforceService {
                 path(operationsBody, "balance.usedCapacity"));
         int backlog = maxInteger(
                 first(capacityBody, productivityBody, workforceBody, "backlog", "queueDepth", "pending", "pendingWork"),
-                path(operationsBody, "workforce.backlog"), path(operationsBody, "workforce.backlogCount"),
+                path(operationsBody, "workforce.backlog"), path(operationsBody, "workforce.backlogCount"), path(operationsBody, "workforce.backlogEvents"),
                 path(operationsBody, "runtimeWorkforce.backlog"), path(operationsBody, "balance.backlogCount"),
                 operationsBody.get("backlogCount"), operationsBody.get("productionBacklog"));
         BigDecimal payrollCost = firstPositive(

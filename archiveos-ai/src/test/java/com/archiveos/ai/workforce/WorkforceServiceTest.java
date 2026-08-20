@@ -91,6 +91,28 @@ class WorkforceServiceTest {
         assertThat((java.math.BigDecimal) ledgerRow.get("productivityScore")).isEqualByComparingTo("11.64");
     }
 
+    @Test
+    void usesLogisticsCapacityEventsWhenDedicatedCapacityEndpointHasNoBaseline() {
+        mockMarket();
+        mockNexus();
+        mockLogistics();
+        mockLedger();
+        when(logitics.capacitySummary()).thenReturn(ok(Map.of("effectiveCapacity", 0, "usedCapacity", 0)));
+        when(logitics.productivitySummary()).thenReturn(ok(Map.of("productivityScore", 0)));
+        when(logitics.operationsSummary()).thenReturn(ok(Map.of(
+                "workforce", Map.of("capacityEvents", 302, "usedCapacity", 110, "backlogEvents", 24192,
+                        "bottleneckRole", "DELIVERY_DRIVER"))));
+
+        List<Map<String, Object>> services = list(new WorkforceService(market, nexus, logitics, ledger).overview().get("services"));
+        Map<String, Object> logisticsRow = services.stream()
+                .filter(row -> "archive-logistics".equals(row.get("serviceId"))).findFirst().orElseThrow();
+
+        assertThat(logisticsRow).containsEntry("effectiveCapacity", new java.math.BigDecimal("302.0"))
+                .containsEntry("usedCapacity", new java.math.BigDecimal("110.0"))
+                .containsEntry("backlog", 24192);
+        assertThat((java.math.BigDecimal) logisticsRow.get("productivityScore")).isEqualByComparingTo("36.42");
+    }
+
     private void mockMarket() {
         when(market.workforceSummary()).thenReturn(ok(Map.of("headcount", 8, "payrollCost", 1_200_000)));
         when(market.productivitySummary()).thenReturn(ok(Map.of("productivityScore", 78, "backlog", 12, "bottleneckRole", "order-review")));
