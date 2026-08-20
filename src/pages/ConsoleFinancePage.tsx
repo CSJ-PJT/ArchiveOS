@@ -23,7 +23,8 @@ export function ConsoleFinancePage({ data, onRefresh }: { data: AppData; onRefre
 function EcosystemFinanceView({ data }: { data: AppData }) {
   const rows = data.balance?.services ?? [];
   const totals = data.balance?.totals;
-  const knownCash = rows.reduce<number | null>((total, row) => row.cashBalance == null ? total : (total ?? 0) + number(row.cashBalance), null);
+  const totalsAvailable = (totals?.includedServices ?? 0) > 0;
+  const knownCash = rows.filter((row) => row.includedInTotals !== false).reduce<number | null>((total, row) => row.cashBalance == null ? total : (total ?? 0) + number(row.cashBalance), null);
   const partial = data.balance?.balanceStatus === "PARTIAL_DATA" || rows.some((row) => row.balance === "NO_DATA");
   const approvals = data.externalApprovals;
   const loadedWaiting = approvals.filter((approval) => ["PENDING", "CALLBACK_PENDING", "HOLD"].includes(approval.status)).length;
@@ -32,14 +33,14 @@ function EcosystemFinanceView({ data }: { data: AppData }) {
   return <div className="page-stack finance-ecosystem-view">
     <div className="finance-context-note"><strong>합성 데이터 기준</strong><span>실제 고객·결제·계좌·금융 데이터는 사용하지 않습니다. GMV는 매출과 이익 계산에 포함하지 않습니다.</span></div>
     <section className="kpi-command-grid finance-kpi-grid">
-      <MetricCard label="인식 매출" value={amount(totals?.revenue)} hint="현재 수집된 서비스 기준" status={totals ? "healthy" : "empty"} />
-      <MetricCard label="총 비용" value={amount(totals?.cost)} hint="현재 수집된 서비스 기준" status={totals ? "healthy" : "empty"} />
-      <MetricCard label="영업이익" value={amount(totals?.profit)} hint="수익 - 비용" status={totals?.profit == null ? "empty" : number(totals.profit) >= 0 ? "healthy" : "warning"} />
-      <MetricCard label="보유자금" value={knownCash == null ? "데이터 없음" : amount(knownCash)} hint="현금값을 제공한 서비스 합계" status={knownCash == null ? "empty" : "working"} />
+      <MetricCard label="인식 매출" value={totalsAvailable ? amount(totals?.revenue) : "데이터 없음"} hint="비교 가능한 현재 운영 기간" status={totalsAvailable ? "healthy" : "empty"} />
+      <MetricCard label="총 비용" value={totalsAvailable ? amount(totals?.cost) : "데이터 없음"} hint="비교 가능한 현재 운영 기간" status={totalsAvailable ? "healthy" : "empty"} />
+      <MetricCard label="영업이익" value={totalsAvailable ? amount(totals?.profit) : "데이터 없음"} hint="수익 - 비용" status={!totalsAvailable ? "empty" : number(totals?.profit) >= 0 ? "healthy" : "warning"} />
+      <MetricCard label="보유자금" value={knownCash == null ? "데이터 없음" : amount(knownCash)} hint="동일 기간·통화 계약만 합산" status={knownCash == null ? "empty" : "working"} />
       <MetricCard label="미결 승인" value={approvalCountAvailable ? waitingSettlement.toLocaleString() : "데이터 없음"} hint="현재 PostgreSQL 승인 큐 기준" status={waitingSettlement > 0 ? "warning" : approvalCountAvailable ? "healthy" : "empty"} />
       <MetricCard label="균형 상태" value={balanceLabel(data.balance?.balanceStatus)} hint={data.balance?.reviewReason || "마지막 계산 기준"} status={partial ? "empty" : data.balance?.balanceStatus === "COMPLETE_BALANCED" ? "healthy" : "warning"} />
     </section>
-    {partial ? <div className="finance-data-note"><strong>부분 수집 상태</strong><span>일부 서비스의 재무 Runtime Mesh가 아직 값을 제공하지 않습니다. 데이터 없음은 실제 0원이 아니며, 전체 균형을 확정하지 않습니다.</span></div> : null}
+    {partial ? <div className="finance-data-note"><strong>부분 수집 상태</strong><span>데이터가 없거나 전기간 누적·비활성 런타임처럼 비교할 수 없는 값은 합계에서 제외합니다. 제외는 실제 0원을 뜻하지 않습니다.</span></div> : null}
     <section className="finance-overview-grid">
       <SectionCard title="수집 범위" eyebrow="DATA AVAILABILITY"><div className="finance-availability-list">{rows.map((row) => <div key={row.serviceId}><strong>{row.serviceName}</strong><StatusBadge status={row.balance === "NO_DATA" ? "empty" : row.status}>{row.balance === "NO_DATA" ? "데이터 없음" : "수집됨"}</StatusBadge><span>{row.balanceReason || "계산 범위 정보 없음"}</span></div>)}{!rows.length ? <p className="empty-copy">재무 Runtime Mesh를 아직 수집하지 못했습니다.</p> : null}</div></SectionCard>
       <SectionCard title="최근 재무 스냅샷" eyebrow="READ ONLY"><FinanceSnapshot systems={data.gameFinance?.systems ?? {}} /></SectionCard>
