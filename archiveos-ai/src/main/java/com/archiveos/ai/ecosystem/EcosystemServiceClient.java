@@ -1,6 +1,8 @@
 package com.archiveos.ai.ecosystem;
 
 import com.archiveos.ai.obsidian.Json;
+import com.archiveos.ai.security.ArchiveScopeRegistry;
+import com.archiveos.ai.security.SecurityProperties;
 import java.net.ConnectException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -16,28 +18,50 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class EcosystemServiceClient {
+    private static final String ARCHIVE_OS_SOURCE = "archive-os";
+
     private final HttpClient http = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NORMAL)
             .connectTimeout(Duration.ofSeconds(3))
             .build();
+    private final SecurityProperties security;
+
+    public EcosystemServiceClient(SecurityProperties security) {
+        this.security = security;
+    }
 
     public IntegrationResult get(String baseUrl, String path, int timeoutMs) {
-        return exchange("GET", baseUrl, path, null, timeoutMs);
+        return exchange("GET", baseUrl, path, null, timeoutMs,
+                security.authenticatedReadToken(), ArchiveScopeRegistry.AUTHENTICATED_READ);
     }
 
     public IntegrationResult post(String baseUrl, String path, Object body, int timeoutMs) {
-        return exchange("POST", baseUrl, path, body, timeoutMs);
+        return exchange("POST", baseUrl, path, body, timeoutMs,
+                security.adminOperatorToken(), ArchiveScopeRegistry.ADMIN_OPERATE);
     }
 
-    private IntegrationResult exchange(String method, String baseUrl, String path, Object body, int timeoutMs) {
+    public IntegrationResult postAuthorized(String baseUrl, String path, Object body, int timeoutMs,
+                                            String token, String scope) {
+        return exchange("POST", baseUrl, path, body, timeoutMs, token, scope);
+    }
+
+    private IntegrationResult exchange(String method, String baseUrl, String path, Object body, int timeoutMs,
+                                       String token, String scope) {
         Instant started = Instant.now();
         if (baseUrl == null || baseUrl.isBlank()) {
             return new IntegrationResult(EcosystemServiceStatus.DISABLED, null, Map.of(), "Base URL is not configured.", 0);
         }
+        if (token == null || token.isBlank() || scope == null || scope.isBlank()) {
+            return new IntegrationResult(EcosystemServiceStatus.DEGRADED, null, Map.of(),
+                    "Outbound service credentials are not configured.", latency(started));
+        }
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder(uri(baseUrl, path))
                     .timeout(Duration.ofMillis(Math.max(timeoutMs, 500)))
-                    .header("accept", "application/json");
+                    .header("accept", "application/json")
+                    .header(ArchiveScopeRegistry.AUTHORIZATION, "Bearer " + token)
+                    .header(ArchiveScopeRegistry.SOURCE_HEADER, ARCHIVE_OS_SOURCE)
+                    .header(ArchiveScopeRegistry.SCOPE_HEADER, scope);
             if ("POST".equals(method)) {
                 builder.header("content-type", "application/json")
                         .POST(HttpRequest.BodyPublishers.ofString(body == null ? "{}" : Json.write(body)));
