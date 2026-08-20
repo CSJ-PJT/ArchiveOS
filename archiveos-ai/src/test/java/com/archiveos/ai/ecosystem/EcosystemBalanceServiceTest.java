@@ -45,7 +45,7 @@ class EcosystemBalanceServiceTest {
                 .containsEntry("operatingMargin", null)
                 .containsEntry("includedInTotals", false);
         assertThat(summary).containsEntry("balanceStatus", "PARTIAL_DATA");
-        assertThat(totals(summary)).containsEntry("includedServices", 3L);
+        assertThat(totals(summary)).containsEntry("includedServices", 4L);
     }
 
     @Test
@@ -99,7 +99,7 @@ class EcosystemBalanceServiceTest {
         assertThat(totals(summary)).containsEntry("revenue", BigDecimal.valueOf(100))
                 .containsEntry("cost", BigDecimal.valueOf(70))
                 .containsEntry("profit", BigDecimal.valueOf(30))
-                .containsEntry("includedServices", 1L);
+                .containsEntry("includedServices", 2L);
     }
 
     @Test
@@ -132,7 +132,7 @@ class EcosystemBalanceServiceTest {
         assertThat(totals(summary)).containsEntry("revenue", BigDecimal.valueOf(250))
                 .containsEntry("cost", BigDecimal.valueOf(150))
                 .containsEntry("profit", BigDecimal.valueOf(100))
-                .containsEntry("includedServices", 1L);
+                .containsEntry("includedServices", 2L);
     }
 
     @Test
@@ -181,7 +181,41 @@ class EcosystemBalanceServiceTest {
         assertThat(totals(summary)).containsEntry("revenue", BigDecimal.ZERO)
                 .containsEntry("cost", BigDecimal.ZERO)
                 .containsEntry("profit", BigDecimal.ZERO)
-                .containsEntry("includedServices", 0L);
+                .containsEntry("includedServices", 1L);
+    }
+
+    @Test
+    void includesVerifiedZeroActivityForNexusAndArchiveOsWithoutInventingRevenue() {
+        EcosystemService ecosystem = Mockito.mock(EcosystemService.class);
+        EcosystemBalanceProperties properties = new EcosystemBalanceProperties();
+        Instant end = Instant.now();
+        Map<String, Object> nexusEconomy = new LinkedHashMap<>();
+        nexusEconomy.put("manufacturingRevenue", 0);
+        nexusEconomy.put("totalCost", 0);
+        nexusEconomy.put("currency", "SYNTHETIC_KRW");
+        nexusEconomy.put("calculationScope", "PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS");
+        nexusEconomy.put("periodStart", end.minus(Duration.ofHours(24)).toString());
+        nexusEconomy.put("periodEnd", end.toString());
+        nexusEconomy.put("available", true);
+        nexusEconomy.put("querySucceeded", true);
+        nexusEconomy.put("financialEventCount", 0);
+        when(ecosystem.summary()).thenReturn(Map.of("services", Map.of(
+                "nexus", service("Archive-Nexus", Map.of("economy", nexusEconomy)))));
+
+        Map<String, Object> summary = new EcosystemBalanceService(ecosystem, properties).summary();
+        Map<String, Object> nexus = row(rows(summary), "archive-nexus");
+        Map<String, Object> archiveOs = row(rows(summary), "archiveos");
+
+        assertThat(nexus).containsEntry("revenue", BigDecimal.ZERO)
+                .containsEntry("cost", BigDecimal.ZERO)
+                .containsEntry("profit", BigDecimal.ZERO)
+                .containsEntry("operatingMargin", BigDecimal.ZERO.setScale(2))
+                .containsEntry("balance", "WITHIN_RANGE")
+                .containsEntry("includedInTotals", true);
+        assertThat(archiveOs).containsEntry("revenue", BigDecimal.ZERO)
+                .containsEntry("cost", BigDecimal.ZERO)
+                .containsEntry("balance", "WITHIN_RANGE")
+                .containsEntry("includedInTotals", true);
     }
 
     @Test

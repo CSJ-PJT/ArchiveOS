@@ -15,6 +15,10 @@ const rpa = read("src/pages/RpaPage.tsx");
 const knowledge = read("src/pages/KnowledgePage.tsx");
 const knowledgeUi = read("src/components/knowledge/KnowledgeUi.tsx");
 const knowledgePanel = read("src/components/knowledge/KnowledgeGraphPanel.tsx");
+const knowledgeGraph = read("src/components/knowledge/KnowledgeGraphSvg.tsx");
+const knowledgeUtils = read("src/components/knowledge/knowledgeGraphUtils.ts");
+const records = read("src/pages/ConsoleRecordsPage.tsx");
+const pagination = read("src/components/shared/Pagination.tsx");
 const operations = read("src/pages/ConsoleOperationsPage.tsx");
 const agents = read("src/pages/AgentsPage.tsx");
 const workflows = read("src/pages/WorkflowsPage.tsx");
@@ -59,6 +63,9 @@ for (const contract of ["라이브 토폴로지 상세", "LiveFlowPage", "onLoad
 }
 for (const contract of ["integrationConnectors", "등록 시스템", "역량 사용률", "시뮬레이터 정지"]) {
   if (!services.includes(contract)) throw new Error(`Service integration/metric contract missing: ${contract}`);
+}
+for (const contract of ["Atlas Platform", "ATLAS PROJECT", "latestAtlasCheck", "Atlas 읽기 전용 health"]) {
+  if (!services.includes(contract)) throw new Error(`Atlas project integration contract missing: ${contract}`);
 }
 for (const contract of ["operations.runtimeWorkforce.usedCapacity", "operations.runtimeWorkforce.effectiveCapacity", "외부 쓰기"]) {
   if (!services.includes(contract)) throw new Error(`Nested service metric/label contract missing: ${contract}`);
@@ -108,6 +115,12 @@ for (const contract of ["knowledgeNodeTypeLabel", "knowledgeEdgeTypeLabel", "kno
 for (const contract of ["knowledgeNodeTypeLabel", "knowledgeEdgeTypeLabel", "knowledgeStateLabel", "그래프 집중 필터"]) {
   if (!knowledgePanel.includes(contract)) throw new Error(`Knowledge graph panel display contract missing: ${contract}`);
 }
+for (const contract of ["hoveredNodeId", "hoverEdgeIds", "onMouseEnter", "graph-hover-card", 'role="button"']) {
+  if (!knowledgeGraph.includes(contract)) throw new Error(`Knowledge graph hover contract missing: ${contract}`);
+}
+for (const contract of ["buildConnectedMemoryChains", 'kind: "memory"', "chainNodes.length < 2", "memory-chain-"]) {
+  if (!knowledgeUtils.includes(contract)) throw new Error(`Truthful active memory chain contract missing: ${contract}`);
+}
 for (const contract of [".settings-list>div", ".memory-chain-card", ".knowledge-graph-panel .panel-header"]) {
   if (!styles.includes(contract)) throw new Error(`Knowledge layout restoration missing: ${contract}`);
 }
@@ -123,6 +136,18 @@ for (const contract of ["detail-flow-arrow-", "markerEnd", "flowEdgePath", "para
 }
 for (const contract of [".mesh-edge-time-badge", ".polished-live-flow .mesh-edge-layer .mesh-flow-edge", "fill:none", "font-variant-numeric:tabular-nums"]) {
   if (!styles.includes(contract)) throw new Error(`Topology thin-line/time-badge style missing: ${contract}`);
+}
+for (const contract of ["totalItems", "pageSize", "aria-label", "이전", "다음"]) {
+  if (!pagination.includes(contract)) throw new Error(`Shared pagination contract missing: ${contract}`);
+}
+for (const contract of ["Pagination", "eventPageSize", "pagedEvents"]) {
+  if (!liveFlowPage.includes(contract)) throw new Error(`Live event pagination missing: ${contract}`);
+}
+for (const contract of ["Pagination", "filteredEvents", "safePage"]) {
+  if (!records.includes(contract)) throw new Error(`Records pagination missing: ${contract}`);
+}
+for (const contract of ["auth-session-trigger", '"운영자 로그인"', 'navigate("settings")']) {
+  if (!appShell.includes(contract)) throw new Error(`Public OCI login entry contract missing: ${contract}`);
 }
 if (liveMesh.includes(': "이벤트 없음"')) throw new Error("Mesh nodes must not label a finite event window as globally empty.");
 if (appShell.includes("MutationObserver")) throw new Error("DOM MutationObserver translation must not remain in AppShell.");

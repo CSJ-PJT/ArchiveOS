@@ -85,7 +85,7 @@ services:
       SLACK_CHANNEL: ${SLACK_CHANNEL:-archiveos-alerts}
       ARCHIVEOS_NODE_BASE_URL: http://backend:4000
       ARCHIVEOS_PUBLIC_URL: ${ARCHIVEOS_PUBLIC_URL:-}
-      ARCHIVEOS_SCHEDULER_ENABLED: ${ARCHIVEOS_SCHEDULER_ENABLED:-false}
+      ARCHIVEOS_SCHEDULER_ENABLED: ${ARCHIVEOS_SCHEDULER_ENABLED:-true}
       # Development preserves the application default. The RC overlay explicitly
       # disables this collector unless an operator deliberately enables it.
       ARCHIVE_LIVE_FLOW_COLLECTOR_ENABLED: ${ARCHIVE_LIVE_FLOW_COLLECTOR_ENABLED:-true}

@@ -92,6 +92,7 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
     () => operationalChains.find((chain) => chain.id === selectedChainId) || operationalChains[0] || null,
     [operationalChains, selectedChainId],
   );
+  const focusedChain = selectedChainId ? activeChain : null;
   const selectedNode = filteredGraph?.nodes.find((node) => node.id === selectedNodeId) || null;
   const nodeTypes = useMemo(() => ["all", ...Object.keys(graph?.stats.types || {})], [graph]);
   const edgeTypes = useMemo(() => ["all", ...Array.from(new Set(graph?.edges.map((edge) => edge.type) || []))], [graph]);
@@ -145,8 +146,8 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
               <h3>운영 메모리 연결망</h3>
               <p>문서, 청크, 결정, 검토, 장애와 보고서가 어떻게 연결되는지 확인합니다.</p>
             </div>
-            <KnowledgeStatusBadge tone={activeChain ? "working" : "idle"}>
-              {activeChain ? "체인 집중" : "자유 탐색"}
+            <KnowledgeStatusBadge tone={focusedChain ? "working" : "idle"}>
+              {focusedChain ? "체인 집중" : "자유 탐색"}
             </KnowledgeStatusBadge>
           </div>
 
@@ -154,7 +155,7 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
             <KnowledgeGraphSvg
               graph={filteredGraph}
               selectedNodeId={selectedNodeId}
-              activeChain={activeChain}
+              activeChain={focusedChain}
               onSelectNode={(node) => {
                 selectNode(node.id);
                 const linkedChain = operationalChains.find((chain) => chain.nodeIds.has(node.id));

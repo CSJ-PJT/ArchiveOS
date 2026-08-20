@@ -238,6 +238,7 @@ public class LiveFlowService {
         Map<String, Object> body = responseData(summary);
         Map<String, Object> operations = responseData(map(summary.get("operations")));
         Map<String, Object> runtime = firstMap(body, "runtime", "pipeline", "scheduler");
+        if (runtime.isEmpty()) runtime = firstMap(operations, "runtime", "pipeline", "scheduler");
         Map<String, Object> outbox = firstMap(body, "outbox", "outboxSummary");
         Instant lastEventAt = firstInstant(
                 runtime.get("lastEventAt"), runtime.get("lastWorkAt"),
@@ -251,15 +252,21 @@ public class LiveFlowService {
         long produced = number(runtime.get("eventsProducedLastTick"));
         long consumed = number(runtime.get("eventsConsumedLastTick"));
         long backlog = number(firstNonNull(runtime.get("backlogCount"), body.get("backlogCount"), outbox.get("pending")));
-        Long recentThroughput = optionalLong(throughputMetrics, "recentThroughput", "throughput", "recentEvents");
-        String throughputSource = "persisted_business_events_30m";
-        if (recentThroughput == null) {
-            recentThroughput = repository.businessEventCountByNode(systemId(key), 30);
-        } else {
+        Long upstreamThroughput = optionalLong(throughputMetrics, "recentThroughput", "throughput", "recentEvents");
+        Long persistedThroughput = repository.businessEventCountByNode(systemId(key), 30);
+        long tickThroughput = Math.max(produced, consumed);
+        long recentThroughput = Math.max(
+                upstreamThroughput == null ? 0 : upstreamThroughput,
+                Math.max(persistedThroughput == null ? 0 : persistedThroughput, tickThroughput));
+        String throughputSource;
+        if (upstreamThroughput != null && upstreamThroughput == recentThroughput && recentThroughput > 0) {
             throughputSource = "upstream";
-        }
-        if (recentThroughput == null) {
-            throughputSource = "none";
+        } else if (persistedThroughput != null && persistedThroughput == recentThroughput && recentThroughput > 0) {
+            throughputSource = "persisted_business_events_30m";
+        } else if (tickThroughput > 0) {
+            throughputSource = "runtime_tick";
+        } else {
+            throughputSource = "no_work_in_window";
         }
         boolean autoRunExplicitlyDisabled = firstNonNull(runtime.get("autoRunEnabled"), body.get("autoRunEnabled")) != null && !autoRunEnabled;
         String runtimeStatus = runtimeStatus(serviceStatus, lastEventAt, schedulerStatus, pipelineStatus,

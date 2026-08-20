@@ -4,6 +4,7 @@ import type { CoreRoute } from "../app/navigation";
 import { LiveMeshTopology } from "../components/console/LiveMeshTopology";
 import { DashboardRagCopilot } from "../components/console/DashboardRagCopilot";
 import { Icon, type IconName } from "../components/shared/Icon";
+import { Pagination } from "../components/shared/Pagination";
 import { StatusBadge, normalizeStatus, type SemanticStatus } from "../components/shared/StatusBadge";
 import { useI18n } from "../i18n/I18nProvider";
 import { LiveFlowPage } from "./LiveFlowPage";
@@ -14,6 +15,7 @@ export function ConsoleDashboardPage({ data, onNavigate, onRefresh, onLoadTopolo
   const { translate } = useI18n();
   const [view, setView] = useState<"overview" | "topology">("overview");
   const [eventFilter, setEventFilter] = useState<EventFilter>("ALL");
+  const [eventPage, setEventPage] = useState(0);
   const [copilotQuestion, setCopilotQuestion] = useState<string | null>(null);
   const services = Object.values(data.ecosystem?.services ?? {});
   const healthy = services.filter((service) => service.status === "HEALTHY").length + 1;
@@ -21,7 +23,10 @@ export function ConsoleDashboardPage({ data, onNavigate, onRefresh, onLoadTopolo
   const balance = data.balance;
   const allEvents = data.liveFlowEvents;
   const filteredEvents = useMemo(() => allEvents.filter((event) => matchesFilter(event, eventFilter)), [allEvents, eventFilter]);
-  const events = filteredEvents.slice(0, 4);
+  const eventPageSize = 5;
+  const safeEventPage = Math.min(eventPage, Math.max(0, Math.ceil(filteredEvents.length / eventPageSize) - 1));
+  const events = filteredEvents.slice(safeEventPage * eventPageSize, (safeEventPage + 1) * eventPageSize);
+  useEffect(() => setEventPage(0), [eventFilter]);
   useEffect(() => {
     const onCorrelationClick = (nativeEvent: MouseEvent) => {
       const button = (nativeEvent.target as HTMLElement | null)?.closest<HTMLButtonElement>(".dashboard-event-list .correlation-link");
@@ -90,9 +95,9 @@ export function ConsoleDashboardPage({ data, onNavigate, onRefresh, onLoadTopolo
           <button type="button" className="text-button" onClick={() => onNavigate("records")}>전체 이벤트 보기 →</button>
         </div>
       </header>
-      {events.length ? <><div className="dashboard-event-columns" aria-hidden="true"><span>시간</span><span>경로</span><span>이벤트</span><span>대상</span><span>Correlation</span><span>상태</span></div><ol className="dashboard-event-list">{events.map((event) => <li key={event.event_id} className={isFresh(event.received_at) ? "is-new" : ""}>
+      {events.length ? <><div className="dashboard-event-table"><div className="dashboard-event-columns" aria-hidden="true"><span>시간</span><span>경로</span><span>이벤트</span><span>대상</span><span>Correlation</span><span>상태</span></div><ol className="dashboard-event-list">{events.map((event) => <li key={event.event_id} className={isFresh(event.received_at) ? "is-new" : ""}>
         <time className="event-time">{formatTime(event.occurred_at)}</time><span className="event-route" title={`${event.from_node} → ${event.to_node}`}>{displayServiceName(event.from_node)} → {displayServiceName(event.to_node)}</span><strong className="event-type" title={event.event_type}>{event.event_type}</strong><small className="event-entity" title={event.entity_id}>{event.entity_id || "대상 정보 없음"}</small><button type="button" className="correlation-link" title={event.correlation_id ? "AI 코파일럿에서 흐름 분석" : "연결 정보 없음"} onClick={() => setCopilotQuestion(interpolate(translate("copilot.questionCorrelation"), { id: event.correlation_id || "NO_DATA" }))}>{shortId(event.correlation_id) || "연결 정보 없음"}</button><StatusBadge status={normalizeStatus(event.status)}>{statusLabel(event.status)}</StatusBadge>
-      </li>)}</ol></> : <p className="dashboard-event-empty">실시간 연결은 정상이며 새 런타임 이벤트를 기다리고 있습니다.</p>}
+      </li>)}</ol></div><Pagination page={safeEventPage} pageSize={eventPageSize} totalItems={filteredEvents.length} onPageChange={setEventPage} label="대시보드 최근 이벤트 페이지" /></> : <p className="dashboard-event-empty">실시간 연결은 정상이며 새 런타임 이벤트를 기다리고 있습니다.</p>}
     </section>
   </div>;
 }

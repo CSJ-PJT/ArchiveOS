@@ -1,5 +1,5 @@
 import { getLocalRuntimeStatus } from "../lib/localRuntime.js";
-import { supabaseAdmin } from "../lib/supabaseAdmin.js";
+import { queryLocalDashboard } from "../lib/localDashboard.js";
 import {
   countByDate,
   getRangeStart,
@@ -86,7 +86,7 @@ export async function getKpiOverview(rangeInput: unknown): Promise<KpiOverview> 
     countTable("knowledge_edges", {}),
     countTable("knowledge_nodes", { sinceColumn: "created_at", since: start }),
     countTable("knowledge_edges", { sinceColumn: "created_at", since: start }),
-    countTable("historian_exports", { column: "status", value: "success", sinceColumn: "created_at", since: start }),
+    countTable("obsidian_documents", { sinceColumn: "updated_at", since: start }),
   ]);
 
   const snapshots = snapshotsResult.data ?? [];
@@ -124,15 +124,15 @@ export async function getKpiOverview(rangeInput: unknown): Promise<KpiOverview> 
   });
 
   if (!runtime) notes.push("Current runtime status was unavailable; latest runtime queue values are null.");
-  if (!snapshots.length) notes.push("No runtime snapshots exist in range; loop detected rate is unavailable.");
-  if (!verdicts.length) notes.push("No reviewer verdicts were found in range; approval rate is unavailable.");
+  if (!snapshots.length) notes.push("No runtime snapshots exist in range; loop detection count is currently zero.");
+  if (!verdicts.length) notes.push("No reviewer verdicts were found in range; approval and rejection counts are currently zero.");
 
   return {
     range,
     generatedAt,
     productivity: {
       tasksCompleted: tasksCompleted.count,
-      reviewsCompleted: verdicts.length || null,
+      reviewsCompleted: verdicts.length,
       decisionsRecorded: decisions.data?.length ?? null,
       commandsRecorded: commands.data?.length ?? null,
       dailyReportsSent: dailyReports.count,
@@ -142,7 +142,7 @@ export async function getKpiOverview(rangeInput: unknown): Promise<KpiOverview> 
       reviewApproveCount,
       reviewRejectCount,
       reviewStopCount,
-      approvalRate: percent(reviewApproveCount, reviewDenominator),
+      approvalRate: reviewDenominator ? percent(reviewApproveCount, reviewDenominator) : 0,
       architectReviewCount: architectureRows.length,
       architectWarningCount: architectureRows.filter((review) => review.status === "warning").length,
       architectBlockedCount: architectureRows.filter((review) => review.status === "blocked").length,
@@ -154,7 +154,7 @@ export async function getKpiOverview(rangeInput: unknown): Promise<KpiOverview> 
       latestReviews: runtime?.queue.reviews ?? latestSnapshot?.reviews_count ?? null,
       latestStatus: runtimeLatestStatus,
       warningCount,
-      loopDetectedRate: loopSignals.length ? percent(loopSignals.filter(Boolean).length, loopSignals.length) : null,
+      loopDetectedRate: loopSignals.length ? percent(loopSignals.filter(Boolean).length, loopSignals.length) : 0,
     },
     knowledge: {
       totalNodes,
@@ -188,44 +188,51 @@ async function countTable(
     since?: string;
   },
 ): Promise<CountResult> {
-  let query = supabaseAdmin.from(table).select("id", { count: "exact", head: true });
-
-  if (filters.column && filters.value) query = query.eq(filters.column, filters.value);
-  if (filters.statusColumn && filters.statusValue) query = query.eq(filters.statusColumn, filters.statusValue);
-  if (filters.sinceColumn && filters.since) query = query.gte(filters.sinceColumn, filters.since);
-
-  const { count, error } = await query;
-  return { count: error ? null : count ?? 0, error };
+  try {
+    const clauses: string[] = [];
+    const values: unknown[] = [];
+    const equal = (column: string, value: string) => { values.push(value); clauses.push(`${identifier(column)} = $${values.length}`); };
+    if (filters.column && filters.value) equal(filters.column, filters.value);
+    if (filters.statusColumn && filters.statusValue) equal(filters.statusColumn, filters.statusValue);
+    if (filters.sinceColumn && filters.since) { values.push(filters.since); clauses.push(`${identifier(filters.sinceColumn)} >= $${values.length}::timestamptz`); }
+    const rows = await queryLocalDashboard<{ count: number }>(`select count(*)::int as count from public.${identifier(table)}${clauses.length ? ` where ${clauses.join(" and ")}` : ""}`, values);
+    return { count: Number(rows[0]?.count ?? 0), error: null };
+  } catch (error) {
+    return { count: null, error };
+  }
 }
 
-async function fetchRows<T>(
+async function fetchRows<T extends object>(
   table: string,
   select: string,
   since: string,
   options: { column?: string; value?: string; sinceColumn?: string; excludeIds?: string[] } = {},
 ) {
-  let query = supabaseAdmin
-    .from(table)
-    .select(select)
-    .gte(options.sinceColumn ?? "created_at", since)
-    .order(options.sinceColumn ?? "created_at", { ascending: false });
-
-  if (options.column && options.value) query = query.eq(options.column, options.value);
-  if (options.excludeIds?.length) query = query.not("id", "in", `(${options.excludeIds.join(",")})`);
-
-  const { data, error } = await query;
-  return { data: error ? [] : (data ?? []) as unknown as T[], error };
+  try {
+    const sinceColumn = options.sinceColumn ?? "created_at";
+    const clauses = [`${identifier(sinceColumn)} >= $1::timestamptz`];
+    const values: unknown[] = [since];
+    if (options.column && options.value) { values.push(options.value); clauses.push(`${identifier(options.column)} = $${values.length}`); }
+    if (options.excludeIds?.length) { values.push(options.excludeIds); clauses.push(`id::text <> all($${values.length}::text[])`); }
+    const data = await queryLocalDashboard<T>(`select ${select} from public.${identifier(table)} where ${clauses.join(" and ")} order by ${identifier(sinceColumn)} desc`, values);
+    return { data, error: null };
+  } catch (error) {
+    return { data: [] as T[], error };
+  }
 }
 
 async function getKnowledgeNodeTrend(start: string) {
-  const { data, error } = await supabaseAdmin
-    .from("knowledge_nodes")
-    .select("created_at")
-    .gte("created_at", start)
-    .order("created_at", { ascending: true });
+  try {
+    const data = await queryLocalDashboard<CreatedAtRow>("select created_at from public.knowledge_nodes where created_at >= $1::timestamptz order by created_at asc", [start]);
+    return countByDate(data.map((row) => row.created_at));
+  } catch {
+    return [];
+  }
+}
 
-  if (error) return [];
-  return countByDate((data ?? []).map((row) => row.created_at));
+function identifier(value: string) {
+  if (!/^[a-z_][a-z0-9_]*$/i.test(value)) throw new Error(`Unsafe SQL identifier: ${value}`);
+  return `"${value}"`;
 }
 
 function deriveRuntimeStatus(runtime: Awaited<ReturnType<typeof getLocalRuntimeStatus>> | null, warningCount: number) {
@@ -240,7 +247,7 @@ function deriveRuntimeStatus(runtime: Awaited<ReturnType<typeof getLocalRuntimeS
 function addCountNotes(notes: string[], counts: Record<string, CountResult | { error: unknown }>) {
   for (const [name, result] of Object.entries(counts)) {
     if (result.error) {
-      notes.push(`${name} metric is unavailable from Supabase.`);
+      notes.push(`${name} metric is unavailable from local ArchiveOS PostgreSQL.`);
     }
   }
 }
