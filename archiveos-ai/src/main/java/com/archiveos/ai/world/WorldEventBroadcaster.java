@@ -11,10 +11,13 @@ import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** SSE boundary for a separate viewer. Frames contain viewer DTOs, never GLB bytes or renderer commands. */
 @Component
 public class WorldEventBroadcaster {
+    private static final Logger log = LoggerFactory.getLogger(WorldEventBroadcaster.class);
     private static final long TIMEOUT_MS = 15 * 60 * 1000L;
     private static final ScheduledExecutorService INITIAL_DISPATCHER = Executors.newSingleThreadScheduledExecutor(task -> {
         Thread thread = new Thread(task, "world-sse-initial-dispatch"); thread.setDaemon(true); return thread;
@@ -26,16 +29,20 @@ public class WorldEventBroadcaster {
 
     public SseEmitter connect(Map<String, Object> snapshot) {
         SseEmitter emitter = new SseEmitter(TIMEOUT_MS); String id = "world-" + System.nanoTime();
-        emitters.put(id, emitter);
-        emitter.onCompletion(() -> emitters.remove(id));
-        emitter.onTimeout(() -> { emitters.remove(id); emitter.complete(); });
-        emitter.onError(error -> emitters.remove(id));
+        registerEmitter(id, emitter);
         // Send after the MVC async response is established so the snapshot is not lost.
         INITIAL_DISPATCHER.schedule(() -> {
             try { send(emitter, "world-state-" + Instant.now().toEpochMilli(), "world-state", snapshot); }
-            catch (IOException error) { emitters.remove(id); emitter.completeWithError(error); }
+            catch (IOException | RuntimeException error) { discardEmitter(id, emitter, error); }
         }, 250, TimeUnit.MILLISECONDS);
         return emitter;
+    }
+
+    void registerEmitter(String id, SseEmitter emitter) {
+        emitters.put(id, emitter);
+        emitter.onCompletion(() -> emitters.remove(id, emitter));
+        emitter.onTimeout(() -> emitters.remove(id, emitter));
+        emitter.onError(error -> emitters.remove(id, emitter));
     }
 
     public void publishRuntimeEvent(Map<String, Object> runtimeEvent) {
@@ -48,7 +55,12 @@ public class WorldEventBroadcaster {
 
     private void broadcast(String id, String type, Object payload) {
         for (Map.Entry<String, SseEmitter> entry : emitters.entrySet()) try { send(entry.getValue(), id, type, payload); }
-        catch (IOException error) { emitters.remove(entry.getKey()); entry.getValue().completeWithError(error); }
+        catch (IOException | RuntimeException error) { discardEmitter(entry.getKey(), entry.getValue(), error); }
+    }
+    private void discardEmitter(String id, SseEmitter emitter, Exception error) {
+        if (emitters.remove(id, emitter)) {
+            log.debug("Removed disconnected World SSE client. emitterId={} cause={}", id, error.toString());
+        }
     }
     private void send(SseEmitter emitter, String id, String type, Object data) throws IOException {
         emitter.send(SseEmitter.event().id(id).name(type).data(data, MediaType.APPLICATION_JSON));

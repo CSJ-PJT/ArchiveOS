@@ -45,25 +45,25 @@ public class LiveFlowEventBroadcaster {
     public SseEmitter connect(String lastEventId, Map<String, Object> snapshot) {
         SseEmitter emitter = new SseEmitter(TIMEOUT_MS);
         String id = "emitter-" + System.nanoTime();
-        emitters.put(id, emitter);
-        emitter.onCompletion(() -> emitters.remove(id));
-        emitter.onTimeout(() -> {
-            emitters.remove(id);
-            emitter.complete();
-        });
-        emitter.onError(error -> emitters.remove(id));
+        registerEmitter(id, emitter);
         // The MVC async response is established only after this method returns. Dispatching the
         // initial snapshot on the next task prevents the first SSE frame from being lost.
         INITIAL_DISPATCHER.schedule(() -> {
             try {
                 send(emitter, "snapshot-" + Instant.now().toEpochMilli(), "snapshot", snapshot);
                 replayAfter(emitter, lastEventId);
-            } catch (IOException error) {
-                emitters.remove(id);
-                emitter.completeWithError(error);
+            } catch (IOException | RuntimeException error) {
+                discardEmitter(id, emitter, error);
             }
         }, 500, TimeUnit.MILLISECONDS);
         return emitter;
+    }
+
+    void registerEmitter(String id, SseEmitter emitter) {
+        emitters.put(id, emitter);
+        emitter.onCompletion(() -> emitters.remove(id, emitter));
+        emitter.onTimeout(() -> emitters.remove(id, emitter));
+        emitter.onError(error -> emitters.remove(id, emitter));
     }
 
     public void publish(Map<String, Object> event) {
@@ -76,9 +76,8 @@ public class LiveFlowEventBroadcaster {
         for (Map.Entry<String, SseEmitter> entry : emitters.entrySet()) {
             try {
                 send(entry.getValue(), eventId, "runtime-event", safe);
-            } catch (IOException error) {
-                emitters.remove(entry.getKey());
-                entry.getValue().completeWithError(error);
+            } catch (IOException | RuntimeException error) {
+                discardEmitter(entry.getKey(), entry.getValue(), error);
             }
         }
     }
@@ -126,10 +125,15 @@ public class LiveFlowEventBroadcaster {
         for (Map.Entry<String, SseEmitter> entry : emitters.entrySet()) {
             try {
                 send(entry.getValue(), id, type, payload);
-            } catch (IOException error) {
-                emitters.remove(entry.getKey());
-                entry.getValue().completeWithError(error);
+            } catch (IOException | RuntimeException error) {
+                discardEmitter(entry.getKey(), entry.getValue(), error);
             }
+        }
+    }
+
+    private void discardEmitter(String id, SseEmitter emitter, Exception error) {
+        if (emitters.remove(id, emitter)) {
+            log.debug("Removed disconnected Live Flow SSE client. emitterId={} cause={}", id, error.toString());
         }
     }
 
