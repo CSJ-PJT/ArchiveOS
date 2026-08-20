@@ -1485,6 +1485,7 @@ code {
 .system-state-context strong { font-size: 0.84rem; }
 
 .kpi-command-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.7rem; }
+.workforce-page .kpi-command-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .metric-tile { position: relative; min-height: 8.5rem; border-color: var(--color-border); border-radius: 0.55rem; background: var(--color-surface); padding: 0.85rem; transition: border-color 140ms ease, background 140ms ease, transform 140ms ease, box-shadow 140ms ease; }
 .metric-tile.interactive { text-align: left; }
 .metric-tile.interactive:hover { border-color: var(--color-border-strong); background: var(--color-surface-elevated); transform: translateY(-2px); box-shadow: 0 8px 24px color-mix(in srgb, var(--color-bg) 30%, transparent); }
@@ -1989,6 +1990,7 @@ dt { color: var(--color-text-subtle); font-size: 0.7rem; } dd { margin: 0; font-
 
 @media (max-width: 1180px) {
   .kpi-command-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .workforce-page .kpi-command-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .agent-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .system-command-bar { grid-template-columns: auto 1fr auto; }
   .system-state-context { grid-column: 1 / -1; padding-left: 4rem; }
@@ -2011,6 +2013,7 @@ dt { color: var(--color-text-subtle); font-size: 0.7rem; } dd { margin: 0; font-
   .system-state-context { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); padding-left: 0; }
   .system-state-context span { min-width: 0; }
   .kpi-command-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workforce-page .kpi-command-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .overview-layout, .workflows-layout { grid-template-columns: 1fr; }
   .span-3, .span-4, .span-5, .span-7, .span-8, .span-12 { grid-column: span 1; }
   .agent-card-grid { grid-template-columns: 1fr; }
@@ -2022,6 +2025,7 @@ dt { color: var(--color-text-subtle); font-size: 0.7rem; } dd { margin: 0; font-
 
 @media (max-width: 520px) {
   .kpi-command-grid { grid-template-columns: 1fr; }
+  .workforce-page .kpi-command-grid { grid-template-columns: 1fr; }
   .metric-tile { min-height: 0; }
   .system-command-bar { grid-template-columns: auto 1fr; }
   .command-refresh { display: none; }
