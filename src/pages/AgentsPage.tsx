@@ -50,27 +50,17 @@ export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () =
         <Summary label="상호작용" value={data.mesh?.recentInteractions.length || 0} status="healthy" />
       </section>
 
-      <SectionCard title="에이전트 Runtime 제어" eyebrow="ADMIN 전용 로컬 제어">
-        <div className="runtime-control-panel">
-          <div>
-            <strong>MCP 큐 루프와 로컬 runtime 스크립트</strong>
-            <p>
-              제어는 <code>tools/runtime</code>의 allowlist 스크립트만 실행합니다. 대화형 implementer와 reviewer 세션은 별도 PID 구성이 필요합니다.
-            </p>
-          </div>
-          <div className="inline-actions">
-            <button className="button button-secondary" type="button" disabled={!canControl || busyAction !== null} onClick={() => void runRuntimeControl("runtime_status")}>상태 확인</button>
-            <button className="button button-primary" type="button" disabled={!canControl || busyAction !== null} onClick={() => void runRuntimeControl("runtime_start_all")}>에이전트 시작</button>
-            <button className="button button-secondary" type="button" disabled={!canControl || busyAction !== null} onClick={() => void runRuntimeControl("runtime_restart_all")}>재시작</button>
-            <button className="button button-secondary" type="button" disabled={!canControl || busyAction !== null} onClick={() => void runRuntimeControl("runtime_stop_all")}>중지</button>
-          </div>
-          {!canControl ? <p className="small-note">로컬 runtime 프로세스 제어에는 관리자 권한이 필요합니다.</p> : null}
-          {message ? <pre className="action-output">{message}</pre> : null}
-        </div>
+      <SectionCard title="DB 에이전트 레지스트리" eyebrow="ARCHIVEOS POSTGRESQL">
+        {registeredAgents.length ? <div className="agent-card-grid">{registeredAgents.map((agent) => (
+          <article className="agent-card" key={agent.id}>
+            <div className="agent-card-icon"><Icon name="agents" size={20} /></div>
+            <div className="agent-card-main"><div className="agent-card-title"><div><strong>{agent.name}</strong><span>{agent.role}</span></div><StatusBadge status={agent.status === "failed" ? "warning" : agent.status === "working" ? "working" : "waiting"}>{agent.status}</StatusBadge></div><p>{agent.current_task || "현재 배정된 작업이 없습니다."}</p><div className="agent-evidence"><span>ArchiveOS PostgreSQL</span><span>갱신 {formatTimeAgo(agent.updated_at)}</span></div></div>
+          </article>
+        ))}</div> : <div className="empty-state">등록된 DB 에이전트가 없습니다.</div>}
       </SectionCard>
 
       <SectionCard title="에이전트 모니터" eyebrow="운영 역할과 활동 기록">
-        {agents.length === 0 ? <div className="empty-state">로컬 에이전트 실행이 감지되지 않았습니다.</div> : null}
+        {agents.length === 0 ? <div className="empty-state">DB 에이전트 {registeredAgents.length}개는 정상 등록되어 있습니다. 현재 별도 로컬 Runtime 프로세스만 실행되지 않은 상태입니다.</div> : null}
         <div className="agent-card-grid">
           {agents.map((agent) => (
             <article className="agent-card" key={agent.id} tabIndex={0}>
@@ -88,15 +78,6 @@ export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () =
         </div>
       </SectionCard>
 
-      <SectionCard title="DB 에이전트 레지스트리" eyebrow="ARCHIVEOS POSTGRESQL">
-        {registeredAgents.length ? <div className="agent-card-grid">{registeredAgents.map((agent) => (
-          <article className="agent-card" key={agent.id}>
-            <div className="agent-card-icon"><Icon name="agents" size={20} /></div>
-            <div className="agent-card-main"><div className="agent-card-title"><div><strong>{agent.name}</strong><span>{agent.role}</span></div><StatusBadge status={agent.status === "failed" ? "warning" : agent.status === "working" ? "working" : "waiting"}>{agent.status}</StatusBadge></div><p>{agent.current_task || "현재 배정된 작업이 없습니다."}</p><div className="agent-evidence"><span>ArchiveOS PostgreSQL</span><span>갱신 {formatTimeAgo(agent.updated_at)}</span></div></div>
-          </article>
-        ))}</div> : <div className="empty-state">등록된 DB 에이전트가 없습니다.</div>}
-      </SectionCard>
-
       <SectionCard title="최근 Handoff" eyebrow="에이전트 간 운영 기록">
         <div className="event-list compact">
           {(data.mesh?.recentInteractions || []).slice(0, 8).map((interaction, index) => (
@@ -106,6 +87,20 @@ export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () =
             </article>
           ))}
           {!data.mesh?.recentInteractions.length ? <div className="empty-state">아직 에이전트 간 handoff 기록이 없습니다.</div> : null}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="로컬 에이전트 제어" eyebrow="관리자 세션 전용">
+        <div className="runtime-control-panel">
+          <div><strong>MCP 큐와 로컬 Runtime</strong><p>허용 목록에 등록된 로컬 Runtime 스크립트만 제어합니다. 공개 조회 세션에서는 실행 버튼이 잠깁니다.</p></div>
+          <div className="inline-actions">
+            <button className="button button-secondary" type="button" disabled={!canControl || busyAction !== null} onClick={() => void runRuntimeControl("runtime_status")}>상태 확인</button>
+            <button className="button button-primary" type="button" disabled={!canControl || busyAction !== null} onClick={() => void runRuntimeControl("runtime_start_all")}>에이전트 시작</button>
+            <button className="button button-secondary" type="button" disabled={!canControl || busyAction !== null} onClick={() => void runRuntimeControl("runtime_restart_all")}>재시작</button>
+            <button className="button button-secondary" type="button" disabled={!canControl || busyAction !== null} onClick={() => void runRuntimeControl("runtime_stop_all")}>중지</button>
+          </div>
+          {!canControl ? <p className="small-note">로컬 Runtime 제어는 관리자 로그인 후 사용할 수 있습니다.</p> : null}
+          {message ? <pre className="action-output">{message}</pre> : null}
         </div>
       </SectionCard>
     </div>

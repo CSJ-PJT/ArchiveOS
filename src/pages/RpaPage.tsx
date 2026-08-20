@@ -15,10 +15,10 @@ import { formatTimeAgo, stringifyMeta } from "./pageUtils";
 type RpaDecisionAction = "approve" | "reject" | "hold" | "request_retry";
 
 const sampleTask = {
-  title: "Archive factory automation smoke",
+  title: "Archive 공장 자동화 안전 검증",
   description:
-    "Generate a safe synthetic operations task for Archive-Nexus, Archive-Logistics, Archive-Ledger and ArchiveOS Control Tower. External writes remain guarded by safe-mode and PM approval.",
-  targetProject: "Archive Platform",
+    "Archive-Nexus, Archive-Logistics, Archive-Ledger와 ArchiveOS Control Tower의 합성 운영 작업을 분류합니다. 외부 쓰기는 safe-mode와 PM 승인으로 계속 차단합니다.",
+  targetProject: "Archive 플랫폼",
 };
 
 export function RpaPage({ role }: { role: PlatformRole }) {
@@ -27,7 +27,7 @@ export function RpaPage({ role }: { role: PlatformRole }) {
   const [title, setTitle] = useState(sampleTask.title);
   const [description, setDescription] = useState(sampleTask.description);
   const [targetProject, setTargetProject] = useState(sampleTask.targetProject);
-  const [decisionReason, setDecisionReason] = useState("PM reviewed the automation risk and recorded the decision.");
+  const [decisionReason, setDecisionReason] = useState("PM이 자동화 위험과 외부 쓰기 차단 상태를 확인하고 결정을 기록했습니다.");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +65,7 @@ export function RpaPage({ role }: { role: PlatformRole }) {
 
   async function createClassification() {
     if (!title.trim() || !description.trim()) {
-      setError("title and description are required.");
+      setError("제목과 설명을 입력하세요.");
       return;
     }
     setBusy("classify");
@@ -74,14 +74,14 @@ export function RpaPage({ role }: { role: PlatformRole }) {
       const result = await classifyRpaTask({
         title: title.trim(),
         description: description.trim(),
-        targetProject: targetProject.trim() || "Archive Platform",
+        targetProject: targetProject.trim() || "Archive 플랫폼",
         requestedBy: "archiveos-control-tower",
         metadata: {
           source: "archiveos-ui",
           safety: "classification_only_no_external_execution",
         },
       });
-      setMessage(`RPA classification recorded. Batch status: ${result.batchStatus}.`);
+      setMessage(`RPA 분류 기록을 저장했습니다. 배치 상태: ${result.batchStatus}.`);
       await refresh();
       if (result.task?.id) setSelected(await getRpaTaskDetail(result.task.id));
     } catch (reason) {
@@ -94,7 +94,7 @@ export function RpaPage({ role }: { role: PlatformRole }) {
   async function decide(action: RpaDecisionAction) {
     if (!selected?.task.id) return;
     if (action === "reject" && !decisionReason.trim()) {
-      setError("Reject requires a reason.");
+      setError("반려하려면 사유를 입력하세요.");
       return;
     }
     setBusy(action);
@@ -105,7 +105,7 @@ export function RpaPage({ role }: { role: PlatformRole }) {
         reason: decisionReason.trim() || null,
         decidedBy: role === "ADMIN" ? "archiveos-admin" : "archiveos-pm",
       });
-      setMessage(`PM decision recorded: ${result.decision.action}.`);
+      setMessage(`PM 결정을 기록했습니다: ${decisionLabel(result.decision.action)}.`);
       await refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -139,24 +139,24 @@ export function RpaPage({ role }: { role: PlatformRole }) {
         <SectionCard title="자동화 작업 분류" eyebrow="관리자가 검토 가능한 RPA 작업을 생성">
           <div className="form-stack">
             <label>
-              <span>Title</span>
+              <span>제목</span>
               <input value={title} onChange={(event) => setTitle(event.target.value)} />
             </label>
             <label>
-              <span>Target project</span>
+              <span>대상 프로젝트</span>
               <input value={targetProject} onChange={(event) => setTargetProject(event.target.value)} />
             </label>
             <label>
-              <span>Description</span>
+              <span>설명</span>
               <textarea value={description} onChange={(event) => setDescription(event.target.value)} />
             </label>
             <p className="small-note">
-              This creates a classification record only. It never runs shell, MCP tools, deployments, or external writes by itself.
+              분류 기록만 생성합니다. shell, MCP 도구, 배포 또는 외부 쓰기를 자동으로 실행하지 않습니다.
             </p>
             <button className="button button-primary" type="button" onClick={() => void createClassification()} disabled={!canCreate || busy !== null}>
-              {busy === "classify" ? "Classifying..." : "Classify with RPA"}
+              {busy === "classify" ? "분류 중…" : "RPA 분류 기록"}
             </button>
-            {!canCreate ? <p className="small-note">Admin unlock is required to create RPA classification tasks.</p> : null}
+            {!canCreate ? <p className="small-note">RPA 분류 작업 생성에는 관리자 로그인이 필요합니다.</p> : null}
           </div>
         </SectionCard>
 
@@ -171,14 +171,14 @@ export function RpaPage({ role }: { role: PlatformRole }) {
               >
                 <div>
                   <strong>{task.title}</strong>
-                  <span>{task.category || "Unclassified"}</span>
+                  <span>{task.category || "미분류"}</span>
                 </div>
                 <StatusBadge status={task.status}>{task.status}</StatusBadge>
-                <span>{task.riskLevel || "No risk"}</span>
+                <span>{task.riskLevel || "위험도 미평가"}</span>
                 <span>{formatTimeAgo(task.updatedAt)}</span>
               </button>
             ))}
-            {!tasks.length && !error ? <div className="empty-state">No RPA tasks have been classified yet. Admin can create one from the form.</div> : null}
+            {!tasks.length && !error ? <div className="empty-state">분류된 RPA 작업이 없습니다. 관리자가 왼쪽 양식에서 기록을 만들 수 있습니다.</div> : null}
           </div>
         </SectionCard>
       </section>
@@ -195,7 +195,7 @@ export function RpaPage({ role }: { role: PlatformRole }) {
               onDecision={decide}
             />
           ) : (
-            <div className="empty-state">Select a task to inspect its classification and decision history.</div>
+            <div className="empty-state">작업을 선택하면 분류 결과와 결정 이력을 확인할 수 있습니다.</div>
           )}
         </SectionCard>
       </section>
@@ -229,16 +229,16 @@ function RpaDetail({
       </div>
       <p className="body-copy">{detail.task.summary || detail.task.description}</p>
       <div className="detail-grid">
-        <span>Risk<strong>{detail.task.riskLevel || "Not assessed"}</strong></span>
-        <span>Recommendation<strong>{detail.task.recommendation || "No recommendation"}</strong></span>
-        <span>Approval<strong>{detail.task.approvalRequired ? "Required" : "Not required"}</strong></span>
-        <span>Source<strong>{detail.task.classificationSource || "rule_based"}</strong></span>
+        <span>위험도<strong>{detail.task.riskLevel || "미평가"}</strong></span>
+        <span>권고<strong>{detail.task.recommendation || "추가 권고 없음"}</strong></span>
+        <span>승인<strong>{detail.task.approvalRequired ? "필요" : "불필요"}</strong></span>
+        <span>분류 출처<strong>{detail.task.classificationSource || "규칙 기반"}</strong></span>
       </div>
       <label className="form-stack">
-        <span>Decision reason</span>
+        <span>결정 사유</span>
         <textarea value={reason} onChange={(event) => setReason(event.target.value)} />
       </label>
-      {!canDecide ? <p className="small-note">PM or Admin session is required to record RPA decisions.</p> : null}
+      {!canDecide ? <p className="small-note">RPA 결정 기록에는 PM 또는 관리자 로그인이 필요합니다.</p> : null}
       <div className="button-row">
         {(["approve", "reject", "hold", "request_retry"] as RpaDecisionAction[]).map((action) => (
           <button
@@ -248,7 +248,7 @@ function RpaDetail({
             onClick={() => onDecision(action)}
             disabled={Boolean(busy) || !canDecide}
           >
-            {busy === action ? "Recording..." : action.replace("_", " ")}
+            {busy === action ? "기록 중…" : decisionLabel(action)}
           </button>
         ))}
       </div>
@@ -256,19 +256,23 @@ function RpaDetail({
         {detail.decisions.map((decision) => (
           <article className="decision-history-row" key={decision.id}>
             <div>
-              <strong>{decision.action.replace(/_/g, " ")}</strong>
-              <span>{decision.decidedBy || "Human PM"} · {formatTimeAgo(decision.createdAt)}</span>
+              <strong>{decisionLabel(decision.action)}</strong>
+              <span>{decision.decidedBy || "담당 PM"} · {formatTimeAgo(decision.createdAt)}</span>
             </div>
             <StatusBadge status={decision.nextStatus}>{decision.nextStatus}</StatusBadge>
-            <p>{decision.reason || "No reason recorded."}</p>
+            <p>{decision.reason || "기록된 사유가 없습니다."}</p>
           </article>
         ))}
-        {!detail.decisions.length ? <div className="empty-state">No PM decisions recorded for this task.</div> : null}
+        {!detail.decisions.length ? <div className="empty-state">이 작업에 기록된 PM 결정이 없습니다.</div> : null}
       </div>
       <details className="details-box">
-        <summary>Classification metadata</summary>
+        <summary>분류 메타데이터</summary>
         <pre>{stringifyMeta(detail.task.metadata)}</pre>
       </details>
     </div>
   );
+}
+
+function decisionLabel(value: string) {
+  return ({ approve: "승인", reject: "반려", hold: "보류", request_retry: "재시도 요청" } as Record<string, string>)[value] || value.replace(/_/g, " ");
 }

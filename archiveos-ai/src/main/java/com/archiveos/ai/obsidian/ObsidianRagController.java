@@ -1,9 +1,11 @@
 package com.archiveos.ai.obsidian;
 
+import com.archiveos.ai.audit.AuditLogService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.io.IOException;
 import java.util.Map;
+import java.util.UUID;
 import java.security.Principal;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -21,10 +23,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class ObsidianRagController {
     private final ObsidianRagService ragService;
     private final RagRateLimitService rateLimit;
+    private final AuditLogService audit;
 
-    public ObsidianRagController(ObsidianRagService ragService, RagRateLimitService rateLimit) {
+    public ObsidianRagController(ObsidianRagService ragService, RagRateLimitService rateLimit, AuditLogService audit) {
         this.ragService = ragService;
         this.rateLimit = rateLimit;
+        this.audit = audit;
     }
 
     @PostMapping("/api/obsidian/sync")
@@ -57,7 +61,20 @@ public class ObsidianRagController {
                                                     HttpServletRequest httpRequest) {
         ResponseEntity<Map<String, Object>> blocked = limited("ask", principal, httpRequest);
         if (blocked != null) return blocked;
-        return ResponseEntity.ok(Map.of("data", ragService.answer(request.question(), request.context())));
+        String correlationId = "rag-" + UUID.randomUUID();
+        try {
+            RagAnswer answer = ragService.answer(request.question(), request.context());
+            audit.recordEventWithTimeline("rag_question_answered", "knowledge", "rag-ask", correlationId,
+                    Map.of("referenceCount", answer.references().size(), "answerRecorded", true),
+                    "success", "RAG 질문 응답 완료",
+                    "운영 지식 질문에 답변하고 참조 " + answer.references().size() + "건을 기록했습니다.");
+            return ResponseEntity.ok(Map.of("data", answer, "correlationId", correlationId));
+        } catch (RuntimeException error) {
+            audit.recordEventWithTimeline("rag_question_failed", "knowledge", "rag-ask", correlationId,
+                    Map.of("errorType", error.getClass().getSimpleName()),
+                    "failed", "RAG 질문 응답 실패", "운영 지식 질문 처리에 실패했습니다.");
+            throw error;
+        }
     }
 
     private ResponseEntity<Map<String, Object>> limited(String operation, Principal principal, HttpServletRequest request) {

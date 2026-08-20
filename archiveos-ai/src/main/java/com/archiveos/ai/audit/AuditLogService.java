@@ -67,6 +67,16 @@ public class AuditLogService {
                 "/api/" + resourceType + "/" + (resourceId == null ? "" : resourceId), json(metadata));
     }
 
+    public void recordEventWithTimeline(String action, String resourceType, String resourceId, String correlationId,
+                                        Map<String, Object> metadata, String status, String title, String summary) {
+        recordEvent(action, resourceType, resourceId, correlationId, metadata);
+        Actor actor = actor();
+        jdbc.update("""
+                insert into public.runtime_timeline(event_type, status, title, summary, correlation_id, source, reference_id, metadata)
+                values (?, ?, ?, ?, ?, 'spring-ai', ?, jsonb_build_object('actor', ?, 'role', ?))
+                """, resourceType, status, title, summary, correlationId, resourceId, actor.name(), actor.role().name());
+    }
+
     public List<Map<String, Object>> recent(int limit) {
         return jdbc.queryForList("select * from public.audit_logs order by occurred_at desc limit ?",
                 Math.max(1, Math.min(limit, 200)));

@@ -28,7 +28,9 @@ public class KnowledgeReadService {
             boolean available = repository.available();
             var stats = obsidian.safeKnowledgeStatistics();
             var vector = obsidian.safeVectorDiagnostics();
-            long nodes = available ? repository.nodeCount() : 0; long edges = available ? repository.edgeCount() : 0;
+            long canonicalNodes = available ? repository.nodeCount() : 0;
+            long nodes = canonicalNodes > 0 ? canonicalNodes : (long) stats.documents() + stats.chunks();
+            long edges = canonicalNodes > 0 ? repository.edgeCount() : stats.chunks();
             String status = !available || !vector.databaseConnected() ? "degraded" : nodes == 0 && stats.documents() == 0 ? "empty" : "healthy";
             return map("status", status, "available", available, "nodeCount", nodes, "edgeCount", edges,
                     "documents", stats.documents(), "chunks", stats.chunks(), "embeddedChunks", stats.embeddedChunks(),
@@ -42,24 +44,48 @@ public class KnowledgeReadService {
     }
 
     public Map<String, Object> overview() {
-        if (!repository.available()) return map("totalNodes", 0, "totalEdges", 0, "countsByType", Map.of(), "latestNodes", List.of(), "latestEdges", List.of());
-        List<KnowledgeNode> nodes = repository.recentNodes(8);
-        List<Map<String, Object>> edges = enrich(repository.recentEdges(8));
-        return map("totalNodes", repository.nodeCount(), "totalEdges", repository.edgeCount(), "countsByType", repository.countsByType(), "latestNodes", nodes, "latestEdges", edges);
+        if (hasCanonicalKnowledge()) {
+            List<KnowledgeNode> nodes = repository.recentNodes(8);
+            List<Map<String, Object>> edges = enrich(repository.recentEdges(8));
+            return map("totalNodes", repository.nodeCount(), "totalEdges", repository.edgeCount(), "countsByType", repository.countsByType(), "latestNodes", nodes, "latestEdges", edges);
+        }
+        var stats = obsidian.safeKnowledgeStatistics();
+        Projection projection = projection(24);
+        Map<String, Long> counts = new LinkedHashMap<>();
+        counts.put("obsidian_document", (long) stats.documents());
+        counts.put("obsidian_chunk", (long) stats.chunks());
+        return map("totalNodes", (long) stats.documents() + stats.chunks(), "totalEdges", (long) stats.chunks(),
+                "countsByType", counts, "latestNodes", projection.nodes().stream().limit(8).toList(),
+                "latestEdges", enrichProjection(projection.edges().stream().limit(8).toList(), projection.nodes()));
     }
 
-    public List<KnowledgeNode> recent(int limit) { return repository.available() ? repository.recentNodes(limit) : List.of(); }
-    public List<KnowledgeNode> search(String query, int limit) { return !repository.available() || query == null || query.isBlank() ? List.of() : repository.search(query.trim(), limit); }
+    public List<KnowledgeNode> recent(int limit) {
+        int safe = Math.min(Math.max(limit, 1), 100);
+        return hasCanonicalKnowledge() ? repository.recentNodes(safe) : projection(safe).nodes().stream().limit(safe).toList();
+    }
+    public List<KnowledgeNode> search(String query, int limit) {
+        if (query == null || query.isBlank()) return List.of();
+        if (hasCanonicalKnowledge()) return repository.search(query.trim(), limit);
+        String needle = query.trim().toLowerCase();
+        return projection(300).nodes().stream().filter(node -> (node.title() + " " + node.summary() + " " + node.external_ref()).toLowerCase().contains(needle)).limit(Math.min(Math.max(limit, 1), 100)).toList();
+    }
 
     public List<Map<String, Object>> related(String externalRef, String nodeType) {
-        if (!repository.available()) return List.of();
+        if (!hasCanonicalKnowledge()) return List.of();
         String ref = clean(externalRef); String type = clean(nodeType);
         if (ref == null && type == null) return List.of();
         return repository.matching(ref, type).stream().map(node -> detail(node.id())).toList();
     }
 
     public Map<String, Object> detail(String id) {
-        if (!repository.available()) return null;
+        if (!hasCanonicalKnowledge()) {
+            Projection projected = projection(300);
+            KnowledgeNode node = projected.nodes().stream().filter(item -> item.id().equals(id)).findFirst().orElse(null);
+            if (node == null) return null;
+            List<Map<String, Object>> related = enrichProjection(projected.edges().stream().filter(edge -> edge.from_node_id().equals(id) || edge.to_node_id().equals(id)).toList(), projected.nodes());
+            return map("node", node, "outgoing", related.stream().filter(edge -> id.equals(edge.get("from_node_id"))).toList(),
+                    "incoming", related.stream().filter(edge -> id.equals(edge.get("to_node_id"))).toList(), "related", related);
+        }
         KnowledgeNode node = repository.node(id); if (node == null) return null;
         List<Map<String, Object>> outgoing = enrich(repository.outgoing(id));
         List<Map<String, Object>> incoming = enrich(repository.incoming(id));
@@ -68,11 +94,13 @@ public class KnowledgeReadService {
     }
 
     public Map<String, Object> graph(int limit) {
-        if (!repository.available()) return emptyGraph();
         int safe = Math.min(Math.max(limit, 1), 300);
-        List<KnowledgeNode> rawNodes = repository.recentNodes(safe);
+        Projection projection = hasCanonicalKnowledge()
+                ? new Projection(repository.recentNodes(safe), repository.recentEdges(safe * 2))
+                : projection(safe);
+        List<KnowledgeNode> rawNodes = projection.nodes();
         Map<String, KnowledgeNode> byId = rawNodes.stream().collect(Collectors.toMap(KnowledgeNode::id, Function.identity()));
-        List<KnowledgeEdge> rawEdges = repository.recentEdges(safe * 2).stream().filter(edge -> byId.containsKey(edge.from_node_id()) && byId.containsKey(edge.to_node_id())).limit(safe).toList();
+        List<KnowledgeEdge> rawEdges = projection.edges().stream().filter(edge -> byId.containsKey(edge.from_node_id()) && byId.containsKey(edge.to_node_id())).limit(safe).toList();
         List<Map<String, Object>> nodes = rawNodes.stream().map(node -> graphNode(node, rawEdges, byId)).toList();
         List<Map<String, Object>> edges = rawEdges.stream().map(edge -> graphEdge(edge, byId)).toList();
         Map<String, Long> types = nodes.stream().collect(Collectors.groupingBy(item -> String.valueOf(item.get("type")), LinkedHashMap::new, Collectors.counting()));
@@ -102,6 +130,56 @@ public class KnowledgeReadService {
     private List<Map<String, Object>> enrich(List<KnowledgeEdge> edges) {
         return edges.stream().map(edge -> { Map<String, Object> value = new LinkedHashMap<>(edgeMap(edge)); value.put("from_node", repository.node(edge.from_node_id())); value.put("to_node", repository.node(edge.to_node_id())); return value; }).toList();
     }
+
+    private List<Map<String, Object>> enrichProjection(List<KnowledgeEdge> edges, List<KnowledgeNode> nodes) {
+        Map<String, KnowledgeNode> byId = nodes.stream().collect(Collectors.toMap(KnowledgeNode::id, Function.identity()));
+        return edges.stream().map(edge -> {
+            Map<String, Object> value = new LinkedHashMap<>(edgeMap(edge));
+            value.put("from_node", byId.get(edge.from_node_id()));
+            value.put("to_node", byId.get(edge.to_node_id()));
+            return value;
+        }).toList();
+    }
+
+    private boolean hasCanonicalKnowledge() {
+        return repository.available() && repository.nodeCount() > 0;
+    }
+
+    private Projection projection(int requestedLimit) {
+        int safe = Math.min(Math.max(requestedLimit, 1), 300);
+        int documentLimit = Math.min(Math.max(8, safe / 3), safe);
+        List<ObsidianJdbcRepository.ProjectionDocument> documents = obsidian.projectionDocuments(documentLimit);
+        int chunkLimit = Math.max(0, safe - documents.size());
+        List<ObsidianJdbcRepository.ProjectionChunk> chunks = obsidian.projectionChunks(documentLimit, chunkLimit);
+        Map<Long, ObsidianJdbcRepository.ProjectionDocument> documentsById = documents.stream()
+                .collect(Collectors.toMap(ObsidianJdbcRepository.ProjectionDocument::id, Function.identity()));
+        List<KnowledgeNode> nodes = new ArrayList<>();
+        for (var document : documents) {
+            String title = document.title() == null || document.title().isBlank() ? fileName(document.filePath()) : document.title();
+            nodes.add(new KnowledgeNode(documentId(document.id()), "obsidian_document", title,
+                    "동기화된 Obsidian 운영 지식 문서", "obsidian", safePath(document.filePath()),
+                    map("origin", "obsidian_index", "documentId", document.id()), document.updatedAt(), document.updatedAt()));
+        }
+        List<KnowledgeEdge> edges = new ArrayList<>();
+        for (var chunk : chunks) {
+            var document = documentsById.get(chunk.documentId());
+            if (document == null) continue;
+            String documentTitle = document.title() == null || document.title().isBlank() ? fileName(document.filePath()) : document.title();
+            String title = chunk.heading() == null || chunk.heading().isBlank() ? documentTitle + " · 청크 " + (chunk.chunkIndex() + 1) : chunk.heading();
+            String chunkId = chunkId(chunk.id());
+            nodes.add(new KnowledgeNode(chunkId, "obsidian_chunk", title,
+                    documentTitle + " 문서에서 인덱싱된 운영 지식 청크", "obsidian", safePath(document.filePath()) + "#chunk-" + chunk.chunkIndex(),
+                    map("origin", "obsidian_index", "documentId", chunk.documentId(), "chunkIndex", chunk.chunkIndex()), chunk.createdAt(), chunk.createdAt()));
+            edges.add(new KnowledgeEdge("obsidian-edge-" + chunk.id(), documentId(chunk.documentId()), chunkId,
+                    "contains_chunk", 1.0, map("origin", "obsidian_index"), chunk.createdAt()));
+        }
+        return new Projection(nodes, edges);
+    }
+
+    private String documentId(long id) { return "obsidian-document-" + id; }
+    private String chunkId(long id) { return "obsidian-chunk-" + id; }
+    private String safePath(String value) { if (value == null || value.isBlank()) return "obsidian"; return value.replace('\\', '/').replaceFirst("^/+", ""); }
+    private String fileName(String value) { String safe = safePath(value); int index = safe.lastIndexOf('/'); return index >= 0 ? safe.substring(index + 1) : safe; }
 
     private Map<String, Object> graphNode(KnowledgeNode node, List<KnowledgeEdge> edges, Map<String, KnowledgeNode> byId) {
         List<KnowledgeEdge> related = edges.stream().filter(edge -> edge.from_node_id().equals(node.id()) || edge.to_node_id().equals(node.id())).toList();
@@ -150,4 +228,5 @@ public class KnowledgeReadService {
         return value;
     }
     private Map<String, Object> map(Object... values) { var map = new LinkedHashMap<String, Object>(); for (int i = 0; i < values.length; i += 2) map.put(String.valueOf(values[i]), values[i + 1]); return map; }
+    private record Projection(List<KnowledgeNode> nodes, List<KnowledgeEdge> edges) {}
 }

@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { AppData } from "../app/AppShell";
 import { MetricCard } from "../components/shared/MetricCard";
@@ -61,13 +61,6 @@ export function LiveFlowPage({ data, onRefresh }: { data: AppData; onRefresh: ()
   const overallStatus = (summary?.failed_callbacks ?? 0) > 0 ? "critical" : (summary?.degraded_systems ?? 0) > 0 ? "degraded" : freshnessBadgeStatus(freshnessStatus);
   const isRuntimeBlocked = freshnessStatus === "STALE" || freshnessStatus === "NO_RUNTIME_EVENTS" || (runtime?.stalledServices?.length ?? 0) > 0;
   const staleMinutes = latestEvent ? Math.floor((Date.now() - new Date(latestEvent).getTime()) / 60000) : null;
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      void onRefresh();
-    }, 10_000);
-    return () => window.clearInterval(timer);
-  }, [onRefresh]);
 
   const filteredEvents = useMemo(() => {
     const text = correlationFilter.trim().toLowerCase();
@@ -138,7 +131,7 @@ export function LiveFlowPage({ data, onRefresh }: { data: AppData; onRefresh: ()
             <StatusBadge status="info">합성 이벤트</StatusBadge>
             <StatusBadge status={overallStatus}>{freshnessStatusLabel(freshnessStatus)}</StatusBadge>
             <span>권한: {data.auth.role}</span>
-            <span>자동 갱신: 10초</span>
+            <span>자동 갱신: 상단 선택값</span>
             <span>최근 갱신: {data.refreshedAt ? formatTimeAgo(data.refreshedAt) : "대기 중"}</span>
           </div>
         </div>

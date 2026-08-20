@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   configuredBackendUrl, getAiRuntime, getAtlasOverview, getAuthSession, getDashboardData, getEcosystemBalanceRecommendations, getEcosystemBalanceSummary, getEcosystemSummary, getEcosystemTopology,
-  getEndpointHealth, getExternalApprovals, getGameFinanceSummary, getHistorianStatus, getKnowledgeOverview, getLatestBatchStatus, getLatestDailyReport, getLiveFlowRecentEvents, getLiveFlowSummary,
-  getLiveFlowTopology, getLocalRuntimeStatus, getMcpRegistry, getMeshOverview, getPlatformReadiness, getPmTasks, getPublicAccessStatus, getQueueSummary, getRuntimeTimeline, getRuntimeVersion, getSecurityStatus, getWorkforceOverview, liveFlowStreamUrl,
+  getEndpointHealth, getExternalApprovals, getGameFinanceSummary, getHistorianStatus, getKnowledgeOverview, getKpiOverview, getLatestBatchStatus, getLatestDailyReport, getLiveFlowRecentEvents, getLiveFlowSummary,
+  getLiveFlowTopology, getLocalRuntimeStatus, getManagedSystemsOverview, getMcpRegistry, getMeshOverview, getPlatformReadiness, getPmTasks, getPublicAccessStatus, getQueueSummary, getRecentCommands, getRecentRuntimeEvents, getRuntimeTimeline, getRuntimeVersion, getSecurityStatus, getWorkforceOverview, liveFlowStreamUrl,
   type AuthSession, type AtlasOverview, type EcosystemBalanceSummary, type EcosystemSummary, type EcosystemTopology, type ExternalApprovalRequest,
   type GameFinanceSummary, type HistorianStatus, type KnowledgeOverview, type LiveFlowEvent, type LiveFlowSummary, type LiveFlowTopology,
   type McpRegistryEntry, type MeshOverview, type QueueSummary, type RuntimeTimelineEntry, type WorkforceOverview,
@@ -53,6 +53,11 @@ function AppShellInner() {
   const reconnectTimer = useRef<number | null>(null);
   const reconnectAttempt = useRef(0);
   const eventIds = useRef(new Set<string>());
+  const refreshInFlight = useRef(false);
+  const [refreshSeconds, setRefreshSeconds] = useState(() => {
+    const stored = Number(window.localStorage.getItem("archiveos.refresh.seconds") || "10");
+    return [0, 5, 10, 30, 60].includes(stored) ? stored : 10;
+  });
   const { locale, setLocale } = useI18n();
 
   const navigate = useCallback((next: CoreRoute) => { window.history.pushState({}, "", `#/${next}`); setRouteState(next); setSidebarOpen(false); }, []);
@@ -65,17 +70,29 @@ function AppShellInner() {
   useEffect(() => { document.body.classList.toggle("sidebar-open", sidebarOpen); return () => document.body.classList.remove("sidebar-open"); }, [sidebarOpen]);
 
   const refresh = useCallback(async () => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
     setData((current) => ({ ...current, loading: true }));
-    const loaders = loadersFor(route);
-    const results = await Promise.all(loaders.map(([key, fn]) => settle(key, fn)));
-    setData((current) => {
-      const next: AppData = { ...current, loading: false, refreshedAt: new Date().toISOString(), errors: {} };
-      for (const result of results) { if (result.error) next.errors[result.key] = result.error; else (next as unknown as Record<string, unknown>)[result.key] = result.value; }
-      if (!next.auth) next.auth = publicAuth;
-      return next;
-    });
+    try {
+      const loaders = loadersFor(route);
+      const results = await Promise.all(loaders.map(([key, fn]) => settle(key, fn)));
+      setData((current) => {
+        const next: AppData = { ...current, loading: false, refreshedAt: new Date().toISOString(), errors: {} };
+        for (const result of results) { if (result.error) next.errors[result.key] = result.error; else (next as unknown as Record<string, unknown>)[result.key] = result.value; }
+        if (!next.auth) next.auth = publicAuth;
+        return next;
+      });
+    } finally {
+      refreshInFlight.current = false;
+    }
   }, [route]);
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    window.localStorage.setItem("archiveos.refresh.seconds", String(refreshSeconds));
+    if (refreshSeconds <= 0) return;
+    const timer = window.setInterval(() => { void refresh(); }, refreshSeconds * 1000);
+    return () => window.clearInterval(timer);
+  }, [refresh, refreshSeconds]);
 
   useEffect(() => {
     if (route !== "dashboard") return;
@@ -133,7 +150,7 @@ function AppShellInner() {
     return Object.keys(data.errors).length ? "warning" : "healthy";
   }, [data.ecosystem, data.errors, data.loading]);
   const page = route === "dashboard" ? <ConsoleDashboardPage data={data} onNavigate={navigate} onRefresh={refresh} /> : route === "services" ? <ConsoleServicesPage data={data} /> : route === "operations" ? <ConsoleOperationsPage data={data} onRefresh={refresh} /> : route === "finance" ? <ConsoleFinancePage data={data} onRefresh={refresh} /> : route === "records" ? <ConsoleRecordsPage data={data} /> : <ConsoleSettingsPage data={data} onRefresh={refresh} backendOrigin={configuredBackendUrl} />;
-  return <div className="app-shell"><Sidebar route={route} open={sidebarOpen} onNavigate={navigate} health={health} loading={data.loading} role={data.auth.role} />{sidebarOpen ? <button className="sidebar-scrim" type="button" aria-label={consoleText(locale, "common.closeMenu")} onClick={() => setSidebarOpen(false)} /> : null}<div className="content-shell"><header className="topbar"><button className="mobile-menu-button" type="button" aria-label={consoleText(locale, "common.openMenu")} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>☰</button><div><span className="eyebrow">ARCHIVEOS CONTROL TOWER</span><h1>{consoleText(locale, `nav.${route}`)}</h1></div><div className="topbar-status">{route === "dashboard" ? <span className={`stream-state stream-${streamState}`}>{streamState === "connected" ? `${consoleText(locale, "common.live")}${data.lastEventLatencyMs === null ? "" : ` · ${data.lastEventLatencyMs}ms`}` : streamState === "fallback" ? consoleText(locale, "common.reconnecting") : consoleText(locale, "common.connecting")}</span> : null}<LanguagePopover locale={locale} setLocale={setLocale} /><span className="last-sync">{data.refreshedAt ? `${consoleText(locale, "common.updated")} ${new Date(data.refreshedAt).toLocaleTimeString()}` : consoleText(locale, "common.loading")}</span><button className="icon-button" type="button" onClick={refresh} aria-label={consoleText(locale, "common.refresh")} title={consoleText(locale, "common.refresh")}><Icon name="refresh" /></button></div></header><main className="page-host" id="main-content">{page}</main></div></div>;
+  return <div className="app-shell"><Sidebar route={route} open={sidebarOpen} onNavigate={navigate} health={health} loading={data.loading} role={data.auth.role} />{sidebarOpen ? <button className="sidebar-scrim" type="button" aria-label={consoleText(locale, "common.closeMenu")} onClick={() => setSidebarOpen(false)} /> : null}<div className="content-shell"><header className="topbar"><button className="mobile-menu-button" type="button" aria-label={consoleText(locale, "common.openMenu")} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>☰</button><div><span className="eyebrow">ARCHIVEOS CONTROL TOWER</span><h1>{consoleText(locale, `nav.${route}`)}</h1></div><div className="topbar-status">{route === "dashboard" ? <span className={`stream-state stream-${streamState}`}>{streamState === "connected" ? `${consoleText(locale, "common.live")}${data.lastEventLatencyMs === null ? "" : ` · ${data.lastEventLatencyMs}ms`}` : streamState === "fallback" ? consoleText(locale, "common.reconnecting") : consoleText(locale, "common.connecting")}</span> : null}<label className="refresh-interval"><span>자동 갱신</span><select value={refreshSeconds} onChange={(event) => setRefreshSeconds(Number(event.target.value))} aria-label="자동 새로고침 간격"><option value={0}>끄기</option><option value={5}>5초</option><option value={10}>10초</option><option value={30}>30초</option><option value={60}>60초</option></select></label><LanguagePopover locale={locale} setLocale={setLocale} /><span className="last-sync">{data.refreshedAt ? `${consoleText(locale, "common.updated")} ${new Date(data.refreshedAt).toLocaleTimeString()}` : consoleText(locale, "common.loading")}</span><button className="icon-button" type="button" onClick={refresh} aria-label={consoleText(locale, "common.refresh")} title={consoleText(locale, "common.refresh")}><Icon name="refresh" /></button></div></header><main className="page-host" id="main-content">{page}</main></div></div>;
 }
 
 function LanguagePopover({ locale, setLocale }: { locale: Locale; setLocale: (locale: Locale) => void }) {
@@ -149,11 +166,11 @@ function LanguagePopover({ locale, setLocale }: { locale: Locale; setLocale: (lo
 
 function loadersFor(route: CoreRoute): Array<[keyof AppData, () => Promise<unknown>]> {
   const auth: [keyof AppData, () => Promise<unknown>] = ["auth", getAuthSession];
-  if (route === "dashboard") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["liveFlowTopology", getLiveFlowTopology], ["liveFlowEvents", () => getLiveFlowRecentEvents(30)], ["balance", getEcosystemBalanceSummary], ["balanceRecommendations", getEcosystemBalanceRecommendations]];
-  if (route === "services") return [auth, ["ecosystem", getEcosystemSummary], ["ecosystemTopology", getEcosystemTopology], ["atlas", getAtlasOverview]];
+  if (route === "dashboard") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["liveFlowTopology", getLiveFlowTopology], ["liveFlowEvents", () => getLiveFlowRecentEvents(100)], ["balance", getEcosystemBalanceSummary], ["balanceRecommendations", getEcosystemBalanceRecommendations], ["workforce", getWorkforceOverview]];
+  if (route === "services") return [auth, ["ecosystem", getEcosystemSummary], ["ecosystemTopology", getEcosystemTopology], ["atlas", getAtlasOverview], ["managedSystems", getManagedSystemsOverview]];
   if (route === "operations") return [auth, ["dashboard", getDashboardData], ["mesh", getMeshOverview], ["workforce", getWorkforceOverview], ["queue", getQueueSummary], ["tasks", getPmTasks]];
   if (route === "finance") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["balance", getEcosystemBalanceSummary], ["gameFinance", getGameFinanceSummary], ["externalApprovals", () => getExternalApprovals(50)]];
-  if (route === "records") return [auth, ["liveFlowEvents", () => getLiveFlowRecentEvents(100)], ["aiRuntime", getAiRuntime], ["knowledge", getKnowledgeOverview], ["historian", getHistorianStatus], ["timeline", () => getRuntimeTimeline(100)]];
+  if (route === "records") return [auth, ["liveFlowEvents", () => getLiveFlowRecentEvents(100)], ["events", getRecentRuntimeEvents], ["commands", getRecentCommands], ["dashboard", getDashboardData], ["kpi", () => getKpiOverview("7d")], ["aiRuntime", getAiRuntime], ["knowledge", getKnowledgeOverview], ["historian", getHistorianStatus], ["timeline", () => getRuntimeTimeline(200)]];
   return [
     auth,
     ["endpointHealth", getEndpointHealth],

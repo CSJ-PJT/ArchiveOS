@@ -18,6 +18,15 @@ function percent(value: number | string | null | undefined) {
   return `${numeric.toFixed(numeric % 1 === 0 ? 0 : 1)}%`;
 }
 
+function capacityPercent(service: WorkforceServiceSummary) {
+  const effective = Number(service.effectiveCapacity);
+  const used = Number(service.usedCapacity);
+  if (Number.isFinite(effective) && effective > 0 && Number.isFinite(used)) return percent((used / effective) * 100);
+  return service.serviceId === "archive-nexus" ? "시뮬레이터 정지" : "기준 역량 없음";
+}
+
+function statusLabel(value: string) { return value === "HEALTHY" ? "정상" : value === "DEGRADED" ? "부분 수집" : value === "UNAVAILABLE" ? "연결 안 됨" : value; }
+
 function statusTone(service: WorkforceServiceSummary) {
   if (service.status === "UNAVAILABLE") return "critical";
   if (service.status === "DEGRADED" || service.capacityShortage) return "degraded";
@@ -95,14 +104,15 @@ export function WorkforcePage({ data }: { data: AppData }) {
               <article className="history-row" key={service.serviceId}>
                 <summary>
                   <strong>{service.serviceName}</strong>
-                  <StatusBadge status={statusTone(service)}>{service.status}</StatusBadge>
+                  <StatusBadge status={statusTone(service)}>{statusLabel(service.status)}</StatusBadge>
                   <span>{service.bottleneckRole}</span>
-                  <p>적체 {service.backlog}건 · 처리량 {service.usedCapacity}/{service.effectiveCapacity} · 생산성 {percent(service.productivityScore)}</p>
+                  <p>적체 {service.backlog}건 · 사용 역량 {service.usedCapacity}/{service.effectiveCapacity} ({capacityPercent(service)}) · 생산성 {percent(service.productivityScore)}</p>
                 </summary>
                 <div className="detail-grid">
                   <span>인원<strong>{service.headcount}</strong></span>
                   <span>유효 처리 역량<strong>{String(service.effectiveCapacity)}</strong></span>
                   <span>사용한 처리 역량<strong>{String(service.usedCapacity)}</strong></span>
+                  <span>역량 사용률<strong>{capacityPercent(service)}</strong></span>
                   <span>적체<strong>{service.backlog}</strong></span>
                   <span>인건비성 비용<strong>{money(service.payrollCost)}</strong></span>
                   <span>생산성<strong>{percent(service.productivityScore)}</strong></span>
