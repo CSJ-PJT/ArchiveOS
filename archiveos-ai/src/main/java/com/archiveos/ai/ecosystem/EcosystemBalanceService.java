@@ -193,10 +193,6 @@ public class EcosystemBalanceService {
         }
         PeriodGate period = periodGate(scope, body.get("periodStart"), body.get("periodEnd"), body.get("sourceLatestEventAt"));
         if (!period.included()) return new AggregationGate(false, period.status(), period.reason());
-        Object runtimeActive = body.get("runtimeActive");
-        if (runtimeActive != null && Boolean.FALSE.equals(booleanValue(runtimeActive))) {
-            return new AggregationGate(false, "RUNTIME_INACTIVE", "현재 런타임이 정지되어 과거 손익을 생태계 합계에서 제외했습니다.");
-        }
         return new AggregationGate(true, "INCLUDED", "동일 합성 통화의 검증된 현재 운영 기간 손익입니다.");
     }
     private boolean allowedScope(String key, String scope) {
