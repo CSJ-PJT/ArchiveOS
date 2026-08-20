@@ -18,6 +18,7 @@ const knowledgePanel = read("src/components/knowledge/KnowledgeGraphPanel.tsx");
 const knowledgeGraph = read("src/components/knowledge/KnowledgeGraphSvg.tsx");
 const knowledgeUtils = read("src/components/knowledge/knowledgeGraphUtils.ts");
 const records = read("src/pages/ConsoleRecordsPage.tsx");
+const history = read("src/pages/HistoryPage.tsx");
 const pagination = read("src/components/shared/Pagination.tsx");
 const operations = read("src/pages/ConsoleOperationsPage.tsx");
 const agents = read("src/pages/AgentsPage.tsx");
@@ -70,6 +71,9 @@ for (const contract of ["integrationConnectors", "등록 시스템", "역량 사
 }
 for (const contract of ["Atlas Platform", "ATLAS PROJECT", "latestAtlasCheck", "Atlas 읽기 전용 health"]) {
   if (!services.includes(contract)) throw new Error(`Atlas project integration contract missing: ${contract}`);
+}
+for (const contract of ["data.kpi.runtime", "data.kpi.knowledge", "지식 노드", "지식 관계", "Runtime 상태"]) {
+  if (!history.includes(contract)) throw new Error(`Complete KPI history contract missing: ${contract}`);
 }
 for (const contract of ["operations.runtimeWorkforce.usedCapacity", "operations.runtimeWorkforce.effectiveCapacity", "외부 쓰기"]) {
   if (!services.includes(contract)) throw new Error(`Nested service metric/label contract missing: ${contract}`);
