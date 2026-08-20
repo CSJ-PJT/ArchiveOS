@@ -34,7 +34,7 @@ export function Sidebar({
       <div className="brand-lockup">
         <div className="brand-mark">
           <img
-            src="/archiveos-mark.svg"
+            src={`${import.meta.env.BASE_URL}archiveos-mark.svg`}
             alt=""
             aria-hidden="true"
             style={{ width: "1.75rem", height: "1.75rem", display: "block" }}
