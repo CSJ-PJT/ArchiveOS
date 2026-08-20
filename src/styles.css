@@ -866,6 +866,44 @@ button {
   gap: 0.65rem;
 }
 
+.kpi-history-groups,
+.kpi-history-group {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.kpi-history-groups {
+  gap: 1rem;
+}
+
+.kpi-history-group h3 {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.kpi-row {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.kpi-row span,
+.kpi-row strong {
+  display: block;
+}
+
+.kpi-row strong {
+  margin-top: 0.35rem;
+}
+
+.kpi-generated-at {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: 0.82rem;
+}
+
 .detail-grid > div,
 .kpi-row,
 .key-value {

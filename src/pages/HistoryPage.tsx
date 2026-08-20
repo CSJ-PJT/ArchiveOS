@@ -104,24 +104,40 @@ export function HistoryPage({ data }: { data: AppData }) {
 
       {filter === "kpi" ? (
         <SectionCard title="KPI 이력" eyebrow="최근 7일 운영 지표">
-          <div className="kpi-history-grid">
-            {Object.entries(data.kpi?.productivity || {}).map(([key, value]) => (
-              <div className="kpi-row" key={key}>
-                <span>{key}</span>
-                <strong>{value == null ? "KPI 이력 데이터 없음" : value}</strong>
-              </div>
-            ))}
-            {Object.entries(data.kpi?.quality || {}).map(([key, value]) => (
-              <div className="kpi-row" key={key}>
-                <span>{key}</span>
-                <strong>{value == null ? "KPI 이력 데이터 없음" : value}</strong>
-              </div>
-            ))}
-          </div>
+          {data.kpi ? <div className="kpi-history-groups">
+            <KpiGroup title="생산성" values={data.kpi.productivity} />
+            <KpiGroup title="품질·검토" values={data.kpi.quality} />
+            <KpiGroup title="Runtime" values={data.kpi.runtime} />
+            <KpiGroup title="운영 지식" values={data.kpi.knowledge} />
+            <p className="kpi-generated-at">집계 생성 {new Date(data.kpi.generatedAt).toLocaleString()}</p>
+          </div> : <div className="empty-state">KPI 집계를 불러오는 중입니다.</div>}
         </SectionCard>
       ) : null}
     </div>
   );
+}
+
+function KpiGroup({ title, values }: { title: string; values: Record<string, string | number | null> }) {
+  return <section className="kpi-history-group" aria-label={`${title} KPI`}>
+    <h3>{title}</h3>
+    <div className="kpi-history-grid">
+      {Object.entries(values).map(([key, value]) => <div className="kpi-row" key={key}>
+        <span>{kpiLabel(key)}</span>
+        <strong>{formatKpiValue(key, value)}</strong>
+      </div>)}
+    </div>
+  </section>;
+}
+
+function kpiLabel(key: string) {
+  return ({ tasksCompleted: "완료 작업", reviewsCompleted: "완료 검토", decisionsRecorded: "기록된 결정", commandsRecorded: "기록된 명령", dailyReportsSent: "일일 보고", nightlyReviewsCompleted: "야간 검토", reviewApproveCount: "승인 판정", reviewRejectCount: "반려 판정", reviewStopCount: "중지 판정", approvalRate: "승인율", architectReviewCount: "설계 검토", architectWarningCount: "설계 주의", architectBlockedCount: "설계 차단", latestInbox: "최근 Inbox", latestProcessing: "현재 처리", latestOutbox: "최근 Outbox", latestReviews: "최근 리뷰", latestStatus: "Runtime 상태", warningCount: "주의 기록", loopDetectedRate: "루프 감지율", totalNodes: "지식 노드", totalEdges: "지식 관계", nodesCreatedInRange: "기간 내 생성 노드", edgesCreatedInRange: "기간 내 생성 관계", obsidianExports: "Obsidian 내보내기", graphDensity: "그래프 밀도" } as Record<string, string>)[key] || key;
+}
+
+function formatKpiValue(key: string, value: string | number | null) {
+  if (value == null) return "집계 대기";
+  if (["approvalRate", "loopDetectedRate"].includes(key) && typeof value === "number") return `${value.toLocaleString()}%`;
+  if (key === "graphDensity" && typeof value === "number") return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return typeof value === "number" ? value.toLocaleString() : value;
 }
 
 function TimelineRows({
