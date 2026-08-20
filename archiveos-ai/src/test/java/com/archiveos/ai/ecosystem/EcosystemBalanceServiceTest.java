@@ -25,7 +25,7 @@ class EcosystemBalanceServiceTest {
                         Map.of("recognizedRevenue", 100, "totalExpense", 70, "operatingProfit", 999)))),
                 "nexus", service("Archive-Nexus", Map.of()),
                 "logitics", service("Archive-Logistics", Map.of("economy", current24(
-                        "ROLLING_24H_RECOGNIZED_LOGISTICS_EVENTS", "dataAvailable",
+                        "ROLLING_24H_RECOGNIZED_NON_RUNTIME_LOGISTICS_EVENTS", "dataAvailable",
                         Map.of("recognizedRevenue", 100, "realizedOperatingCost", 92, "operatingProfit", 999)))),
                 "ledger", service("Archive-Ledger", Map.of("balance", currentWorkday(
                         Map.of("recognizedRevenue", 100, "realizedOperatingCost", 95, "operatingProfit", 999)))))));
@@ -107,7 +107,7 @@ class EcosystemBalanceServiceTest {
         EcosystemService ecosystem = Mockito.mock(EcosystemService.class);
         EcosystemBalanceProperties properties = new EcosystemBalanceProperties();
         Map<String, Object> logisticsEconomy = current24(
-                "ROLLING_24H_RECOGNIZED_LOGISTICS_EVENTS", "dataAvailable",
+                "ROLLING_24H_RECOGNIZED_NON_RUNTIME_LOGISTICS_EVENTS", "dataAvailable",
                 Map.of(
                         "recognizedRevenue", 250,
                         "realizedOperatingCost", 150,
@@ -141,7 +141,7 @@ class EcosystemBalanceServiceTest {
         EcosystemBalanceProperties properties = new EcosystemBalanceProperties();
         Instant staleEnd = Instant.now().minus(Duration.ofHours(2));
         Map<String, Object> unavailableLogistics = current24(
-                "ROLLING_24H_RECOGNIZED_LOGISTICS_EVENTS", "dataAvailable",
+                "ROLLING_24H_RECOGNIZED_NON_RUNTIME_LOGISTICS_EVENTS", "dataAvailable",
                 Map.of("recognizedRevenue", 300, "realizedOperatingCost", 200));
         unavailableLogistics.put("dataAvailable", false);
         Map<String, Object> legacyLedger = currentWorkday(
