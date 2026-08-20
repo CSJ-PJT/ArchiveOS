@@ -6,6 +6,7 @@ const navigation = read("src/app/navigation.ts");
 const styles = read("src/styles.css");
 const api = read("src/lib/backendApi.ts");
 const liveMesh = read("src/components/console/LiveMeshTopology.tsx");
+const liveFlowPage = read("src/pages/LiveFlowPage.tsx");
 const dashboard = read("src/pages/ConsoleDashboardPage.tsx");
 const services = read("src/pages/ConsoleServicesPage.tsx");
 const finance = read("src/pages/ConsoleFinancePage.tsx");
@@ -32,7 +33,7 @@ for (const route of ["overview", "liveflow", "ecosystem", "agents", "approvals",
 for (const contract of ["getEcosystemSummary", "getLiveFlowSummary", "getLiveFlowTopology", "getLiveFlowRecentEvents", "liveFlowStreamUrl", "getEcosystemBalanceSummary"]) {
   if (!api.includes(contract)) throw new Error(`Console V3 API contract missing: ${contract}`);
 }
-for (const contract of ["EventSource", "runtime-event", "fallback", "getLiveFlowRecentEvents(30)", "reconnectAttempt", "30_000", "eventIds.current.size > 750", "window.addEventListener(\"online\""]) {
+for (const contract of ["EventSource", "runtime-event", "fallback", "getLiveFlowRecentEvents(30)", "reconnectAttempt", "30_000", "mergeLiveFlowEvents", "window.addEventListener(\"online\""]) {
   if (!appShell.includes(contract)) throw new Error(`Live Flow SSE contract missing: ${contract}`);
 }
 if (!/route === "records"[^\n]+\["aiRuntime", getAiRuntime\]/.test(appShell)) {
@@ -41,7 +42,18 @@ if (!/route === "records"[^\n]+\["aiRuntime", getAiRuntime\]/.test(appShell)) {
 for (const contract of ["archiveos.refresh.seconds", "자동 새로고침 간격", "getManagedSystemsOverview", "getRecentRuntimeEvents", "getRecentCommands", "getKpiOverview"]) {
   if (!appShell.includes(contract)) throw new Error(`Restored console contract missing: ${contract}`);
 }
-for (const contract of ["라이브 토폴로지 상세", "LiveFlowPage"]) {
+for (const contract of ["REFRESH_PREFERENCE_VERSION", 'storedValue === "10"', "? stored : 5", "refreshGeneration", "refreshInFlight", "active?.route === route", "window.setTimeout", "result.key !== \"auth\"", "getLiveFlowRecentEvents(30)"]) {
+  if (!appShell.includes(contract)) throw new Error(`Five-second progressive dashboard contract missing: ${contract}`);
+}
+for (const contract of ["mergeLiveFlowEvents", "MAX_LIVE_FLOW_EVENTS", "loadDashboardDetails", "getLiveFlowRecentEvents(MAX_LIVE_FLOW_EVENTS)", "getWorkforceOverview", "streamConnected", "fallbackInFlight", "routeEpoch", "newestEventTime"]) {
+  if (!appShell.includes(contract)) throw new Error(`Race-safe live-flow/lazy-detail contract missing: ${contract}`);
+}
+if (appShell.includes("window.setInterval(() => { void refresh()")) throw new Error("Dashboard polling must schedule only after the prior refresh completes.");
+if (appShell.includes("liveFlowEvents: events")) throw new Error("Live-flow polling must merge events instead of replacing newer stream data.");
+if ((appShell.match(/mergeLiveFlowEvents\(/g) ?? []).length < 4) throw new Error("Every live-flow event ingress path must use the shared merge policy.");
+const dashboardLoader = appShell.match(/if \(route === "dashboard"\) return \[([^\n]+)\];/)?.[1] ?? "";
+if (dashboardLoader.includes("getWorkforceOverview") || dashboardLoader.includes("MAX_LIVE_FLOW_EVENTS")) throw new Error("Initial dashboard loading must keep workforce and full event history lazy.");
+for (const contract of ["라이브 토폴로지 상세", "LiveFlowPage", "onLoadTopologyDetails", "refreshTopology"]) {
   if (!dashboard.includes(contract)) throw new Error(`Dashboard topology detail contract missing: ${contract}`);
 }
 for (const contract of ["integrationConnectors", "등록 시스템", "역량 사용률", "시뮬레이터 정지"]) {
@@ -99,8 +111,14 @@ if (!operations.includes('items={[["batch", "배치 작업"], ["rpa", "RPA 검�
 for (const contract of ["Archive-Market", "Archive-Nexus", "Archive-Logistics", "Archive-Ledger", "ArchiveOS", "Settlement", "events.slice(0, 30)"]) {
   if (!liveMesh.includes(contract)) throw new Error(`Mesh topology contract missing: ${contract}`);
 }
-for (const contract of ["nodeEventMetric", "state?.lastEventAt", "최근 창 0건", "최근 수신 대기"]) {
-  if (!liveMesh.includes(contract)) throw new Error(`Mesh zero-window/runtime distinction missing: ${contract}`);
+for (const contract of ["nodeEventMetric", "state?.recentThroughput", "현재 처리", "mesh-edge-time-badge", "segment.fromX", "segment.toX"]) {
+  if (!liveMesh.includes(contract)) throw new Error(`Mesh processing/direction contract missing: ${contract}`);
+}
+for (const contract of ["detail-flow-arrow-", "markerEnd", "flowEdgePath", "parallelEdges", "parallelIndex", "parallelOffset", "mesh-flow-edge", "현재 처리"]) {
+  if (!liveFlowPage.includes(contract)) throw new Error(`Detailed topology arrow contract missing: ${contract}`);
+}
+for (const contract of [".mesh-edge-time-badge", ".polished-live-flow .mesh-edge-layer .mesh-flow-edge", "fill:none", "font-variant-numeric:tabular-nums"]) {
+  if (!styles.includes(contract)) throw new Error(`Topology thin-line/time-badge style missing: ${contract}`);
 }
 if (liveMesh.includes(': "이벤트 없음"')) throw new Error("Mesh nodes must not label a finite event window as globally empty.");
 if (appShell.includes("MutationObserver")) throw new Error("DOM MutationObserver translation must not remain in AppShell.");

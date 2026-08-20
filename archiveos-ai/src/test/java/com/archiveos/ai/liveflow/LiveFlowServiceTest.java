@@ -85,6 +85,23 @@ class LiveFlowServiceTest {
         assertThat(edges).anySatisfy(edge -> assertThat(edge).containsEntry("from", "archiveos").containsEntry("to", "settlement"));
     }
 
+    @Test void readEndpointsUsePersistedSnapshotsWithoutTriggeringExternalRefresh() {
+        LiveFlowRepository repository = repositoryBase(Map.of("market", Instant.now().minusSeconds(2)));
+        EcosystemService ecosystem = Mockito.mock(EcosystemService.class);
+        ExternalApprovalRepository approvals = Mockito.mock(ExternalApprovalRepository.class);
+        ApprovalCallbackOutboxRepository callbacks = Mockito.mock(ApprovalCallbackOutboxRepository.class);
+        when(ecosystem.summary()).thenReturn(healthyServices(Map.of()));
+        when(approvals.summary()).thenReturn(Map.of());
+        when(repository.recent(30)).thenReturn(List.of());
+        LiveFlowService service = new LiveFlowService(repository, ecosystem, approvals, callbacks, audit());
+
+        service.summary();
+        service.recent(30);
+
+        verify(ecosystem, never()).refresh();
+        verify(repository).recent(30);
+    }
+
     @Test void runtimeUsesPerNodeBusinessAggregateInsteadOfGlobalLatestSample() {
         LiveFlowRepository repository = repositoryBase(Map.of(
                 "market", Instant.now().minusSeconds(1),

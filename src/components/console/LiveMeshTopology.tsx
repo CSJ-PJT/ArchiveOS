@@ -56,20 +56,18 @@ export function LiveMeshTopology({ topology, summary, events, onNavigate, onAsk 
 
     <div className="mesh-mobile-summary" aria-label="모바일 서비스 흐름 요약">
       <div className="mesh-mobile-flow-list"><strong>활성 경로</strong>{activeFlowEdges.length ? activeFlowEdges.map(({ edge, metric }) => <button type="button" key={edgeKey(edge.from, edge.to)} className="mesh-mobile-flow" onClick={(event) => openSelection({ type: "edge", edge }, event.currentTarget)}><span>{shortNodeLabel(edge.from)} → {shortNodeLabel(edge.to)}</span><small>최근 {metric?.count}건 · {eventAge(metric?.lastAt)}</small><StatusBadge status={metric?.warning ? "warning" : "working"}>{metric?.warning ? "주의" : "처리 중"}</StatusBadge></button>) : <p>현재 활성 경로가 없습니다.</p>}</div>
-      <div className="mesh-mobile-service-list"><strong>서비스 상태</strong>{nodes.map((node) => <button type="button" key={node.id} className="mesh-mobile-node" onClick={(event) => openSelection({ type: "node", node }, event.currentTarget)}><span><strong>{node.label}</strong><small>{roleByNode[node.id] ?? node.type} · {nodeBacklog(node, runtime, visibleEvents)}</small></span><StatusBadge status={nodeStatus(node, runtime)}>{runtimeLabel(nodeStatus(node, runtime))}</StatusBadge></button>)}</div>
+      <div className="mesh-mobile-service-list"><strong>서비스 상태</strong>{nodes.map((node) => { const state = runtime.find((item) => normalizeNode(item.serviceId || item.serviceName) === node.id); const count = visibleEvents.filter((event) => normalizeNode(event.from_node) === node.id || normalizeNode(event.to_node) === node.id).length; return <button type="button" key={node.id} className="mesh-mobile-node" onClick={(event) => openSelection({ type: "node", node }, event.currentTarget)}><span><strong>{node.label}</strong><small>{roleByNode[node.id] ?? node.type} · {nodeEventMetric(count, state)} · {nodeBacklog(node, runtime, visibleEvents)}</small></span><StatusBadge status={nodeStatus(node, runtime)}>{runtimeLabel(nodeStatus(node, runtime))}</StatusBadge></button>; })}</div>
     </div>
 
     <div className="mesh-canvas-scroll"><div className="mesh-canvas">
       <svg className="mesh-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Archive 서비스 메쉬 구조">
-        <defs><marker id="mesh-arrow" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" /></marker></defs>
+        <defs><marker id="mesh-arrow" markerWidth="3.2" markerHeight="3.2" refX="2.8" refY="1.6" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L3.2,1.6 L0,3.2 z" /></marker></defs>
         {edges.map((edge) => {
           const from = nodeMap.get(edge.from); const to = nodeMap.get(edge.to); if (!from || !to) return null;
           const key = edgeKey(edge.from, edge.to); const metric = edgeMetrics.get(key); const tone = edgeTone(edge.from, edge.to);
           const segment = edgeSegment(from, to);
-          const anchor = edgeAnchor(segment, edgeIndex(edge, edges));
           return <g key={`${key}-${edge.label}`} className="mesh-edge-group" onClick={(event) => openSelection({ type: "edge", edge }, event.currentTarget)} tabIndex={0} role="button" aria-label={`${edge.from}에서 ${edge.to} 흐름 상세 보기`} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openSelection({ type: "edge", edge }, event.currentTarget); }}>
-            <line className={`mesh-edge edge-${tone} ${metric?.count ? "edge-active" : ""} ${metric?.warning ? "edge-warning" : ""}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} markerEnd="url(#mesh-arrow)" />
-            {metric?.count ? <g className="mesh-edge-badge" transform={`translate(${anchor.x} ${anchor.y})`}><rect x="-4.6" y="-2.7" width="9.2" height="5.4" rx="2.6" /><text x="0" y="1">{`${metric.count} · ${shortAge(metric.lastAt)}`}</text></g> : null}
+            <line className={`mesh-edge edge-${tone} ${metric?.count ? "edge-active" : ""} ${metric?.warning ? "edge-warning" : ""}`} x1={segment.fromX} y1={segment.fromY} x2={segment.toX} y2={segment.toY} markerEnd="url(#mesh-arrow)" />
             <title>{`${edge.label} · 최근 ${metric?.count ?? 0}건${metric?.lastAt ? ` · ${formatTime(metric.lastAt)}` : ""}`}</title>
           </g>;
         })}
@@ -82,6 +80,12 @@ export function LiveMeshTopology({ topology, summary, events, onNavigate, onAsk 
           </circle>;
         })}
       </svg>
+      {edges.map((edge) => {
+        const from = nodeMap.get(edge.from); const to = nodeMap.get(edge.to); if (!from || !to) return null;
+        const metric = edgeMetrics.get(edgeKey(edge.from, edge.to)); if (!metric?.count) return null;
+        const anchor = edgeAnchor(edgeSegment(from, to), edgeIndex(edge, edges));
+        return <button type="button" key={`badge-${edgeKey(edge.from, edge.to)}`} className="mesh-edge-time-badge" style={{ left: `${anchor.x}%`, top: `${anchor.y}%` }} onClick={(event) => openSelection({ type: "edge", edge }, event.currentTarget)} title={`${edge.label} · ${metric.count}건 · ${shortAge(metric.lastAt)}`}>{metric.count}<span>·</span>{shortAge(metric.lastAt)}</button>;
+      })}
       {nodes.map((node) => {
         const runtimeState = runtime.find((state) => normalizeNode(state.serviceId || state.serviceName) === node.id);
         const nodeEvents = visibleEvents.filter((event) => normalizeNode(event.from_node) === node.id || normalizeNode(event.to_node) === node.id);
@@ -132,7 +136,7 @@ function tokenTone(event: LiveFlowEvent) { const value = `${event.status} ${even
 function runtimeLabel(value?: string | null) { const text = String(value || "").toUpperCase(); if (["PROCESSING", "RUNNING", "MOVING"].includes(text)) return "처리 중"; if (["STALLED", "STALE"].includes(text)) return "정체"; if (["WARNING", "DEGRADED", "SLOW", "DELAYED"].includes(text)) return "주의"; if (["FAILED", "UNAVAILABLE"].includes(text)) return "실패"; if (["HEALTHY", "LIVE", "COMPLETED"].includes(text)) return "정상"; return "대기"; }
 function shortNodeLabel(value?: string | null) { const id = normalizeNode(value); return ({ market: "Market", nexus: "Nexus", logistics: "Logistics", ledger: "Ledger", archiveos: "ArchiveOS", settlement: "Settlement" } as Record<string, string>)[id]; }
 function shortAge(value?: string | null) { if (!value) return "-"; const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000)); if (seconds < 60) return `${seconds}초`; return `${Math.floor(seconds / 60)}분`; }
-function nodeEventMetric(count: number, state?: RuntimeService) { if (count > 0) return `${count}건`; if (state?.lastEventAt) return eventAge(state.lastEventAt); return state ? "최근 창 0건" : "수집 대기"; }
+function nodeEventMetric(count: number, state?: RuntimeService) { const throughput = typeof state?.recentThroughput === "number" ? state.recentThroughput : count; return `현재 처리 ${throughput.toLocaleString()}건`; }
 function nodeBacklog(node: MeshNode, runtime: RuntimeService[], events: LiveFlowEvent[]) { const state = runtime.find((item) => normalizeNode(item.serviceId || item.serviceName) === node.id); if (typeof state?.backlogCount === "number") return `적체 ${state.backlogCount.toLocaleString()}`; const count = events.filter((event) => normalizeNode(event.from_node) === node.id || normalizeNode(event.to_node) === node.id).length; return count ? `최근 이벤트 ${count}건` : "수집 대기"; }
 function runtimeErrorLabel(status?: string | null, reason?: string | null) { const text = String(status || "").toUpperCase(); if (["HEALTHY", "LIVE", "COMPLETED", "PROCESSING", "RUNNING"].includes(text)) return "없음"; return runtimeReason(reason); }
 function runtimeReason(value?: string | null) { const text = String(value || "").trim(); if (!text) return "수집된 상태와 최근 이벤트를 기준으로 표시합니다."; if (/service is healthy|healthy/i.test(text)) return "최근 수집 상태가 정상입니다."; if (/unavailable|connection|timeout/i.test(text)) return "연결 또는 수집 상태를 확인하세요."; if (/stale|no runtime event/i.test(text)) return "최근 실행 이벤트가 없어 흐름 상태를 확인하세요."; return "수집된 상태와 최근 이벤트를 기준으로 표시합니다."; }

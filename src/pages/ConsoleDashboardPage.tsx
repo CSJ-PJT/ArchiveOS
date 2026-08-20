@@ -10,7 +10,7 @@ import { LiveFlowPage } from "./LiveFlowPage";
 
 type EventFilter = "ALL" | "MARKET" | "NEXUS" | "LOGISTICS" | "LEDGER" | "ARCHIVEOS" | "WARNING";
 
-export function ConsoleDashboardPage({ data, onNavigate, onRefresh }: { data: AppData; onNavigate: (route: CoreRoute) => void; onRefresh: () => Promise<void> }) {
+export function ConsoleDashboardPage({ data, onNavigate, onRefresh, onLoadTopologyDetails }: { data: AppData; onNavigate: (route: CoreRoute) => void; onRefresh: () => Promise<void>; onLoadTopologyDetails: () => Promise<void> }) {
   const { translate } = useI18n();
   const [view, setView] = useState<"overview" | "topology">("overview");
   const [eventFilter, setEventFilter] = useState<EventFilter>("ALL");
@@ -41,13 +41,22 @@ export function ConsoleDashboardPage({ data, onNavigate, onRefresh }: { data: Ap
   const activeTrend = buildTrend(allEvents, () => true);
   const backlogTrend = buildTrend(allEvents, (event) => /waiting|delayed|failed|warning|retry/i.test(`${event.status} ${event.severity} ${event.event_type}`));
 
+  const changeView = (next: "overview" | "topology") => {
+    setView(next);
+    if (next === "topology") void onLoadTopologyDetails();
+  };
+  const refreshTopology = async () => {
+    await onRefresh();
+    await onLoadTopologyDetails();
+  };
+
   if (view === "topology") return <div className="console-page dashboard-v4 dashboard-rework-phase1">
-    <DashboardViewTabs value={view} onChange={setView} />
-    <LiveFlowPage data={data} onRefresh={onRefresh} />
+    <DashboardViewTabs value={view} onChange={changeView} />
+    <LiveFlowPage data={data} onRefresh={refreshTopology} />
   </div>;
 
   return <div className="console-page dashboard-v4 dashboard-rework-phase1">
-    <DashboardViewTabs value={view} onChange={setView} />
+    <DashboardViewTabs value={view} onChange={changeView} />
     <section className="dashboard-overview-header">
       <div className="dashboard-title-block">
         <span className="eyebrow">CONTROL TOWER</span>

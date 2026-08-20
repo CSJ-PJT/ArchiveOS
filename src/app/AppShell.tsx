@@ -40,8 +40,11 @@ export type AppData = {
 };
 
 const publicAuth: AuthSession = { actor: "anonymous", role: "PUBLIC", authenticated: false };
+const REFRESH_PREFERENCE_VERSION = "2";
+const MAX_LIVE_FLOW_EVENTS = 120;
 const emptyData: AppData = { loading: true, refreshedAt: null, errors: {}, auth: publicAuth, dashboard: null, runtime: null, events: [], commands: [], kpi: null, endpointHealth: null, platformReadiness: null, publicAccess: null, runtimeVersion: null, security: null, architect: null, axReadiness: null, aiRuntime: null, latestBatch: null, dailyReport: null, managedSystems: null, ecosystemTimeline: null, settlementGame: null, ecosystem: null, ecosystemTopology: null, liveFlow: null, liveFlowTopology: null, liveFlowEvents: [], balance: null, balanceRecommendations: null, workforce: null, mesh: null, queue: null, tasks: [], atlas: null, gameFinance: null, externalApprovals: [], knowledge: null, historian: null, mcpRegistry: [], timeline: [], lastEventLatencyMs: null };
 type Result = { key: keyof AppData; value: unknown; error: string | null };
+type RefreshRun = { route: CoreRoute; generation: number; promise: Promise<void> };
 async function settle(key: keyof AppData, fn: () => Promise<unknown>): Promise<Result> { try { return { key, value: await fn(), error: null }; } catch (error) { return { key, value: null, error: error instanceof Error ? error.message : String(error) }; } }
 
 function AppShellInner() {
@@ -52,11 +55,22 @@ function AppShellInner() {
   const fallbackTimer = useRef<number | null>(null);
   const reconnectTimer = useRef<number | null>(null);
   const reconnectAttempt = useRef(0);
-  const eventIds = useRef(new Set<string>());
-  const refreshInFlight = useRef(false);
+  const refreshGeneration = useRef(0);
+  const refreshInFlight = useRef<RefreshRun | null>(null);
+  const dashboardDetailsInFlight = useRef<Promise<void> | null>(null);
+  const routeRef = useRef(route);
+  const routeEpoch = useRef(0);
+  if (routeRef.current !== route) {
+    routeRef.current = route;
+    routeEpoch.current += 1;
+    dashboardDetailsInFlight.current = null;
+  }
   const [refreshSeconds, setRefreshSeconds] = useState(() => {
-    const stored = Number(window.localStorage.getItem("archiveos.refresh.seconds") || "10");
-    return [0, 5, 10, 30, 60].includes(stored) ? stored : 10;
+    const storedValue = window.localStorage.getItem("archiveos.refresh.seconds");
+    const preferenceVersion = window.localStorage.getItem("archiveos.refresh.preference.version");
+    if (preferenceVersion !== REFRESH_PREFERENCE_VERSION && (storedValue === null || storedValue === "10")) return 5;
+    const stored = Number(storedValue ?? "5");
+    return [0, 5, 10, 30, 60].includes(stored) ? stored : 5;
   });
   const { locale, setLocale } = useI18n();
 
@@ -69,67 +83,120 @@ function AppShellInner() {
   useEffect(() => { const onPopState = () => setRouteState(routeFromLocation()); window.addEventListener("popstate", onPopState); window.addEventListener("hashchange", onPopState); return () => { window.removeEventListener("popstate", onPopState); window.removeEventListener("hashchange", onPopState); }; }, []);
   useEffect(() => { document.body.classList.toggle("sidebar-open", sidebarOpen); return () => document.body.classList.remove("sidebar-open"); }, [sidebarOpen]);
 
-  const refresh = useCallback(async () => {
-    if (refreshInFlight.current) return;
-    refreshInFlight.current = true;
+  const refresh = useCallback(() => {
+    const active = refreshInFlight.current;
+    if (active?.route === route) return active.promise;
+    const generation = ++refreshGeneration.current;
+    const loaders = loadersFor(route);
     setData((current) => current.refreshedAt ? current : ({ ...current, loading: true }));
-    try {
-      const loaders = loadersFor(route);
-      const results = await Promise.all(loaders.map(([key, fn]) => settle(key, fn)));
-      setData((current) => {
-        const next: AppData = { ...current, loading: false, refreshedAt: new Date().toISOString(), errors: {} };
-        for (const result of results) { if (result.error) next.errors[result.key] = result.error; else (next as unknown as Record<string, unknown>)[result.key] = result.value; }
-        if (!next.auth) next.auth = publicAuth;
-        return next;
-      });
-    } finally {
-      refreshInFlight.current = false;
-    }
+    setData((current) => ({ ...current, errors: {} }));
+    const promise = (async () => {
+      await Promise.all(loaders.map(async ([key, fn]) => {
+        const result = await settle(key, fn);
+        if (generation !== refreshGeneration.current) return;
+        setData((current) => applyResult(current, result));
+      }));
+      if (generation === refreshGeneration.current) {
+        setData((current) => ({ ...current, loading: false, refreshedAt: new Date().toISOString() }));
+      }
+    })();
+    refreshInFlight.current = { route, generation, promise };
+    void promise.then(() => {
+      if (refreshInFlight.current?.generation === generation) refreshInFlight.current = null;
+    });
+    return promise;
   }, [route]);
-  useEffect(() => { refresh(); }, [refresh]);
+
+  const loadDashboardDetails = useCallback(() => {
+    if (routeRef.current !== "dashboard") return Promise.resolve();
+    if (dashboardDetailsInFlight.current) return dashboardDetailsInFlight.current;
+    const requestedRoute = routeRef.current;
+    const requestedRouteEpoch = routeEpoch.current;
+    const promise = (async () => {
+      const results = await Promise.all([
+        settle("workforce", getWorkforceOverview),
+        settle("liveFlowEvents", () => getLiveFlowRecentEvents(MAX_LIVE_FLOW_EVENTS)),
+      ]);
+      if (routeRef.current !== requestedRoute || routeEpoch.current !== requestedRouteEpoch) return;
+      setData((current) => {
+        let next = current;
+        for (const result of results) next = applyResult(next, result);
+        return { ...next, refreshedAt: new Date().toISOString() };
+      });
+    })();
+    dashboardDetailsInFlight.current = promise;
+    void promise.then(() => {
+      if (dashboardDetailsInFlight.current === promise) dashboardDetailsInFlight.current = null;
+    });
+    return promise;
+  }, []);
+
   useEffect(() => {
     window.localStorage.setItem("archiveos.refresh.seconds", String(refreshSeconds));
-    if (refreshSeconds <= 0) return;
-    const timer = window.setInterval(() => { void refresh(); }, refreshSeconds * 1000);
-    return () => window.clearInterval(timer);
+    window.localStorage.setItem("archiveos.refresh.preference.version", REFRESH_PREFERENCE_VERSION);
+    let disposed = false;
+    let timer: number | null = null;
+    const poll = async () => {
+      await refresh();
+      if (!disposed && refreshSeconds > 0) timer = window.setTimeout(() => { void poll(); }, refreshSeconds * 1000);
+    };
+    void poll();
+    return () => { disposed = true; if (timer !== null) window.clearTimeout(timer); };
   }, [refresh, refreshSeconds]);
 
   useEffect(() => {
     if (route !== "dashboard") return;
     let disposed = false;
+    let streamConnected = false;
+    let fallbackInFlight = false;
     let source: EventSource | null = null;
     const receive = (raw: string) => {
       try {
         const payload = JSON.parse(raw) as LiveFlowEvent | LiveFlowSummary;
         if ("event_id" in payload) {
-          if (eventIds.current.has(payload.event_id)) return;
-          eventIds.current.add(payload.event_id);
-          if (eventIds.current.size > 750) eventIds.current.delete(eventIds.current.values().next().value as string);
           const receivedAt = payload.received_at ? Date.parse(payload.received_at) : Number.NaN;
           const latency = Number.isFinite(receivedAt) ? Math.max(0, Date.now() - receivedAt) : null;
-          setData((current) => ({ ...current, lastEventLatencyMs: latency, liveFlowEvents: [payload, ...current.liveFlowEvents.filter((event) => event.event_id !== payload.event_id)].slice(0, 100), liveFlow: current.liveFlow ? { ...current.liveFlow, latest_event_at: payload.occurred_at, recent_events: (current.liveFlow.recent_events ?? 0) + 1, active_flows: (current.liveFlow.active_flows ?? 0) + 1 } : current.liveFlow }));
+          setData((current) => {
+            const isNew = !current.liveFlowEvents.some((event) => event.event_id === payload.event_id);
+            return { ...current, lastEventLatencyMs: latency, liveFlowEvents: mergeLiveFlowEvents(current.liveFlowEvents, [payload]), liveFlow: current.liveFlow ? { ...current.liveFlow, latest_event_at: newestEventTime(current.liveFlow.latest_event_at, payload.occurred_at), recent_events: (current.liveFlow.recent_events ?? 0) + (isNew ? 1 : 0), active_flows: (current.liveFlow.active_flows ?? 0) + (isNew ? 1 : 0) } : current.liveFlow };
+          });
         } else if ("active_flows" in payload) setData((current) => ({ ...current, liveFlow: payload }));
       } catch { /* malformed stream data is ignored; API polling remains a degraded fallback. */ }
     };
-    const startFallback = () => {
-      if (fallbackTimer.current) return;
-      setStreamState("fallback");
-      fallbackTimer.current = window.setInterval(() => { getLiveFlowRecentEvents(30).then((events) => { if (!disposed) setData((current) => ({ ...current, liveFlowEvents: events })); }).catch(() => undefined); }, 1000);
+    const pollFallback = async () => {
+      fallbackTimer.current = null;
+      if (disposed || streamConnected || fallbackInFlight) return;
+      fallbackInFlight = true;
+      try {
+        const events = await getLiveFlowRecentEvents(30);
+        if (!disposed && !streamConnected) setData((current) => ({ ...current, liveFlowEvents: mergeLiveFlowEvents(current.liveFlowEvents, events) }));
+      } catch { /* the next fallback poll retries after the normal delay. */ }
+      finally {
+        fallbackInFlight = false;
+        if (!disposed && !streamConnected) fallbackTimer.current = window.setTimeout(() => { void pollFallback(); }, 1000);
+      }
     };
-    const stopFallback = () => { if (fallbackTimer.current) { window.clearInterval(fallbackTimer.current); fallbackTimer.current = null; } };
+    const startFallback = () => {
+      if (streamConnected || fallbackTimer.current || fallbackInFlight) return;
+      setStreamState("fallback");
+      fallbackTimer.current = window.setTimeout(() => { void pollFallback(); }, 0);
+    };
+    const stopFallback = () => { if (fallbackTimer.current) { window.clearTimeout(fallbackTimer.current); fallbackTimer.current = null; } };
     const clearReconnect = () => { if (reconnectTimer.current) { window.clearTimeout(reconnectTimer.current); reconnectTimer.current = null; } };
     const connect = (reconnecting = false) => {
       if (disposed) return;
       clearReconnect();
+      streamConnected = false;
       setStreamState(reconnecting ? "fallback" : "connecting");
       source?.close();
       source = new EventSource(liveFlowStreamUrl(), { withCredentials: true });
-      const connected = (event: Event) => { receive((event as MessageEvent).data); reconnectAttempt.current = 0; setStreamState("connected"); stopFallback(); clearReconnect(); };
+      const connected = (event: Event) => { streamConnected = true; receive((event as MessageEvent).data); reconnectAttempt.current = 0; setStreamState("connected"); stopFallback(); clearReconnect(); };
       source.addEventListener("snapshot", connected);
       source.addEventListener("runtime-event", connected);
       source.addEventListener("service-status", (event) => receive((event as MessageEvent).data));
       source.onerror = () => {
         if (disposed) return;
+        streamConnected = false;
         startFallback();
         source?.close();
         if (!navigator.onLine) return;
@@ -141,7 +208,7 @@ function AppShellInner() {
     const reconnectWhenOnline = () => { if (!disposed && !reconnectTimer.current) connect(true); };
     window.addEventListener("online", reconnectWhenOnline);
     connect();
-    return () => { disposed = true; window.removeEventListener("online", reconnectWhenOnline); clearReconnect(); source?.close(); stopFallback(); reconnectAttempt.current = 0; eventIds.current.clear(); };
+    return () => { disposed = true; streamConnected = false; window.removeEventListener("online", reconnectWhenOnline); clearReconnect(); source?.close(); stopFallback(); reconnectAttempt.current = 0; };
   }, [route]);
 
   const health = useMemo(() => {
@@ -149,7 +216,7 @@ function AppShellInner() {
     if (data.loading) return "waiting";
     return Object.keys(data.errors).length ? "warning" : "healthy";
   }, [data.ecosystem, data.errors, data.loading]);
-  const page = route === "dashboard" ? <ConsoleDashboardPage data={data} onNavigate={navigate} onRefresh={refresh} /> : route === "services" ? <ConsoleServicesPage data={data} /> : route === "operations" ? <ConsoleOperationsPage data={data} onRefresh={refresh} /> : route === "finance" ? <ConsoleFinancePage data={data} onRefresh={refresh} /> : route === "records" ? <ConsoleRecordsPage data={data} /> : <ConsoleSettingsPage data={data} onRefresh={refresh} backendOrigin={configuredBackendUrl} />;
+  const page = route === "dashboard" ? <ConsoleDashboardPage data={data} onNavigate={navigate} onRefresh={refresh} onLoadTopologyDetails={loadDashboardDetails} /> : route === "services" ? <ConsoleServicesPage data={data} /> : route === "operations" ? <ConsoleOperationsPage data={data} onRefresh={refresh} /> : route === "finance" ? <ConsoleFinancePage data={data} onRefresh={refresh} /> : route === "records" ? <ConsoleRecordsPage data={data} /> : <ConsoleSettingsPage data={data} onRefresh={refresh} backendOrigin={configuredBackendUrl} />;
   return <div className="app-shell"><Sidebar route={route} open={sidebarOpen} onNavigate={navigate} health={health} loading={data.loading} role={data.auth.role} />{sidebarOpen ? <button className="sidebar-scrim" type="button" aria-label={consoleText(locale, "common.closeMenu")} onClick={() => setSidebarOpen(false)} /> : null}<div className="content-shell"><header className="topbar"><button className="mobile-menu-button" type="button" aria-label={consoleText(locale, "common.openMenu")} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>☰</button><div><span className="eyebrow">ARCHIVEOS CONTROL TOWER</span><h1>{consoleText(locale, `nav.${route}`)}</h1></div><div className="topbar-status">{route === "dashboard" ? <span className={`stream-state stream-${streamState}`}>{streamState === "connected" ? `${consoleText(locale, "common.live")}${data.lastEventLatencyMs === null ? "" : ` · ${data.lastEventLatencyMs}ms`}` : streamState === "fallback" ? consoleText(locale, "common.reconnecting") : consoleText(locale, "common.connecting")}</span> : null}<label className="refresh-interval"><span>자동 갱신</span><select value={refreshSeconds} onChange={(event) => setRefreshSeconds(Number(event.target.value))} aria-label="자동 새로고침 간격"><option value={0}>끄기</option><option value={5}>5초</option><option value={10}>10초</option><option value={30}>30초</option><option value={60}>60초</option></select></label><LanguagePopover locale={locale} setLocale={setLocale} /><span className="last-sync">{data.refreshedAt ? `${consoleText(locale, "common.updated")} ${new Date(data.refreshedAt).toLocaleTimeString()}` : consoleText(locale, "common.loading")}</span><button className="icon-button" type="button" onClick={refresh} aria-label={consoleText(locale, "common.refresh")} title={consoleText(locale, "common.refresh")}><Icon name="refresh" /></button></div></header><main className="page-host" id="main-content">{page}</main></div></div>;
 }
 
@@ -166,7 +233,7 @@ function LanguagePopover({ locale, setLocale }: { locale: Locale; setLocale: (lo
 
 function loadersFor(route: CoreRoute): Array<[keyof AppData, () => Promise<unknown>]> {
   const auth: [keyof AppData, () => Promise<unknown>] = ["auth", getAuthSession];
-  if (route === "dashboard") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["liveFlowTopology", getLiveFlowTopology], ["liveFlowEvents", () => getLiveFlowRecentEvents(100)], ["balance", getEcosystemBalanceSummary], ["balanceRecommendations", getEcosystemBalanceRecommendations], ["workforce", getWorkforceOverview]];
+  if (route === "dashboard") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["liveFlowTopology", getLiveFlowTopology], ["liveFlowEvents", () => getLiveFlowRecentEvents(30)], ["balance", getEcosystemBalanceSummary]];
   if (route === "services") return [auth, ["ecosystem", getEcosystemSummary], ["ecosystemTopology", getEcosystemTopology], ["atlas", getAtlasOverview], ["managedSystems", getManagedSystemsOverview]];
   if (route === "operations") return [auth, ["dashboard", getDashboardData], ["mesh", getMeshOverview], ["workforce", getWorkforceOverview], ["queue", getQueueSummary], ["tasks", getPmTasks]];
   if (route === "finance") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["balance", getEcosystemBalanceSummary], ["gameFinance", getGameFinanceSummary], ["externalApprovals", () => getExternalApprovals(50)]];
@@ -186,6 +253,39 @@ function loadersFor(route: CoreRoute): Array<[keyof AppData, () => Promise<unkno
     ["security", getSecurityStatus],
     ["runtimeVersion", getRuntimeVersion],
   ];
+}
+function applyResult(current: AppData, result: Result): AppData {
+  const errors = { ...current.errors };
+  const next: AppData = { ...current, errors };
+  if (result.error) errors[result.key] = result.error;
+  else {
+    delete errors[result.key];
+    if (result.key === "liveFlowEvents") next.liveFlowEvents = mergeLiveFlowEvents(current.liveFlowEvents, result.value as LiveFlowEvent[]);
+    else (next as unknown as Record<string, unknown>)[result.key] = result.value;
+    if (result.key !== "auth") next.loading = false;
+  }
+  if (!next.auth) next.auth = publicAuth;
+  return next;
+}
+function mergeLiveFlowEvents(current: LiveFlowEvent[], incoming: LiveFlowEvent[]) {
+  const events = new Map<string, LiveFlowEvent>();
+  for (const event of [...current, ...incoming]) {
+    const existing = events.get(event.event_id);
+    if (!existing || liveFlowEventTime(event) >= liveFlowEventTime(existing)) events.set(event.event_id, event);
+  }
+  return [...events.values()]
+    .sort((left, right) => liveFlowEventTime(right) - liveFlowEventTime(left) || left.event_id.localeCompare(right.event_id))
+    .slice(0, MAX_LIVE_FLOW_EVENTS);
+}
+function liveFlowEventTime(event: LiveFlowEvent) {
+  const received = Date.parse(event.received_at || "");
+  const occurred = Date.parse(event.occurred_at || "");
+  return Math.max(Number.isFinite(received) ? received : 0, Number.isFinite(occurred) ? occurred : 0);
+}
+function newestEventTime(current: string | null | undefined, incoming: string) {
+  const currentTime = Date.parse(current || "");
+  const incomingTime = Date.parse(incoming);
+  return !Number.isFinite(currentTime) || (Number.isFinite(incomingTime) && incomingTime >= currentTime) ? incoming : current;
 }
 function routeFromLocation(): CoreRoute { const hash = window.location.hash.replace(/^#\/?/, ""); const path = window.location.pathname.split("/").filter(Boolean).pop(); return normalizeRoute(hash || path); }
 export function AppShell() { return <ThemeProvider><I18nProvider><AppShellInner /></I18nProvider></ThemeProvider>; }
