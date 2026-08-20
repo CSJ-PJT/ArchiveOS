@@ -160,7 +160,12 @@ function AppShellInner() {
             const isNew = !current.liveFlowEvents.some((event) => event.event_id === payload.event_id);
             return { ...current, lastEventLatencyMs: latency, liveFlowEvents: mergeLiveFlowEvents(current.liveFlowEvents, [payload]), liveFlow: current.liveFlow ? { ...current.liveFlow, latest_event_at: newestEventTime(current.liveFlow.latest_event_at, payload.occurred_at), recent_events: (current.liveFlow.recent_events ?? 0) + (isNew ? 1 : 0), active_flows: (current.liveFlow.active_flows ?? 0) + (isNew ? 1 : 0) } : current.liveFlow };
           });
-        } else if ("active_flows" in payload) setData((current) => ({ ...current, liveFlow: payload }));
+        } else if ("active_flows" in payload) {
+          // SSE snapshots are intentionally compact. Preserve the richer
+          // runtime/backlog contract loaded by polling so service processing
+          // state cannot disappear between refreshes.
+          setData((current) => ({ ...current, liveFlow: mergeLiveFlowSummary(current.liveFlow, payload) }));
+        }
       } catch { /* malformed stream data is ignored; API polling remains a degraded fallback. */ }
     };
     const pollFallback = async () => {
@@ -276,6 +281,24 @@ function mergeLiveFlowEvents(current: LiveFlowEvent[], incoming: LiveFlowEvent[]
   return [...events.values()]
     .sort((left, right) => liveFlowEventTime(right) - liveFlowEventTime(left) || left.event_id.localeCompare(right.event_id))
     .slice(0, MAX_LIVE_FLOW_EVENTS);
+}
+function mergeLiveFlowSummary(current: LiveFlowSummary | null, incoming: LiveFlowSummary): LiveFlowSummary {
+  if (!current) return incoming;
+  return {
+    ...current,
+    ...incoming,
+    runtime: incoming.runtime
+      ? {
+          ...current.runtime,
+          ...incoming.runtime,
+          services: incoming.runtime.services ?? current.runtime?.services,
+        }
+      : current.runtime,
+    approvalBacklog: incoming.approvalBacklog ?? current.approvalBacklog,
+    approvalBacklogSource: incoming.approvalBacklogSource ?? current.approvalBacklogSource,
+    processingBacklog: incoming.processingBacklog ?? current.processingBacklog,
+    processingBacklogSource: incoming.processingBacklogSource ?? current.processingBacklogSource,
+  };
 }
 function liveFlowEventTime(event: LiveFlowEvent) {
   const received = Date.parse(event.received_at || "");
