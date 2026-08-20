@@ -147,6 +147,7 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Survival Finance", method: "GET", path: "/api/game/survival/finance", service: "runtime", description: "Persisted system cash, exports, and imports for survival mode." },
   { name: "Survival System Finance", method: "GET", path: "/api/game/survival/finance/:systemId", service: "runtime", description: "Persisted cash, exports, and imports for one managed system." },
   { name: "Nexus Outbox", method: "GET", path: "/api/integrations/nexus/outbox", service: "runtime", description: "Archive-Nexus outbox summary proxy." },
+  { name: "Nexus Events", method: "GET", path: "/api/integrations/nexus/events", service: "runtime", description: "Archive-Nexus recent outbox event proxy." },
   { name: "Nexus Generate", method: "POST", path: "/api/integrations/nexus/outbox/generate", service: "runtime", description: "Safe-mode guarded Nexus event generation." },
   { name: "Nexus Publish", method: "POST", path: "/api/integrations/nexus/outbox/publish", service: "runtime", description: "Safe-mode guarded Nexus outbox publish." },
   { name: "Market Summary", method: "GET", path: "/api/integrations/market/summary", service: "runtime", description: "Archive-Market operations summary proxy." },
@@ -175,9 +176,11 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Workforce Productivity Trend", method: "GET", path: "/api/workforce/productivity-trend", service: "runtime", description: "Current productivity trend points by service." },
   { name: "Logistics Summary", method: "GET", path: "/api/integrations/logitics/summary", service: "runtime", description: "Archive-Logistics operations summary proxy." },
   { name: "Logistics Outbox", method: "GET", path: "/api/integrations/logitics/outbox", service: "runtime", description: "Archive-Logistics outbox summary proxy." },
+  { name: "Logistics Routes", method: "GET", path: "/api/integrations/logitics/routes", service: "runtime", description: "Archive-Logistics route summary proxy." },
   { name: "Logistics Publish", method: "POST", path: "/api/integrations/logitics/outbox/publish", service: "runtime", description: "Safe-mode guarded Logistics outbox publish." },
   { name: "Ledger Summary", method: "GET", path: "/api/integrations/ledger/summary", service: "runtime", description: "Archive-Ledger operations summary proxy." },
   { name: "Ledger Approval Required", method: "GET", path: "/api/integrations/ledger/approval-required", service: "runtime", description: "Archive-Ledger APPROVAL_REQUIRED transaction proxy." },
+  { name: "Ledger Reconciliation", method: "GET", path: "/api/integrations/ledger/reconciliation", service: "runtime", description: "Archive-Ledger reconciliation summary proxy." },
   { name: "Approval Callback Outbox", method: "GET", path: "/api/approvals/callbacks", service: "runtime", description: "Approval callback outbox queue." },
   { name: "Retry Approval Callback", method: "POST", path: "/api/approvals/callbacks/:callbackId/retry", service: "runtime", description: "Retry one callback outbox item." },
   { name: "Retry Failed Callbacks", method: "POST", path: "/api/approvals/callbacks/retry-failed", service: "runtime", description: "Retry failed callback outbox items." },
@@ -887,6 +890,10 @@ app.get("/api/game/survival/finance/:systemId", async (request, response) => {
 
 app.get("/api/integrations/nexus/outbox", async (request, response) => {
   await relayArchiveOsAi(response, "/api/integrations/nexus/outbox", undefined, undefined, request);
+});
+
+app.get("/api/integrations/nexus/events", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/integrations/nexus/events", undefined, undefined, request);
 });
 
 app.post("/api/integrations/nexus/outbox/generate", async (request, response) => {
