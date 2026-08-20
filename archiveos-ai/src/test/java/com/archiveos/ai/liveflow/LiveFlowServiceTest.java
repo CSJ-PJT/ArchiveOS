@@ -135,6 +135,66 @@ class LiveFlowServiceTest {
         verify(repository, never()).latestBusinessEvents(anyInt());
     }
 
+    @Test void runtimeUsesCurrentTickWhenPersistedSourceEventsHaveNotArrivedYet() {
+        LiveFlowRepository repository = repositoryBase(Map.of("logistics", Instant.now().minusSeconds(5)));
+        when(repository.businessEventCountByNode("archive-logistics", 30)).thenReturn(0L);
+        LiveFlowService service = service(repository, healthyServices(Map.of("logitics", Map.of(
+                "runtime", Map.of(
+                        "runtimeActive", true,
+                        "autoRunEnabled", true,
+                        "schedulerStatus", "RUNNING",
+                        "pipelineStatus", "LIVE_WITH_BACKLOG",
+                        "eventsProducedLastTick", 10,
+                        "eventsConsumedLastTick", 8)))));
+
+        Map<String, Object> result = service.refresh();
+        Map<String, Object> logistics = runtimeService(result, "Archive-Logistics");
+
+        assertThat(logistics).containsEntry("recentThroughput", 10L)
+                .containsEntry("throughputSource", "runtime_tick");
+    }
+
+    @Test void runtimeReadsMarketTickFromNestedOperationsContract() {
+        LiveFlowRepository repository = repositoryBase(Map.of("market", Instant.now().minusSeconds(5)));
+        when(repository.businessEventCountByNode("archive-market", 30)).thenReturn(0L);
+        LiveFlowService service = service(repository, healthyServices(Map.of("market", Map.of(
+                "operations", Map.of("runtime", Map.of(
+                        "runtimeActive", true,
+                        "autoRunEnabled", true,
+                        "schedulerStatus", "RUNNING",
+                        "pipelineStatus", "LIVE",
+                        "eventsProducedLastTick", 1,
+                        "eventsConsumedLastTick", 0))))));
+
+        Map<String, Object> market = runtimeService(service.refresh(), "Archive-Market");
+
+        assertThat(market).containsEntry("runtimeActive", true)
+                .containsEntry("autoRunEnabled", true)
+                .containsEntry("recentThroughput", 1L)
+                .containsEntry("throughputSource", "runtime_tick");
+    }
+
+    @Test void runtimeKeepsExplicitNoWorkStateInsteadOfInventingProcessingVolume() {
+        LiveFlowRepository repository = repositoryBase(Map.of("nexus", Instant.now().minusSeconds(600)));
+        when(repository.businessEventCountByNode("archive-nexus", 30)).thenReturn(0L);
+        LiveFlowService service = service(repository, healthyServices(Map.of("nexus", Map.of(
+                "runtime", Map.of(
+                        "runtimeActive", false,
+                        "autoRunEnabled", false,
+                        "schedulerStatus", "DISABLED",
+                        "pipelineStatus", "DISABLED",
+                        "eventsProducedLastTick", 0,
+                        "eventsConsumedLastTick", 0)))));
+
+        Map<String, Object> result = service.refresh();
+        Map<String, Object> nexus = runtimeService(result, "Archive-Nexus");
+
+        assertThat(nexus).containsEntry("recentThroughput", 0L)
+                .containsEntry("throughputSource", "no_work_in_window")
+                .containsEntry("schedulerStatus", "DISABLED")
+                .containsEntry("pipelineStatus", "DISABLED");
+    }
+
     @Test void runtimeIgnoresRecentHealthOnlyEventsForProcessingState() {
         LiveFlowRepository repository = repositoryBase(Map.of("nexus", Instant.now().minusSeconds(400)));
         when(repository.summary()).thenReturn(Map.of(
@@ -227,11 +287,15 @@ class LiveFlowServiceTest {
 
     @SuppressWarnings("unchecked")
     private String runtimeStatus(Map<String, Object> result, String serviceName) {
+        return String.valueOf(runtimeService(result, serviceName).get("runtimeStatus"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> runtimeService(Map<String, Object> result, String serviceName) {
         Map<String, Object> runtime = (Map<String, Object>) result.get("runtime");
         List<Map<String, Object>> services = (List<Map<String, Object>>) runtime.get("services");
         return services.stream()
                 .filter(service -> serviceName.equals(service.get("serviceName")))
-                .map(service -> String.valueOf(service.get("runtimeStatus")))
                 .findFirst()
                 .orElseThrow();
     }

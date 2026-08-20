@@ -59,10 +59,20 @@ export function ActiveDecisionChainPanel({
                 <span title={formatExactDate(chain.lastUpdated)}>갱신: {formatRelativeTime(chain.lastUpdated)}</span>
               </div>
               <div className="chain-card-statuses">
-                <KnowledgeMetric label="아키텍처" value={knowledgeStateLabel(chain.architectStatus)} tone={chain.risk === "High" ? "failed" : "reviewing"} />
-                <KnowledgeMetric label="구현" value={knowledgeStateLabel(chain.builderStatus)} tone="working" />
-                <KnowledgeMetric label="검토" value={knowledgeStateLabel(chain.reviewerStatus)} tone="reviewing" />
-                <KnowledgeMetric label="PM" value={knowledgeStateLabel(chain.pmDecisionStatus)} tone={chain.pmDecisionStatus === "pending" ? "failed" : "succeeded"} />
+                {chain.kind === "memory" ? (
+                  <>
+                    <KnowledgeMetric label="실데이터 노드" value={chain.nodeIds.size} tone="working" />
+                    <KnowledgeMetric label="실데이터 연결" value={chain.edgeIds.size} tone="reviewing" />
+                    <KnowledgeMetric label="메모리 상태" value="연결됨" tone="succeeded" />
+                  </>
+                ) : (
+                  <>
+                    <KnowledgeMetric label="아키텍처" value={knowledgeStateLabel(chain.architectStatus)} tone={chain.risk === "High" ? "failed" : "reviewing"} />
+                    <KnowledgeMetric label="구현" value={knowledgeStateLabel(chain.builderStatus)} tone="working" />
+                    <KnowledgeMetric label="검토" value={knowledgeStateLabel(chain.reviewerStatus)} tone="reviewing" />
+                    <KnowledgeMetric label="PM" value={knowledgeStateLabel(chain.pmDecisionStatus)} tone={chain.pmDecisionStatus === "pending" ? "failed" : "succeeded"} />
+                  </>
+                )}
               </div>
               <div className="mini-chain">
                 {chain.steps.map((step, index) => (
@@ -151,5 +161,5 @@ function localizeChainWarning(value: string) {
 }
 
 function stepLabel(value: string) {
-  return ({ "Architect Review": "아키텍처 검토", "Builder Result": "구현 결과", "Reviewer Verdict": "검토 결과", "PM Decision": "PM 결정", "Knowledge Record": "지식 기록" } as Record<string, string>)[value] || value;
+  return ({ "Architect Review": "아키텍처 검토", "Builder Result": "구현 결과", "Reviewer Verdict": "검토 결과", "PM Decision": "PM 결정", "Knowledge Record": "지식 기록" } as Record<string, string>)[value] || knowledgeNodeTypeLabel(value);
 }

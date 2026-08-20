@@ -12,6 +12,12 @@ const pool = connectionString ? new Pool({ connectionString, max: 4 }) : null;
 
 export const isLocalDashboardConfigured = Boolean(pool);
 
+export async function queryLocalDashboard<T extends object>(text: string, values: unknown[] = []): Promise<T[]> {
+  if (!pool) throw new Error("Local ArchiveOS dashboard database is not configured.");
+  const result = await pool.query(text, values);
+  return result.rows as T[];
+}
+
 export async function getLocalDashboardData(): Promise<DashboardData> {
   if (!pool) {
     throw new Error("Local ArchiveOS dashboard database is not configured.");

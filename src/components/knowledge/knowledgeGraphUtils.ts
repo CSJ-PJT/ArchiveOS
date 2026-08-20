@@ -26,6 +26,7 @@ export type ActiveDecisionStep = {
 };
 
 export type ActiveDecisionChain = {
+  kind: "decision" | "memory";
   id: string;
   title: string;
   status: string;
@@ -229,7 +230,7 @@ export function getOperationalChains(insights: KnowledgeGraphInsights | null, gr
   const built = chains
     .map((chain, index) => buildOperationalChain(chain, graph, index))
     .filter((chain): chain is ActiveDecisionChain => Boolean(chain));
-  return built;
+  return built.length ? built : buildConnectedMemoryChains(graph);
 }
 
 export function getActiveDecisionChain(insights: KnowledgeGraphInsights | null, graph: KnowledgeGraph): ActiveDecisionChain | null {
@@ -271,6 +272,7 @@ function buildOperationalChain(
   );
 
   return {
+    kind: "decision",
     id: decisionNode?.id || chain?.decisionNodeId || `operational-chain-${index}`,
     title: decisionNode?.label || chain?.decisionLabel || "Active operational memory chain",
     status: decisionNode ? "PM Decision Recorded" : reviewerNode ? "PM Decision Required" : builderNode ? "Review Pending" : "Building Context",
@@ -287,6 +289,95 @@ function buildOperationalChain(
     nodeIds,
     edgeIds,
   };
+}
+
+function buildConnectedMemoryChains(graph: KnowledgeGraph): ActiveDecisionChain[] {
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const adjacency = new Map<string, Array<{ node: KnowledgeGraphNode; edge: KnowledgeGraphEdge }>>();
+
+  for (const edge of graph.edges) {
+    const from = nodeById.get(edge.from);
+    const to = nodeById.get(edge.to);
+    if (!from || !to) continue;
+    adjacency.set(from.id, [...(adjacency.get(from.id) || []), { node: to, edge }]);
+    adjacency.set(to.id, [...(adjacency.get(to.id) || []), { node: from, edge }]);
+  }
+
+  const seeds = graph.nodes
+    .filter((node) => (adjacency.get(node.id)?.length || 0) > 0)
+    .sort((left, right) => {
+      const degreeDelta = (adjacency.get(right.id)?.length || 0) - (adjacency.get(left.id)?.length || 0);
+      if (degreeDelta !== 0) return degreeDelta;
+      const importanceDelta = right.importanceScore - left.importanceScore;
+      if (importanceDelta !== 0) return importanceDelta;
+      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+    });
+  const covered = new Set<string>();
+  const chains: ActiveDecisionChain[] = [];
+
+  for (const seed of seeds) {
+    if (covered.has(seed.id) || chains.length >= 5) continue;
+    const chainNodes: KnowledgeGraphNode[] = [];
+    const chainEdges: KnowledgeGraphEdge[] = [];
+    const queued = [seed];
+    const visited = new Set<string>();
+
+    while (queued.length && chainNodes.length < 5) {
+      const current = queued.shift();
+      if (!current || visited.has(current.id)) continue;
+      visited.add(current.id);
+      chainNodes.push(current);
+      const linked = (adjacency.get(current.id) || []).slice().sort((left, right) => {
+        const importanceDelta = right.node.importanceScore - left.node.importanceScore;
+        return importanceDelta || new Date(right.node.createdAt).getTime() - new Date(left.node.createdAt).getTime();
+      });
+      for (const item of linked) {
+        if (visited.has(item.node.id)) continue;
+        if (!chainEdges.some((edge) => edge.id === item.edge.id)) chainEdges.push(item.edge);
+        queued.push(item.node);
+      }
+    }
+
+    if (chainNodes.length < 2) continue;
+    chainNodes.forEach((node) => covered.add(node.id));
+    const nodeIds = new Set(chainNodes.map((node) => node.id));
+    const edgeIds = new Set(
+      graph.edges.filter((edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to)).map((edge) => edge.id),
+    );
+    const priorityNode = chainNodes.slice().sort((left, right) => right.importanceScore - left.importanceScore)[0];
+    const risk = chainNodes.some((node) => node.importanceLevel === "critical") || chainEdges.some((edge) => edge.type === "blocks")
+      ? "High"
+      : chainNodes.some((node) => node.importanceLevel === "high")
+        ? "Medium"
+        : "Low";
+    const steps = chainNodes.map<ActiveDecisionStep>((node, index) => ({
+      key: `memory-${index}-${node.id}`,
+      label: node.type,
+      node,
+      fallback: "",
+    }));
+
+    chains.push({
+      kind: "memory",
+      id: `memory-chain-${seed.id}`,
+      title: seed.label,
+      status: "linked",
+      priority: priorityNode.importanceLevel,
+      risk,
+      warning: "No blocking warning detected.",
+      lastUpdated: getLatestChainTimestamp(steps),
+      architectStatus: "not applicable",
+      builderStatus: "not applicable",
+      reviewerStatus: "not applicable",
+      pmDecisionStatus: "not applicable",
+      knowledgeStatus: "linked",
+      steps,
+      nodeIds,
+      edgeIds,
+    });
+  }
+
+  return chains;
 }
 
 function getNodeStatusLabel(node: KnowledgeGraphNode) {

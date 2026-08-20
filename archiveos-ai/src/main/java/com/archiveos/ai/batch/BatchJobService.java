@@ -54,6 +54,10 @@ public class BatchJobService {
     }
 
     public Map<String, Object> run(String jobName) {
+        return run(jobName, "archiveos-api");
+    }
+
+    public Map<String, Object> run(String jobName, String triggeredBy) {
         if (MANUAL_JOB_DENYLIST.contains(jobName)) {
             throw new IllegalArgumentException(jobName + " requires dedicated task parameters and cannot be launched from the generic batch endpoint.");
         }
@@ -63,7 +67,7 @@ public class BatchJobService {
         }
         JobParameters parameters = new JobParametersBuilder()
                 .addLong("requestedAt", System.currentTimeMillis())
-                .addString("triggeredBy", "archiveos-api")
+                .addString("triggeredBy", triggeredBy == null || triggeredBy.isBlank() ? "archiveos" : triggeredBy)
                 .toJobParameters();
         try {
             JobExecution execution = jobLauncher.run(job, parameters);

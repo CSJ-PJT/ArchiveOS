@@ -1,14 +1,17 @@
 ﻿import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import type { AppData } from "../app/AppShell";
 import { MetricCard } from "../components/shared/MetricCard";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
+import { Pagination } from "../components/shared/Pagination";
 import { getLiveFlowCorrelation, getLiveFlowEntity, refreshLiveFlow, type LiveFlowEvent } from "../lib/backendApi";
 import { formatTimeAgo, stringifyMeta } from "./pageUtils";
 
 type FlowNodeId = "market" | "nexus" | "logistics" | "ledger" | "archiveos" | "settlement";
 type FlowEdgeKind = "business" | "async" | "approval" | "settlement" | "monitoring";
+type RuntimeServiceState = NonNullable<NonNullable<NonNullable<AppData["liveFlow"]>["runtime"]>["services"]>[number];
 const flowEdgeColors: Record<FlowEdgeKind, string> = { business: "#22c55e", async: "#60a5fa", approval: "#a855f7", settlement: "#d97706", monitoring: "#0891b2" };
 
 const nodes: Array<{
@@ -48,6 +51,7 @@ export function LiveFlowPage({ data, onRefresh }: { data: AppData; onRefresh: ()
   const [domainFilter, setDomainFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [correlationFilter, setCorrelationFilter] = useState("");
+  const [eventPage, setEventPage] = useState(0);
   const [chainEvents, setChainEvents] = useState<LiveFlowEvent[]>([]);
   const [chainLabel, setChainLabel] = useState("추적할 이벤트를 선택하세요.");
 
@@ -71,6 +75,10 @@ export function LiveFlowPage({ data, onRefresh }: { data: AppData; onRefresh: ()
       .filter((event) => !text || (event.correlation_id || "").toLowerCase().includes(text))
       .slice(0, 120);
   }, [correlationFilter, domainFilter, severityFilter, sourceEvents]);
+  const eventPageSize = 8;
+  const safeEventPage = Math.min(eventPage, Math.max(0, Math.ceil(filteredEvents.length / eventPageSize) - 1));
+  const pagedEvents = filteredEvents.slice(safeEventPage * eventPageSize, (safeEventPage + 1) * eventPageSize);
+  useEffect(() => setEventPage(0), [correlationFilter, domainFilter, severityFilter]);
 
   async function refreshNow() {
     setMessage(null);
@@ -200,7 +208,7 @@ export function LiveFlowPage({ data, onRefresh }: { data: AppData; onRefresh: ()
             <button className="button button-secondary" type="button" onClick={() => { setDomainFilter("all"); setSeverityFilter("all"); setCorrelationFilter(""); }}>필터 초기화</button>
           </div>
           <div className="event-list compact live-event-list">
-            {filteredEvents.slice(0, 24).map((event) => (
+            {pagedEvents.map((event) => (
               <button className="event-row clickable" type="button" key={event.event_id} onClick={() => selectEvent(event)}>
                 <span>{formatTimeAgo(event.occurred_at)}</span>
                 <StatusBadge status={event.status}>{statusLabel(event.status)}</StatusBadge>
@@ -210,6 +218,7 @@ export function LiveFlowPage({ data, onRefresh }: { data: AppData; onRefresh: ()
             ))}
             {!filteredEvents.length ? <div className="empty-state">최근 실시간 관제 이벤트가 없습니다. 외부 서비스의 outbox, scheduler, publish 상태를 확인하세요.</div> : null}
           </div>
+          {filteredEvents.length ? <Pagination page={safeEventPage} pageSize={eventPageSize} totalItems={filteredEvents.length} onPageChange={setEventPage} label="라이브 토폴로지 이벤트 페이지" /> : null}
         </SectionCard>
 
         <SectionCard title="연관 흐름" eyebrow={chainLabel} className="span-5 live-chain-section">
@@ -267,7 +276,7 @@ function MeshFlowBoard({ events, runtimeServices, selected, onSelect }: {
               <p>{node.description}</p>
               <div className="mesh-node-footer">
                 <StatusBadge status={stat.status}>{statusLabel(stat.status)}</StatusBadge>
-                <span>현재 처리 {stat.count.toLocaleString()}건</span>
+                <span>{stat.activityLabel}</span>
                 <span>대기 {stat.backlog}건</span>
                 {stat.runtimeLabel ? <span>{stat.runtimeLabel}</span> : null}
               </div>
@@ -386,7 +395,7 @@ function DetailSection({ title, children }: { title: string; children: ReactNode
 }
 
 function buildNodeStats(events: LiveFlowEvent[], runtimeServices: NonNullable<NonNullable<AppData["liveFlow"]>["runtime"]>["services"] = []) {
-  const stats = Object.fromEntries(nodes.map((node) => [node.id, { count: 0, backlog: 0, status: "idle", runtimeLabel: "" }])) as Record<FlowNodeId, { count: number; backlog: number; status: string; runtimeLabel: string }>;
+  const stats = Object.fromEntries(nodes.map((node) => [node.id, { count: 0, backlog: 0, status: "idle", runtimeLabel: "", activityLabel: "신규 작업 대기" }])) as Record<FlowNodeId, { count: number; backlog: number; status: string; runtimeLabel: string; activityLabel: string }>;
   for (const event of events) {
     for (const node of new Set([normalizeNode(event.source_system_id || event.domain), normalizeNode(event.from_node || ""), normalizeNode(event.to_node || "")])) {
       stats[node].count += 1;
@@ -402,9 +411,24 @@ function buildNodeStats(events: LiveFlowEvent[], runtimeServices: NonNullable<No
     stats[node].status = mapped.priority >= statusPriority(stats[node].status) ? mapped.status : stats[node].status;
     stats[node].runtimeLabel = runtimeStatusLabel(service.runtimeStatus);
     if (typeof service.recentThroughput === "number") stats[node].count = service.recentThroughput;
+    stats[node].activityLabel = runtimeActivityLabel(node, stats[node].count, service);
     if (typeof service.backlogCount === "number" && service.backlogCount > stats[node].backlog) stats[node].backlog = service.backlogCount;
   }
+  for (const node of nodes) {
+    if (!runtimeServices.some((service) => runtimeServiceToNode(service.serviceId || service.serviceName) === node.id)) {
+      stats[node.id].activityLabel = node.id === "settlement" ? "정산 배치 대기" : stats[node.id].count > 0 ? `현재 처리 ${stats[node.id].count.toLocaleString()}건` : "신규 작업 대기";
+    }
+  }
   return stats;
+}
+
+function runtimeActivityLabel(node: FlowNodeId, count: number, service: RuntimeServiceState) {
+  if (count > 0) return `현재 처리 ${count.toLocaleString()}건`;
+  const scheduler = String(service.schedulerStatus || "").toUpperCase();
+  const pipeline = String(service.pipelineStatus || "").toUpperCase();
+  if (node === "nexus" && (scheduler === "DISABLED" || pipeline === "DISABLED")) return "시뮬레이터 안전 정지";
+  if (service.runtimeActive || ["PROCESSING", "RUNNING"].includes(String(service.runtimeStatus || "").toUpperCase())) return "실시간 감시 중";
+  return "신규 작업 대기";
 }
 
 function buildTokenGroups(events: LiveFlowEvent[]) {

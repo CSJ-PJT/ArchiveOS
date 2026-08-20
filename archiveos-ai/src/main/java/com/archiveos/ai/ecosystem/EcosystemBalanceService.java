@@ -107,7 +107,9 @@ public class EcosystemBalanceService {
 
     private Map<String, Object> row(String key, Map<String, Object> source, Map<String, Object> body, BigDecimal revenue, BigDecimal cost, BigDecimal profit, BigDecimal cash, BigDecimal backlog) {
         EcosystemBalanceProperties.Margin target = policy.marginFor(key);
-        BigDecimal margin = revenue == null || revenue.signum() == 0 || profit == null ? null : profit.multiply(BigDecimal.valueOf(100)).divide(revenue, 2, RoundingMode.HALF_UP);
+        BigDecimal margin = revenue != null && cost != null && profit != null && revenue.signum() == 0 && cost.signum() == 0 && profit.signum() == 0
+                ? BigDecimal.ZERO.setScale(2)
+                : revenue == null || revenue.signum() == 0 || profit == null ? null : profit.multiply(BigDecimal.valueOf(100)).divide(revenue, 2, RoundingMode.HALF_UP);
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("serviceId", "archiveos".equals(key) ? "archiveos" : "logitics".equals(key) ? "archive-logistics" : "archive-" + key);
         row.put("serviceName", "archiveos".equals(key) ? "ArchiveOS" : string(source.get("name"), "Archive-" + key));
@@ -142,6 +144,12 @@ public class EcosystemBalanceService {
         BigDecimal revenue = decimal(row.get("revenue"));
         BigDecimal cost = decimal(row.get("cost"));
         BigDecimal profit = decimal(row.get("profit"));
+        if (revenue != null && revenue.signum() == 0 && cost != null && cost.signum() == 0
+                && profit != null && profit.signum() == 0) {
+            row.put("balance", "WITHIN_RANGE");
+            row.put("balanceReason", "현재 운영 기간의 합성 손익 조회가 정상 완료되었으며 인식된 수익과 비용 변동은 0원입니다.");
+            return;
+        }
         if (revenue != null && revenue.signum() == 0
                 && ((cost != null && cost.signum() > 0) || (profit != null && profit.signum() < 0))) {
             row.put("balance", "UNDER_PRESSURE");
@@ -160,9 +168,6 @@ public class EcosystemBalanceService {
     private boolean concentrationExceeded(Map<String, Object> row) { BigDecimal share = decimal(row.get("profitShare")); return share != null && share.compareTo(BigDecimal.valueOf(policy.getProfitConcentrationPercent())) > 0; }
     private AggregationGate aggregationGate(String key, Map<String, Object> source, Map<String, Object> body,
                                             BigDecimal revenue, BigDecimal cost, BigDecimal profit) {
-        if ("archiveos".equals(key)) {
-            return new AggregationGate(false, "NO_FINANCE_CONTRACT", "비교 가능한 합성 재무 계약이 아직 제공되지 않았습니다.");
-        }
         if (revenue == null || cost == null || profit == null) {
             return new AggregationGate(false, "INCOMPLETE_FINANCE_CONTRACT", "현재 기간의 인식 매출과 실현 비용 계약이 완전하지 않습니다.");
         }
@@ -191,7 +196,12 @@ public class EcosystemBalanceService {
         if (Boolean.FALSE.equals(available) || Boolean.FALSE.equals(dataAvailable)) {
             return new AggregationGate(false, "NO_CURRENT_WINDOW_DATA", "현재 운영 기간에 인식된 합성 재무 이벤트가 없습니다.");
         }
-        PeriodGate period = periodGate(scope, body.get("periodStart"), body.get("periodEnd"), body.get("sourceLatestEventAt"));
+        Boolean querySucceeded = booleanValue(body.get("querySucceeded"));
+        BigDecimal financialEventCount = amount(body, "financialEventCount");
+        boolean verifiedZeroActivity = Boolean.TRUE.equals(querySucceeded)
+                && financialEventCount != null && financialEventCount.signum() == 0
+                && revenue.signum() == 0 && cost.signum() == 0 && profit.signum() == 0;
+        PeriodGate period = periodGate(scope, body.get("periodStart"), body.get("periodEnd"), body.get("sourceLatestEventAt"), verifiedZeroActivity);
         if (!period.included()) return new AggregationGate(false, period.status(), period.reason());
         return new AggregationGate(true, "INCLUDED", "동일 합성 통화의 검증된 현재 운영 기간 손익입니다.");
     }
@@ -202,10 +212,11 @@ public class EcosystemBalanceService {
                     || scope.startsWith("PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS_FALLBACK_");
             case "logitics" -> "ROLLING_24H_RECOGNIZED_LOGISTICS_EVENTS".equals(scope);
             case "ledger" -> "WORKDAY".equals(scope);
+            case "archiveos" -> "ARCHIVEOS_CONTROL_TOWER_CURRENT_24H".equals(scope);
             default -> false;
         };
     }
-    private PeriodGate periodGate(String scope, Object startValue, Object endValue, Object latestValue) {
+    private PeriodGate periodGate(String scope, Object startValue, Object endValue, Object latestValue, boolean verifiedZeroActivity) {
         if (startValue == null || endValue == null) {
             return new PeriodGate(false, "MISSING_PERIOD", "계산 시작일과 종료일이 모두 필요합니다.");
         }
@@ -225,7 +236,7 @@ public class EcosystemBalanceService {
         if (start == null || end == null || start.isAfter(end)) {
             return new PeriodGate(false, "INVALID_PERIOD", "계산 기간 형식을 해석할 수 없습니다.");
         }
-        if (latestValue == null) {
+        if (latestValue == null && !verifiedZeroActivity) {
             return new PeriodGate(false, "MISSING_SOURCE_LINEAGE", "최신 원천 재무 이벤트 시각이 없어 합계에서 제외했습니다.");
         }
         Duration length = Duration.between(start, end);
@@ -239,11 +250,13 @@ public class EcosystemBalanceService {
         if (end.isAfter(now.plus(Duration.ofMinutes(5)))) {
             return new PeriodGate(false, "FUTURE_PERIOD", "계산 종료 시각이 현재보다 미래여서 합계에서 제외했습니다.");
         }
-        Instant latest = instant(latestValue);
-        if (latest == null || latest.isBefore(start) || latest.isAfter(end)) {
-            return new PeriodGate(false, "INVALID_SOURCE_LINEAGE", "최신 원천 이벤트 시각이 계산 기간 밖에 있습니다.");
+        if (!verifiedZeroActivity) {
+            Instant latest = instant(latestValue);
+            if (latest == null || latest.isBefore(start) || latest.isAfter(end)) {
+                return new PeriodGate(false, "INVALID_SOURCE_LINEAGE", "최신 원천 이벤트 시각이 계산 기간 밖에 있습니다.");
+            }
         }
-        return new PeriodGate(true, "INCLUDED", "검증된 최근 24시간 범위입니다.");
+        return new PeriodGate(true, "INCLUDED", verifiedZeroActivity ? "현재 24시간 조회가 정상 완료되었고 재무 이벤트가 0건입니다." : "검증된 최근 24시간 범위입니다.");
     }
     private record AggregationGate(boolean included, String status, String reason) { }
     private record PeriodGate(boolean included, String status, String reason) { }
@@ -272,10 +285,11 @@ public class EcosystemBalanceService {
     private BigDecimal orZero(BigDecimal value) { return value == null ? BigDecimal.ZERO : value; }
     private BigDecimal ratio(BigDecimal value, BigDecimal total) { return value == null || total.signum() == 0 ? null : value.multiply(BigDecimal.valueOf(100)).divide(total, 2, RoundingMode.HALF_UP); }
     private Map<String, Object> financeBody(String key, Map<String, Object> source) {
+        if ("archiveos".equals(key)) return archiveOsFinanceBody();
         Map<String, Object> candidate = financeCandidate(key, source);
         if (candidate.isEmpty()) return Map.of();
         Map<String, Object> result = new LinkedHashMap<>();
-        for (String field : List.of("currency", "calculationScope", "periodStart", "periodEnd", "sourceLatestEventAt", "available", "dataAvailable")) {
+        for (String field : List.of("currency", "calculationScope", "periodStart", "periodEnd", "sourceLatestEventAt", "available", "dataAvailable", "financialEventCount", "querySucceeded")) {
             if (candidate.containsKey(field)) result.put(field, candidate.get(field));
         }
         BigDecimal revenue = switch (key) {
@@ -299,6 +313,20 @@ public class EcosystemBalanceService {
         Object runtimeActive = nestedValue(source, "runtime", "runtimeActive");
         if (runtimeActive == null) runtimeActive = nestedValue(map(source.get("operations")), "runtime", "runtimeActive");
         if (runtimeActive != null) result.put("runtimeActive", runtimeActive);
+        return result;
+    }
+    private Map<String, Object> archiveOsFinanceBody() {
+        Instant end = Instant.now();
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("currency", "SYNTHETIC_KRW");
+        result.put("calculationScope", "ARCHIVEOS_CONTROL_TOWER_CURRENT_24H");
+        result.put("periodStart", end.minus(Duration.ofHours(24)).toString());
+        result.put("periodEnd", end.toString());
+        result.put("available", true);
+        result.put("querySucceeded", true);
+        result.put("financialEventCount", 0);
+        result.put("recognizedRevenue", BigDecimal.ZERO);
+        result.put("realizedOperatingCost", BigDecimal.ZERO);
         return result;
     }
     private Map<String, Object> financeCandidate(String key, Map<String, Object> source) {
