@@ -165,7 +165,8 @@ function LanguagePopover({ locale, setLocale }: { locale: Locale; setLocale: (lo
 }
 
 function loadersFor(route: CoreRoute): Array<[keyof AppData, () => Promise<unknown>]> {
-  const auth: [keyof AppData, () => Promise<unknown>] = ["auth", getAuthSession];
+  const authPromise = getAuthSession();
+  const auth: [keyof AppData, () => Promise<unknown>] = ["auth", () => authPromise];
   if (route === "dashboard") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["liveFlowTopology", getLiveFlowTopology], ["liveFlowEvents", () => getLiveFlowRecentEvents(100)], ["balance", getEcosystemBalanceSummary], ["balanceRecommendations", getEcosystemBalanceRecommendations], ["workforce", getWorkforceOverview]];
   if (route === "services") return [auth, ["ecosystem", getEcosystemSummary], ["ecosystemTopology", getEcosystemTopology], ["atlas", getAtlasOverview], ["managedSystems", getManagedSystemsOverview]];
   if (route === "operations") return [auth, ["dashboard", getDashboardData], ["mesh", getMeshOverview], ["workforce", getWorkforceOverview], ["queue", getQueueSummary], ["tasks", getPmTasks]];
@@ -179,11 +180,11 @@ function loadersFor(route: CoreRoute): Array<[keyof AppData, () => Promise<unkno
     ["knowledge", getKnowledgeOverview],
     ["historian", getHistorianStatus],
     ["runtime", getLocalRuntimeStatus],
-    ["mcpRegistry", getMcpRegistry],
+    ["mcpRegistry", async () => (await authPromise).authenticated ? getMcpRegistry() : []],
     ["latestBatch", getLatestBatchStatus],
     ["dailyReport", getLatestDailyReport],
-    ["publicAccess", getPublicAccessStatus],
-    ["security", getSecurityStatus],
+    ["publicAccess", async () => (await authPromise).authenticated ? getPublicAccessStatus() : null],
+    ["security", async () => (await authPromise).authenticated ? getSecurityStatus() : null],
     ["runtimeVersion", getRuntimeVersion],
   ];
 }

@@ -73,6 +73,9 @@ if (!services.includes('"archive-logitics": "합성 물류·운송 운영"')) th
 for (const contract of ["protectedKeys", "권한 보호 항목", "공개 세션에서 보호됨", "roleLabel"]) {
   if (!consoleSettings.includes(contract)) throw new Error(`Settings public-protection display missing: ${contract}`);
 }
+for (const contract of ["const authPromise = getAuthSession()", '["auth", () => authPromise]', "(await authPromise).authenticated ? getMcpRegistry() : []", "(await authPromise).authenticated ? getPublicAccessStatus() : null", "(await authPromise).authenticated ? getSecurityStatus() : null"]) {
+  if (!appShell.includes(contract)) throw new Error(`Settings protected-loader auth gate missing: ${contract}`);
+}
 for (const contract of ["MCP 도구 레지스트리", "운영자·PM·관리자 세션", "읽기 전용 도구 거버넌스"]) {
   if (!mcpRegistry.includes(contract)) throw new Error(`MCP registry localization missing: ${contract}`);
 }
