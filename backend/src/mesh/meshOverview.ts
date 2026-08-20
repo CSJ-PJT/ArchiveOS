@@ -2,7 +2,11 @@ import { getLatestArchitectureReview } from "../architect/index.js";
 import { getLatestDailyReport, getLatestHistorianExport } from "../batches/store.js";
 import { getRecentKnowledgeEdges, isHistorianConfigured } from "../historian/index.js";
 import { getLocalRuntimeStatus } from "../lib/localRuntime.js";
+import type { LocalRuntimeStatus } from "../lib/localRuntime.js";
 import type { MeshAgent, MeshInteraction, MeshLink, MeshOverview } from "./types.js";
+
+const RUNTIME_TIMEOUT_MS = 1_500;
+const OPTIONAL_LOOKUP_TIMEOUT_MS = 900;
 
 type KnowledgeEdgeWithNodes = {
   id: string;
@@ -23,11 +27,11 @@ type KnowledgeEdgeWithNodes = {
 
 export async function getAgentMeshOverview(): Promise<MeshOverview> {
   const [runtime, architect, latestExport, latestDailyReport, knowledgeEdges] = await Promise.all([
-    getLocalRuntimeStatus(),
-    getLatestArchitectureReview().catch(() => null),
-    getLatestHistorianExport().catch(() => null),
-    getLatestDailyReport().catch(() => null),
-    getRecentKnowledgeEdges(12).catch(() => []),
+    resolveWithin(getLocalRuntimeStatus(), unavailableRuntime(), RUNTIME_TIMEOUT_MS),
+    resolveWithin(getLatestArchitectureReview(), null, OPTIONAL_LOOKUP_TIMEOUT_MS),
+    resolveWithin(getLatestHistorianExport(), null, OPTIONAL_LOOKUP_TIMEOUT_MS),
+    resolveWithin(getLatestDailyReport(), null, OPTIONAL_LOOKUP_TIMEOUT_MS),
+    resolveWithin(getRecentKnowledgeEdges(12), [], OPTIONAL_LOOKUP_TIMEOUT_MS),
   ]);
 
   const agents: MeshAgent[] = [
@@ -141,6 +145,34 @@ export async function getAgentMeshOverview(): Promise<MeshOverview> {
     links: [...links, ...graphLinks].slice(0, 16),
     recentInteractions,
     health,
+  };
+}
+
+/** Keep optional historian/Supabase lookups from turning a healthy mesh into an empty timeout fallback. */
+export function resolveWithin<T>(promise: Promise<T>, fallback: T, timeoutMs: number): Promise<T> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value: T) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(fallback), Math.max(1, timeoutMs));
+    promise.then(finish, () => finish(fallback));
+  });
+}
+
+function unavailableRuntime(): LocalRuntimeStatus {
+  return {
+    checked_at: new Date().toISOString(),
+    status: "unknown",
+    queue: { path: null, inbox: 0, processing: 0, outbox: 0, reviews: 0 },
+    active_task: null,
+    processes: { implementer: null, reviewer: null, loop: null, reviewer_bridge: null },
+    latest: { inbox: null, processing: null, outbox: null, review: null },
+    latest_details: { builder: null, reviewer: null },
+    judgement: "Local runtime status was not available within the mesh response budget.",
   };
 }
 
