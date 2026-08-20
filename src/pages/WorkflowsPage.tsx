@@ -29,6 +29,15 @@ function getOwner(task: PmTask) {
   return "큐";
 }
 
+function displayTaskTitle(task: PmTask) {
+  const title = task.title?.trim();
+  const replacementMarkers = title?.match(/\?/g)?.length ?? 0;
+  if (!title || replacementMarkers >= 2) {
+    return `${task.target_project?.trim() || "ArchiveOS"} 운영 작업`;
+  }
+  return title;
+}
+
 export function WorkflowsPage({ data, onRefresh }: { data: AppData; onRefresh: () => void }) {
   const [filter, setFilter] = useState<WorkflowFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -141,7 +150,7 @@ export function WorkflowsPage({ data, onRefresh }: { data: AppData; onRefresh: (
                 onClick={() => setSelectedId(task.id)}
               >
                 <div>
-                  <strong>{task.title}</strong>
+                  <strong>{displayTaskTitle(task)}</strong>
                   <span>{task.target_project}</span>
                 </div>
                 <StatusBadge status={task.status}>{task.status}</StatusBadge>
@@ -195,7 +204,7 @@ function WorkflowDetail({
     <div className="detail-stack">
       <div className="detail-title">
         <div>
-          <h3>{task.title}</h3>
+          <h3>{displayTaskTitle(task)}</h3>
           <p>{task.description}</p>
         </div>
         <StatusBadge status={task.status}>{task.status}</StatusBadge>

@@ -207,6 +207,27 @@ class EcosystemBalanceServiceTest {
                 .containsEntry("balance", "NO_DATA");
     }
 
+    @Test
+    void includesCurrentWorkdayFinanceWhenTheIndependentSchedulerIsPaused() {
+        EcosystemService ecosystem = Mockito.mock(EcosystemService.class);
+        EcosystemBalanceProperties properties = new EcosystemBalanceProperties();
+        Map<String, Object> ledgerSummary = new LinkedHashMap<>();
+        ledgerSummary.put("balance", currentWorkday(Map.of(
+                "recognizedRevenue", 33_000,
+                "realizedOperatingCost", 12_000)));
+        ledgerSummary.put("runtime", Map.of("runtimeActive", false));
+        when(ecosystem.summary()).thenReturn(Map.of("services", Map.of(
+                "ledger", service("Archive-Ledger", ledgerSummary))));
+
+        Map<String, Object> ledger = row(rows(new EcosystemBalanceService(ecosystem, properties).summary()), "archive-ledger");
+
+        assertThat(ledger).containsEntry("includedInTotals", true)
+                .containsEntry("aggregationStatus", "INCLUDED")
+                .containsEntry("revenue", BigDecimal.valueOf(33_000))
+                .containsEntry("cost", BigDecimal.valueOf(12_000))
+                .containsEntry("profit", BigDecimal.valueOf(21_000));
+    }
+
     private Map<String, Object> current24(String scope, String availabilityKey, Map<String, Object> values) {
         return current24At(Instant.now(), scope, availabilityKey, values);
     }

@@ -17,6 +17,7 @@ const knowledgeUi = read("src/components/knowledge/KnowledgeUi.tsx");
 const knowledgePanel = read("src/components/knowledge/KnowledgeGraphPanel.tsx");
 const operations = read("src/pages/ConsoleOperationsPage.tsx");
 const agents = read("src/pages/AgentsPage.tsx");
+const workflows = read("src/pages/WorkflowsPage.tsx");
 const sidebar = read("src/components/shared/Sidebar.tsx");
 const consoleSettings = read("src/pages/ConsoleSettingsPage.tsx");
 const mcpRegistry = read("src/pages/McpRegistryPage.tsx");
@@ -74,6 +75,9 @@ for (const contract of ["roleLabel", "recommendationSeverityLabel", "합성 작�
 }
 for (const contract of ["agentStatusLabel", "agentRoleLabel", "agentTaskLabel", "관리자 세션 전용"]) {
   if (!agents.includes(contract)) throw new Error(`Agent display contract missing: ${contract}`);
+}
+for (const contract of ["displayTaskTitle", "replacementMarkers >= 2", "운영 작업"]) {
+  if (!workflows.includes(contract)) throw new Error(`Workflow replacement-character display guard missing: ${contract}`);
 }
 for (const contract of ["attentionTypeLabel", "incidentLabel"]) {
   if (!operations.includes(contract)) throw new Error(`Operations attention localization missing: ${contract}`);
