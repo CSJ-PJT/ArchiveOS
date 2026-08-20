@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppData } from "../../app/AppShell";
-import { analyzeDecision, askRag, getAiRuntime, searchRag, syncObsidian, type AiRuntime, type DecisionRecommendation, type RagAnswer, type RagReference, type RagRuntimeContext } from "../../lib/backendApi";
+import { analyzeDecision, askRag, getAiRuntime, searchKnowledgeNodes, searchRag, syncObsidian, type AiRuntime, type DecisionRecommendation, type RagAnswer, type RagReference, type RagRuntimeContext } from "../../lib/backendApi";
 import { useI18n } from "../../i18n/I18nProvider";
 import type { TranslationKey } from "../../i18n";
 import { Icon } from "../shared/Icon";
@@ -13,7 +13,8 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
   const { translate } = useI18n();
   const [runtime, setRuntime] = useState<AiRuntime | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
-  const [mode, setMode] = useState<CopilotMode>("ask");
+  const authenticated = data.auth.authenticated;
+  const [mode, setMode] = useState<CopilotMode>(() => authenticated ? "ask" : "search");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -45,9 +46,13 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
 
   useEffect(() => {
     if (!seedQuestion) return;
-    setQuery(seedQuestion); setMode("ask"); setAnswer(null); setResults(null); setRequestError(null); setOpen(true);
+    setQuery(seedQuestion); setMode(authenticated ? "ask" : "search"); setAnswer(null); setResults(null); setRequestError(null); setOpen(true);
     onSeedHandled?.();
-  }, [seedQuestion, onSeedHandled]);
+  }, [authenticated, seedQuestion, onSeedHandled]);
+
+  useEffect(() => {
+    if (!authenticated && mode !== "search") setMode("search");
+  }, [authenticated, mode]);
 
   useEffect(() => {
     if (!open) return;
@@ -78,7 +83,19 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
     const controller = new AbortController(); requestRef.current = controller;
     setQuery(normalized); setOpen(true); setLoading(true); setRequestError(null); setAnswer(null); setResults(null); setDecision(null);
     try {
-      if (mode === "search") setResults(await searchRag(normalized, { signal: controller.signal }));
+      if (mode === "search") {
+        if (authenticated) setResults(await searchRag(normalized, { signal: controller.signal }));
+        else {
+          const nodes = await searchKnowledgeNodes(normalized, 10);
+          setResults(nodes.map((node) => ({
+            title: node.title,
+            path: node.external_ref || node.source || node.id,
+            heading: node.node_type || null,
+            chunkText: node.summary || node.title,
+            score: 0,
+          })));
+        }
+      }
       else setAnswer(await askRag(normalized, context, { signal: controller.signal }));
     } catch (error) {
       if ((error as Error).name !== "AbortError") setRequestError(safeError(error));
@@ -118,7 +135,7 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
       <span className="copilot-search-icon"><Icon name="knowledge" size={16} /></span>
       <input ref={triggerRef} id="dashboard-copilot-query" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} aria-label={translate("copilot.placeholder")} />
       <select value={mode} onChange={(event) => setMode(event.target.value as CopilotMode)} aria-label={translate("copilot.questionMode")}>
-        <option value="ask">{translate("copilot.questionMode")}</option><option value="search">{translate("copilot.searchMode")}</option>
+        {authenticated ? <option value="ask">{translate("copilot.questionMode")}</option> : null}<option value="search">{translate("copilot.searchMode")}</option>
       </select>
       <button type="submit" className="copilot-submit" disabled={!query.trim() || loading}>{translate("copilot.search")}</button>
     </form>
@@ -141,7 +158,7 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
 }
 
 function ReferenceList({ references, title, empty }: { references: RagReference[]; title: string; empty: string }) {
-  return <section className="copilot-references"><strong>{title}</strong>{references.length ? <ol>{references.map((reference, index) => <li key={`${reference.path}-${reference.heading}-${index}`}><b>{reference.title}</b>{reference.heading ? <span>{reference.heading}</span> : null}<p>{reference.chunkText}</p><small>score {reference.score.toFixed(3)} · Obsidian</small></li>)}</ol> : <p>{empty}</p>}</section>;
+  return <section className="copilot-references"><strong>{title}</strong>{references.length ? <ol>{references.map((reference, index) => <li key={`${reference.path}-${reference.heading}-${index}`}><b>{reference.title}</b>{reference.heading ? <span>{reference.heading}</span> : null}<p>{reference.chunkText}</p><small>{reference.score > 0 ? `score ${reference.score.toFixed(3)} · Obsidian` : "ArchiveOS Knowledge"}</small></li>)}</ol> : <p>{empty}</p>}</section>;
 }
 
 function deriveState(runtime: AiRuntime | null, error: string | null): CopilotState {
