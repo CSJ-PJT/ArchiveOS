@@ -57,7 +57,9 @@ function recommendationSeverityLabel(value: string) {
 }
 
 function localizeRecommendation(value: string) {
-  return value.replace(/APPROVAL_REVIEWER/g, "승인 검토").replace(/TRANSACTION_PROCESSOR/g, "거래 처리").replace(/PRODUCTION_OPERATOR/g, "생산 운영").replace(/DELIVERY_DRIVER/g, "배송 운영");
+  const localized = value.replace(/APPROVAL_REVIEWER/g, "승인 검토").replace(/TRANSACTION_PROCESSOR/g, "거래 처리").replace(/PRODUCTION_OPERATOR/g, "생산 운영").replace(/DELIVERY_DRIVER/g, "배송 운영");
+  const concise = localized.replace(/^Archive-[^:]+ 병목 검토:\s*/, "");
+  return concise === localized ? localized : `${concise} 병목 확인`;
 }
 
 function statusLabel(value: string) { return value === "HEALTHY" ? "정상" : value === "DEGRADED" ? "부분 수집" : value === "UNAVAILABLE" ? "연결 안 됨" : value; }
