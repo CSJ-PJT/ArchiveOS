@@ -71,6 +71,10 @@ export async function getKpiOverview(rangeInput: unknown): Promise<KpiOverview> 
     knowledgeEdgesTotal,
     knowledgeNodesRange,
     knowledgeEdgesRange,
+    obsidianDocumentsTotal,
+    obsidianChunksTotal,
+    obsidianDocumentsRange,
+    obsidianChunksRange,
     historianExports,
   ] = await Promise.all([
     getLocalRuntimeStatus().catch(() => null),
@@ -86,6 +90,10 @@ export async function getKpiOverview(rangeInput: unknown): Promise<KpiOverview> 
     countTable("knowledge_edges", {}),
     countTable("knowledge_nodes", { sinceColumn: "created_at", since: start }),
     countTable("knowledge_edges", { sinceColumn: "created_at", since: start }),
+    countTable("obsidian_documents", {}),
+    countTable("obsidian_chunks", {}),
+    countTable("obsidian_documents", { sinceColumn: "created_at", since: start }),
+    countTable("obsidian_chunks", { sinceColumn: "created_at", since: start }),
     countTable("obsidian_documents", { sinceColumn: "updated_at", since: start }),
   ]);
 
@@ -107,8 +115,10 @@ export async function getKpiOverview(rangeInput: unknown): Promise<KpiOverview> 
     architectureRows.filter((review) => review.status === "warning" || review.status === "blocked").length;
   const loopSignals = snapshots.map((snapshot) => isLoopDetected(snapshot.operators)).filter((value): value is boolean => value !== null);
   const runtimeLatestStatus = deriveRuntimeStatus(runtime, warningCount);
-  const totalNodes = knowledgeNodesTotal.count;
-  const totalEdges = knowledgeEdgesTotal.count;
+  const totalNodes = sumCounts(knowledgeNodesTotal, obsidianDocumentsTotal, obsidianChunksTotal);
+  const totalEdges = sumCounts(knowledgeEdgesTotal, obsidianChunksTotal);
+  const nodesCreatedInRange = sumCounts(knowledgeNodesRange, obsidianDocumentsRange, obsidianChunksRange);
+  const edgesCreatedInRange = sumCounts(knowledgeEdgesRange, obsidianChunksRange);
 
   addCountNotes(notes, {
     tasksCompleted,
@@ -120,6 +130,10 @@ export async function getKpiOverview(rangeInput: unknown): Promise<KpiOverview> 
     knowledgeEdgesTotal,
     knowledgeNodesRange,
     knowledgeEdgesRange,
+    obsidianDocumentsTotal,
+    obsidianChunksTotal,
+    obsidianDocumentsRange,
+    obsidianChunksRange,
     historianExports,
   });
 
@@ -159,10 +173,10 @@ export async function getKpiOverview(rangeInput: unknown): Promise<KpiOverview> 
     knowledge: {
       totalNodes,
       totalEdges,
-      nodesCreatedInRange: knowledgeNodesRange.count,
-      edgesCreatedInRange: knowledgeEdgesRange.count,
+      nodesCreatedInRange,
+      edgesCreatedInRange,
       obsidianExports: historianExports.count,
-      graphDensity: totalNodes === null || totalEdges === null ? null : ratio(totalEdges, totalNodes),
+      graphDensity: totalNodes === null || totalEdges === null ? null : ratio(totalEdges, totalNodes) ?? 0,
     },
     trends: {
       dailyReports: countByDate(dailyRows.map((row) => row.created_at)),
@@ -223,11 +237,23 @@ async function fetchRows<T extends object>(
 
 async function getKnowledgeNodeTrend(start: string) {
   try {
-    const data = await queryLocalDashboard<CreatedAtRow>("select created_at from public.knowledge_nodes where created_at >= $1::timestamptz order by created_at asc", [start]);
+    const data = await queryLocalDashboard<CreatedAtRow>(`
+      select created_at from public.knowledge_nodes where created_at >= $1::timestamptz
+      union all
+      select created_at from public.obsidian_documents where created_at >= $1::timestamptz
+      union all
+      select created_at from public.obsidian_chunks where created_at >= $1::timestamptz
+      order by created_at asc
+    `, [start]);
     return countByDate(data.map((row) => row.created_at));
   } catch {
     return [];
   }
+}
+
+function sumCounts(...results: CountResult[]) {
+  if (results.some((result) => result.count === null)) return null;
+  return results.reduce((sum, result) => sum + (result.count ?? 0), 0);
 }
 
 function identifier(value: string) {
