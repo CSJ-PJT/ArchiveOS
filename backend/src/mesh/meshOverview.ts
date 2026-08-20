@@ -1,4 +1,5 @@
 import { getLatestArchitectureReview } from "../architect/index.js";
+import type { ArchitectureReviewRow } from "../architect/types.js";
 import { getLatestDailyReport, getLatestHistorianExport } from "../batches/store.js";
 import { getRecentKnowledgeEdges, isHistorianConfigured } from "../historian/index.js";
 import { getLocalRuntimeStatus } from "../lib/localRuntime.js";
@@ -28,7 +29,7 @@ type KnowledgeEdgeWithNodes = {
 export async function getAgentMeshOverview(): Promise<MeshOverview> {
   const [runtime, architect, latestExport, latestDailyReport, knowledgeEdges] = await Promise.all([
     resolveWithin(getLocalRuntimeStatus(), unavailableRuntime(), RUNTIME_TIMEOUT_MS),
-    resolveWithin(getLatestArchitectureReview(), null, OPTIONAL_LOOKUP_TIMEOUT_MS),
+    resolveWithin(getOperationalArchitectureReview(), null, OPTIONAL_LOOKUP_TIMEOUT_MS),
     resolveWithin(getLatestHistorianExport(), null, OPTIONAL_LOOKUP_TIMEOUT_MS),
     resolveWithin(getLatestDailyReport(), null, OPTIONAL_LOOKUP_TIMEOUT_MS),
     resolveWithin(getRecentKnowledgeEdges(12), [], OPTIONAL_LOOKUP_TIMEOUT_MS),
@@ -161,6 +162,24 @@ export function resolveWithin<T>(promise: Promise<T>, fallback: T, timeoutMs: nu
     const timer = setTimeout(() => finish(fallback), Math.max(1, timeoutMs));
     promise.then(finish, () => finish(fallback));
   });
+}
+
+/** Prefer the persisted local control-plane review; Supabase remains a compatibility fallback. */
+export async function getOperationalArchitectureReview(): Promise<ArchitectureReviewRow | null> {
+  const baseUrl = (process.env.ARCHIVEOS_AI_BASE_URL?.trim() || "http://localhost:4100").replace(/\/$/, "");
+  try {
+    const response = await fetch(`${baseUrl}/api/architect/reviews/latest`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(OPTIONAL_LOOKUP_TIMEOUT_MS),
+    });
+    if (response.ok) {
+      const payload = await response.json() as { data?: ArchitectureReviewRow | null };
+      if (payload.data?.id) return payload.data;
+    }
+  } catch {
+    // The legacy store may still be available when the local AI service is restarting.
+  }
+  return getLatestArchitectureReview();
 }
 
 function unavailableRuntime(): LocalRuntimeStatus {
