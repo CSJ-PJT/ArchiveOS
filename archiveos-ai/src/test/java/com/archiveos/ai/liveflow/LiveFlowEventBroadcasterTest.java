@@ -15,9 +15,16 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.core.SpringVersion;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 class LiveFlowEventBroadcasterTest {
+    @Test void runsOnFrameworkWithAsyncDisconnectDispatchFix() {
+        Runtime.Version current = Runtime.Version.parse(SpringVersion.getVersion());
+
+        assertThat(current).isGreaterThanOrEqualTo(Runtime.Version.parse("6.1.17"));
+    }
+
     @Test void replaysInMemoryHistoryAfterLastEventIdWithoutDuplicates() {
         LiveFlowRepository repository = Mockito.mock(LiveFlowRepository.class);
         LiveFlowEventBroadcaster broadcaster = new LiveFlowEventBroadcaster(repository);
