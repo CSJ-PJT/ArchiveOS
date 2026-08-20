@@ -42,7 +42,7 @@ class WorkforceServiceTest {
         assertThat(summary.get("largestBottleneck")).isEqualTo("approval-reconciliation");
         assertThat(services).hasSize(4);
         assertThat(recommendations).hasSize(4);
-        assertThat(overview.get("dataPolicy")).asString().contains("No real employee");
+        assertThat(overview.get("dataPolicy")).asString().contains("실제 임직원");
     }
 
     @Test
@@ -68,6 +68,27 @@ class WorkforceServiceTest {
 
         assertThat(services).hasSize(4);
         assertThat(services).allMatch(row -> "UNAVAILABLE".equals(row.get("status")));
+    }
+
+    @Test
+    void recoversNestedRuntimeCapacityAndNormalizesFractionalProductivity() {
+        mockMarket();
+        mockNexus();
+        mockLogistics();
+        mockLedger();
+        when(ledger.capacitySummary()).thenReturn(ok(Map.of("effectiveCapacity", 0, "usedCapacity", 0)));
+        when(ledger.productivitySummary()).thenReturn(ok(Map.of("productivityScore", 0.1164)));
+        when(ledger.operationsSummary()).thenReturn(ok(Map.of(
+                "runtimeWorkforce", Map.of("effectiveCapacity", 500, "usedCapacity", 180, "backlog", 1366),
+                "workforce", Map.of("bottleneckRole", "APPROVAL_REVIEWER"))));
+
+        List<Map<String, Object>> services = list(new WorkforceService(market, nexus, logitics, ledger).overview().get("services"));
+        Map<String, Object> ledgerRow = services.stream().filter(row -> "archive-ledger".equals(row.get("serviceId"))).findFirst().orElseThrow();
+
+        assertThat(ledgerRow).containsEntry("effectiveCapacity", new java.math.BigDecimal("500.0"))
+                .containsEntry("usedCapacity", new java.math.BigDecimal("180.0"))
+                .containsEntry("backlog", 1366);
+        assertThat((java.math.BigDecimal) ledgerRow.get("productivityScore")).isEqualByComparingTo("11.64");
     }
 
     private void mockMarket() {

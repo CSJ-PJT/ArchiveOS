@@ -13,6 +13,7 @@ import { getDecisionRecommendations, getIncidents, getPmAttention, type AiOperat
 export function ConsoleOperationsPage({ data, onRefresh }: { data: AppData; onRefresh: () => Promise<void> }) {
   const { locale } = useI18n();
   const [tab, setTab] = useState<"agents" | "workforce" | "workflows" | "automation">("agents");
+  const [automationTab, setAutomationTab] = useState<"batch" | "rpa">("batch");
   const [decisions, setDecisions] = useState<DecisionRecommendation[]>([]);
   const [attention, setAttention] = useState<AiOperationsItem[]>([]);
   const [incidents, setIncidents] = useState<IncidentRecord[]>([]);
@@ -34,6 +35,6 @@ export function ConsoleOperationsPage({ data, onRefresh }: { data: AppData; onRe
     {tab === "agents" ? <AgentsPage data={data} onRefresh={onRefresh} /> : null}
     {tab === "workforce" ? <WorkforcePage data={data} /> : null}
     {tab === "workflows" ? <WorkflowsPage data={data} onRefresh={onRefresh} /> : null}
-    {tab === "automation" ? <div className="console-subgrid"><BatchPage role={data.auth.role} /><RpaPage role={data.auth.role} /></div> : null}
+    {tab === "automation" ? <div className="page-stack automation-console"><ConsoleTabs value={automationTab} onChange={setAutomationTab} items={[["batch", "배치 작업"], ["rpa", "RPA 검토"]]} />{automationTab === "batch" ? <BatchPage role={data.auth.role} /> : <RpaPage role={data.auth.role} />}</div> : null}
   </div>;
 }

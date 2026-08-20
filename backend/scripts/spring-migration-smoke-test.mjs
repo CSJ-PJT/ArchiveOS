@@ -14,7 +14,7 @@ for (const path of [
   const routeIndex = server.lastIndexOf(`\"${path}\"`);
   if (routeIndex < 0) throw new Error(`Missing compatibility route: ${path}`);
   const routeBody = server.slice(routeIndex, routeIndex + 900);
-  if (!routeBody.includes("proxyArchiveOsAi")) throw new Error(`Node route is not a Spring proxy: ${path}`);
+  if (!routeBody.includes("relayArchiveOsAi")) throw new Error(`Node compatibility route is not relayed to Spring: ${path}`);
 }
 
 for (const path of [

@@ -160,6 +160,37 @@ public class ObsidianJdbcRepository {
                 """, Math.min(Math.max(limit, 1), 500));
     }
 
+    public List<ProjectionDocument> projectionDocuments(int limit) {
+        return jdbcTemplate.query("""
+                select id, file_path, title, updated_at
+                from public.obsidian_documents
+                order by updated_at desc, id desc
+                limit ?
+                """, (rs, rowNum) -> new ProjectionDocument(
+                rs.getLong("id"), rs.getString("file_path"), rs.getString("title"), instant(rs, "updated_at")),
+                Math.min(Math.max(limit, 1), 200));
+    }
+
+    public List<ProjectionChunk> projectionChunks(int documentLimit, int chunkLimit) {
+        if (chunkLimit <= 0) return List.of();
+        return jdbcTemplate.query("""
+                with recent_documents as (
+                  select id
+                  from public.obsidian_documents
+                  order by updated_at desc, id desc
+                  limit ?
+                )
+                select c.id, c.document_id, c.chunk_index, c.heading, c.created_at
+                from public.obsidian_chunks c
+                join recent_documents d on d.id = c.document_id
+                order by c.created_at desc, c.id desc
+                limit ?
+                """, (rs, rowNum) -> new ProjectionChunk(
+                rs.getLong("id"), rs.getLong("document_id"), rs.getInt("chunk_index"),
+                rs.getString("heading"), instant(rs, "created_at")),
+                Math.min(Math.max(documentLimit, 1), 200), Math.min(Math.max(chunkLimit, 1), 500));
+    }
+
     public List<RagReference> search(float[] queryEmbedding, int limit) {
         return jdbcTemplate.query(
                 "select * from public.match_obsidian_chunks(?::vector, ?)",
@@ -309,6 +340,11 @@ public class ObsidianJdbcRepository {
                 rs.getDouble("score"));
     }
 
+    private String instant(ResultSet rs, String column) throws SQLException {
+        Timestamp value = rs.getTimestamp(column);
+        return value == null ? null : value.toInstant().toString();
+    }
+
     private String toVectorLiteral(float[] vector) {
         StringBuilder builder = new StringBuilder("[");
         for (int index = 0; index < vector.length; index += 1) {
@@ -321,6 +357,10 @@ public class ObsidianJdbcRepository {
     public record ExistingDocument(long id, String contentHash) {}
 
     public record PendingChunk(long id, String text) {}
+
+    public record ProjectionDocument(long id, String filePath, String title, String updatedAt) {}
+
+    public record ProjectionChunk(long id, long documentId, int chunkIndex, String heading, String createdAt) {}
 
     public record KnowledgeStatistics(
             int documents,

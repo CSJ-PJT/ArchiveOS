@@ -6,12 +6,13 @@ import { DashboardRagCopilot } from "../components/console/DashboardRagCopilot";
 import { Icon, type IconName } from "../components/shared/Icon";
 import { StatusBadge, normalizeStatus, type SemanticStatus } from "../components/shared/StatusBadge";
 import { useI18n } from "../i18n/I18nProvider";
+import { LiveFlowPage } from "./LiveFlowPage";
 
 type EventFilter = "ALL" | "MARKET" | "NEXUS" | "LOGISTICS" | "LEDGER" | "ARCHIVEOS" | "WARNING";
 
-export function ConsoleDashboardPage({ data, onNavigate, onRefresh }: { data: AppData; onNavigate: (route: CoreRoute) => void; onRefresh: () => void }) {
-  void onRefresh;
+export function ConsoleDashboardPage({ data, onNavigate, onRefresh }: { data: AppData; onNavigate: (route: CoreRoute) => void; onRefresh: () => Promise<void> }) {
   const { translate } = useI18n();
+  const [view, setView] = useState<"overview" | "topology">("overview");
   const [eventFilter, setEventFilter] = useState<EventFilter>("ALL");
   const [copilotQuestion, setCopilotQuestion] = useState<string | null>(null);
   const services = Object.values(data.ecosystem?.services ?? {});
@@ -40,7 +41,13 @@ export function ConsoleDashboardPage({ data, onNavigate, onRefresh }: { data: Ap
   const activeTrend = buildTrend(allEvents, () => true);
   const backlogTrend = buildTrend(allEvents, (event) => /waiting|delayed|failed|warning|retry/i.test(`${event.status} ${event.severity} ${event.event_type}`));
 
+  if (view === "topology") return <div className="console-page dashboard-v4 dashboard-rework-phase1">
+    <DashboardViewTabs value={view} onChange={setView} />
+    <LiveFlowPage data={data} onRefresh={onRefresh} />
+  </div>;
+
   return <div className="console-page dashboard-v4 dashboard-rework-phase1">
+    <DashboardViewTabs value={view} onChange={setView} />
     <section className="dashboard-overview-header">
       <div className="dashboard-title-block">
         <span className="eyebrow">CONTROL TOWER</span>
@@ -78,6 +85,13 @@ export function ConsoleDashboardPage({ data, onNavigate, onRefresh }: { data: Ap
         <time className="event-time">{formatTime(event.occurred_at)}</time><span className="event-route" title={`${event.from_node} → ${event.to_node}`}>{displayServiceName(event.from_node)} → {displayServiceName(event.to_node)}</span><strong className="event-type" title={event.event_type}>{event.event_type}</strong><small className="event-entity" title={event.entity_id}>{event.entity_id || "대상 정보 없음"}</small><button type="button" className="correlation-link" title={event.correlation_id ? "AI 코파일럿에서 흐름 분석" : "연결 정보 없음"} onClick={() => setCopilotQuestion(interpolate(translate("copilot.questionCorrelation"), { id: event.correlation_id || "NO_DATA" }))}>{shortId(event.correlation_id) || "연결 정보 없음"}</button><StatusBadge status={normalizeStatus(event.status)}>{statusLabel(event.status)}</StatusBadge>
       </li>)}</ol></> : <p className="dashboard-event-empty">실시간 연결은 정상이며 새 런타임 이벤트를 기다리고 있습니다.</p>}
     </section>
+  </div>;
+}
+
+function DashboardViewTabs({ value, onChange }: { value: "overview" | "topology"; onChange: (value: "overview" | "topology") => void }) {
+  return <div className="console-tabs dashboard-view-tabs" role="tablist" aria-label="대시보드 보기">
+    <button type="button" role="tab" aria-selected={value === "overview"} className={value === "overview" ? "active" : ""} onClick={() => onChange("overview")}>운영 요약</button>
+    <button type="button" role="tab" aria-selected={value === "topology"} className={value === "topology" ? "active" : ""} onClick={() => onChange("topology")}>라이브 토폴로지 상세</button>
   </div>;
 }
 

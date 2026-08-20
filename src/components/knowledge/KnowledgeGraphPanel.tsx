@@ -69,7 +69,7 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
       } catch (err) {
         if (cancelled) return;
         setLoadState("error");
-        setError(err instanceof Error ? err.message : "Unknown Knowledge Graph error");
+        setError(err instanceof Error ? err.message : "지식 그래프 오류");
       }
     }
 
@@ -103,10 +103,10 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
 
   const graphBody = () => {
     if (loadState === "loading") {
-      return <KnowledgeEmptyState title="Loading graph" body="Reading knowledge_nodes and knowledge_edges." />;
+      return <KnowledgeEmptyState title="지식 그래프를 불러오는 중입니다." body="운영 지식 노드와 Obsidian 인덱스 연결을 확인하고 있습니다." />;
     }
     if (loadState === "error") {
-      return <KnowledgeEmptyState title="Knowledge Graph API를 불러오지 못했습니다." body={error || "Settings > Endpoint Health Matrix를 확인하세요."} />;
+      return <KnowledgeEmptyState title="지식 그래프 API를 불러오지 못했습니다." body={error || "설정의 엔드포인트 상태를 확인하세요."} />;
     }
     if (!filteredGraph || filteredGraph.nodes.length === 0) {
       return (
@@ -138,12 +138,12 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
         <section className="memory-constellation">
           <div className="constellation-header">
             <div>
-              <span className="eyebrow">Knowledge Graph</span>
-              <h3>Memory Constellation</h3>
-              <p>Explore how decisions, reviews, incidents, reports, and knowledge records are connected.</p>
+              <span className="eyebrow">KNOWLEDGE GRAPH</span>
+              <h3>운영 메모리 연결망</h3>
+              <p>문서, 청크, 결정, 검토, 장애와 보고서가 어떻게 연결되는지 확인합니다.</p>
             </div>
             <KnowledgeStatusBadge tone={activeChain ? "working" : "idle"}>
-              {activeChain ? "chain focus" : "free explore"}
+              {activeChain ? "체인 집중" : "자유 탐색"}
             </KnowledgeStatusBadge>
           </div>
 
@@ -184,21 +184,21 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
 
   return (
     <KnowledgePanel
-      title="Operational Memory"
-      eyebrow="Chain View + Knowledge Graph"
+      title="운영 메모리"
+      eyebrow="체인 보기 + 지식 그래프"
       className="knowledge-graph-panel"
       right={<KnowledgeStatusBadge tone={loadState === "ready" ? "succeeded" : loadState === "error" ? "failed" : "idle"}>{loadState}</KnowledgeStatusBadge>}
     >
       <div className="graph-health-row">
-        <KnowledgeMetric label="Nodes" value={graph?.stats.nodeCount ?? overview?.totalNodes ?? 0} tone="working" />
-        <KnowledgeMetric label="Edges" value={graph?.stats.edgeCount ?? overview?.totalEdges ?? 0} tone="reviewing" />
-        <KnowledgeMetric label="Operational Chains" value={operationalChains.length} tone="succeeded" />
-        <KnowledgeMetric label="Latest Node" value={latestNode?.type || "None"} tone="idle" />
+        <KnowledgeMetric label="노드" value={graph?.stats.nodeCount ?? overview?.totalNodes ?? 0} tone="working" />
+        <KnowledgeMetric label="연결" value={graph?.stats.edgeCount ?? overview?.totalEdges ?? 0} tone="reviewing" />
+        <KnowledgeMetric label="운영 체인" value={operationalChains.length} tone="succeeded" />
+        <KnowledgeMetric label="최근 노드" value={latestNode?.type || "없음"} tone="idle" />
       </div>
 
       <div className="graph-filter-bar">
         <label>
-          Node type
+          노드 유형
           <select value={nodeType} onChange={(event) => setNodeType(event.target.value)}>
             {nodeTypes.map((type) => (
               <option key={type} value={type}>
@@ -208,7 +208,7 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
           </select>
         </label>
         <label>
-          Edge type
+          연결 유형
           <select value={edgeType} onChange={(event) => setEdgeType(event.target.value)}>
             {edgeTypes.map((type) => (
               <option key={type} value={type}>
@@ -218,7 +218,7 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
           </select>
         </label>
         <label>
-          Limit
+          표시 수
           <select value={limit} onChange={(event) => setLimit(Number(event.target.value))}>
             {[50, 100, 200].map((value) => (
               <option key={value} value={value}>
@@ -228,20 +228,20 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
           </select>
         </label>
         <label className="graph-search">
-          Search
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="title, ref, source..." />
+          검색
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="제목, 경로, 출처…" />
         </label>
       </div>
 
       <div className="graph-mode-row" aria-label="Graph focus filters">
         {[
-          ["all", "All Importance"],
-          ["high", "High Only"],
-          ["critical", "Critical Only"],
-          ["recent", "Recent Only"],
-          ["decision", "Decision Path"],
-          ["architect", "Architect Path"],
-          ["incident", "Incident Path"],
+          ["all", "전체 중요도"],
+          ["high", "높음 이상"],
+          ["critical", "긴급만"],
+          ["recent", "최근만"],
+          ["decision", "결정 경로"],
+          ["architect", "설계 경로"],
+          ["incident", "장애 경로"],
         ].map(([value, label]) => (
           <GraphToggle key={value} active={mode === value} onClick={() => setMode(value as GraphFilterMode)}>
             {label}
@@ -250,8 +250,8 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
       </div>
 
       <p className="graph-readonly-note">
-        Read-only operational memory view. Chain cards explain the active PM flow first; Memory Constellation keeps the relationship graph as the signature visual layer.
-        {latestNode ? <span title={latestNode.createdAt}> Latest: {latestNode.type} / {formatRelativeTime(latestNode.createdAt)}</span> : null}
+        읽기 전용 운영 메모리입니다. 실제 PostgreSQL 지식 노드 또는 Obsidian 문서·청크 투영만 표시합니다.
+        {latestNode ? <span title={latestNode.createdAt}> 최근: {latestNode.type} / {formatRelativeTime(latestNode.createdAt)}</span> : null}
       </p>
 
       {graphBody()}

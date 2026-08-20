@@ -6,6 +6,10 @@ const navigation = read("src/app/navigation.ts");
 const styles = read("src/styles.css");
 const api = read("src/lib/backendApi.ts");
 const liveMesh = read("src/components/console/LiveMeshTopology.tsx");
+const dashboard = read("src/pages/ConsoleDashboardPage.tsx");
+const services = read("src/pages/ConsoleServicesPage.tsx");
+const knowledge = read("src/pages/KnowledgePage.tsx");
+const operations = read("src/pages/ConsoleOperationsPage.tsx");
 const i18n = read("src/i18n/I18nProvider.tsx");
 
 for (const label of ["대시보드", "서비스", "운영", "재무", "기록", "설정"]) {
@@ -24,6 +28,19 @@ for (const contract of ["EventSource", "runtime-event", "fallback", "getLiveFlow
 if (!/route === "records"[^\n]+\["aiRuntime", getAiRuntime\]/.test(appShell)) {
   throw new Error("Records knowledge view must load Spring AI runtime metrics.");
 }
+for (const contract of ["archiveos.refresh.seconds", "자동 새로고침 간격", "getManagedSystemsOverview", "getRecentRuntimeEvents", "getRecentCommands", "getKpiOverview"]) {
+  if (!appShell.includes(contract)) throw new Error(`Restored console contract missing: ${contract}`);
+}
+for (const contract of ["라이브 토폴로지 상세", "LiveFlowPage"]) {
+  if (!dashboard.includes(contract)) throw new Error(`Dashboard topology detail contract missing: ${contract}`);
+}
+for (const contract of ["integrationConnectors", "등록 시스템", "역량 사용률", "시뮬레이터 정지"]) {
+  if (!services.includes(contract)) throw new Error(`Service integration/metric contract missing: ${contract}`);
+}
+for (const contract of ["Obsidian 그래프", "KnowledgeGraphPanel", "최근 RAG·지식 기록", "askRag"]) {
+  if (!knowledge.includes(contract)) throw new Error(`Knowledge restoration contract missing: ${contract}`);
+}
+if (!operations.includes('items={[["batch", "배치 작업"], ["rpa", "RPA 검토"]]}')) throw new Error("Automation must restore separate Batch and RPA tabs.");
 for (const contract of ["Archive-Market", "Archive-Nexus", "Archive-Logistics", "Archive-Ledger", "ArchiveOS", "Settlement", "events.slice(0, 30)"]) {
   if (!liveMesh.includes(contract)) throw new Error(`Mesh topology contract missing: ${contract}`);
 }

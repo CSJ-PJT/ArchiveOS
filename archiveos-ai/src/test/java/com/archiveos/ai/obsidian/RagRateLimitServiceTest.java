@@ -1,8 +1,10 @@
 package com.archiveos.ai.obsidian;
 
+import com.archiveos.ai.audit.AuditLogService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 import java.security.Principal;
 import java.time.Clock;
@@ -35,9 +37,10 @@ class RagRateLimitServiceTest {
         MutableClock clock = new MutableClock("2026-07-16T00:00:00Z");
         RagRateLimitService limiter = new RagRateLimitService(clock, 1, 1);
         ObsidianRagService rag = mock(ObsidianRagService.class);
+        AuditLogService audit = mock(AuditLogService.class);
         when(rag.search("status", 10)).thenReturn(List.of());
         when(rag.answer("question", null)).thenReturn(new RagAnswer("answer", List.of()));
-        ObsidianRagController controller = new ObsidianRagController(rag, limiter);
+        ObsidianRagController controller = new ObsidianRagController(rag, limiter, audit);
         Principal alpha = () -> "alpha";
 
         var search = controller.search("status", 10, alpha, request());
@@ -51,6 +54,15 @@ class RagRateLimitServiceTest {
         assertThat(limitedSearch.getHeaders().getFirst("Retry-After")).isEqualTo("60");
         assertThat(ask.getStatusCode().value()).isEqualTo(200);
         assertThat(limitedAsk.getStatusCode().value()).isEqualTo(429);
+        verify(audit).recordEventWithTimeline(
+                org.mockito.ArgumentMatchers.eq("rag_question_answered"),
+                org.mockito.ArgumentMatchers.eq("knowledge"),
+                org.mockito.ArgumentMatchers.eq("rag-ask"),
+                org.mockito.ArgumentMatchers.startsWith("rag-"),
+                org.mockito.ArgumentMatchers.anyMap(),
+                org.mockito.ArgumentMatchers.eq("success"),
+                org.mockito.ArgumentMatchers.eq("RAG 질문 응답 완료"),
+                org.mockito.ArgumentMatchers.contains("참조 0건"));
     }
 
     private MockHttpServletRequest request() {

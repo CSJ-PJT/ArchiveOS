@@ -7,6 +7,7 @@ import { formatTimeAgo } from "./pageUtils";
 type HistoryFilter = "runtime timeline" | "events" | "commands" | "agent runs" | "decisions" | "errors" | "kpi";
 
 const filters: HistoryFilter[] = ["runtime timeline", "events", "commands", "agent runs", "decisions", "errors", "kpi"];
+const filterLabels: Record<HistoryFilter, string> = { "runtime timeline": "전체 기록", events: "운영 이벤트", commands: "명령 기록", "agent runs": "에이전트 실행", decisions: "PM 결정", errors: "오류", kpi: "KPI" };
 
 export function HistoryPage({ data }: { data: AppData }) {
   const [filter, setFilter] = useState<HistoryFilter>("runtime timeline");
@@ -18,13 +19,13 @@ export function HistoryPage({ data }: { data: AppData }) {
       <div className="subnav">
         {filters.map((item) => (
           <button className={filter === item ? "active" : ""} type="button" key={item} onClick={() => setFilter(item)}>
-            {item}
+            {filterLabels[item]}
           </button>
         ))}
       </div>
 
       {filter === "runtime timeline" ? (
-        <SectionCard title="Runtime Timeline" eyebrow="Task · Workflow · Approval · Knowledge · Slack · Agent · Batch">
+        <SectionCard title="감사·Runtime 타임라인" eyebrow="작업 · 흐름 · 승인 · RAG · 지식 · 에이전트 · 배치">
           <TimelineRows rows={data.timeline.map((event) => ({
             id: event.id,
             time: event.occurred_at,
@@ -37,7 +38,7 @@ export function HistoryPage({ data }: { data: AppData }) {
       ) : null}
 
       {filter === "events" ? (
-        <SectionCard title="Timeline" eyebrow="Operational history">
+        <SectionCard title="운영 이벤트" eyebrow="실제 Runtime 이력">
           <TimelineRows rows={data.events.map((event) => ({
             id: event.id,
             time: event.created_at,
@@ -50,20 +51,20 @@ export function HistoryPage({ data }: { data: AppData }) {
       ) : null}
 
       {filter === "commands" ? (
-        <SectionCard title="Commands" eyebrow="Recorded command suggestions/results">
+        <SectionCard title="명령 기록" eyebrow="기록된 명령 제안과 결과">
           <TimelineRows rows={data.commands.map((command) => ({
             id: command.id,
             time: command.created_at,
             type: command.command_type || "command",
             status: command.status,
             target: command.command,
-            summary: command.result || "No result recorded",
+            summary: command.result || "기록된 결과 없음",
           }))} />
         </SectionCard>
       ) : null}
 
       {filter === "agent runs" ? (
-        <SectionCard title="Agent Runs" eyebrow="Runtime evidence">
+        <SectionCard title="에이전트 실행" eyebrow="Runtime 근거">
           <TimelineRows rows={(data.events || []).filter((event) => ["builder", "reviewer", "task"].includes(event.type)).map((event) => ({
             id: event.id,
             time: event.created_at,
@@ -76,7 +77,7 @@ export function HistoryPage({ data }: { data: AppData }) {
       ) : null}
 
       {filter === "decisions" ? (
-        <SectionCard title="Decisions" eyebrow="PM decision archive">
+        <SectionCard title="PM 결정" eyebrow="의사결정 기록">
           <TimelineRows rows={decisionLogs.map((log) => ({
             id: log.id,
             time: log.created_at,
@@ -89,7 +90,7 @@ export function HistoryPage({ data }: { data: AppData }) {
       ) : null}
 
       {filter === "errors" ? (
-        <SectionCard title="Errors" eyebrow="Warnings and failures">
+        <SectionCard title="오류" eyebrow="주의와 실패 기록">
           <TimelineRows rows={errorEvents.map((event) => ({
             id: event.id,
             time: event.created_at,
@@ -102,7 +103,7 @@ export function HistoryPage({ data }: { data: AppData }) {
       ) : null}
 
       {filter === "kpi" ? (
-        <SectionCard title="KPI History" eyebrow="7-day operations metrics">
+        <SectionCard title="KPI 이력" eyebrow="최근 7일 운영 지표">
           <div className="kpi-history-grid">
             {Object.entries(data.kpi?.productivity || {}).map(([key, value]) => (
               <div className="kpi-row" key={key}>
