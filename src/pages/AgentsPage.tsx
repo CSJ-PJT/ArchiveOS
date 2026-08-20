@@ -135,6 +135,7 @@ function agentSourceLabel(value: string | null | undefined) {
 function agentSummaryLabel(id: string, value: string | null | undefined) {
   const summary = value || "";
   if (id === "architect" && summary) return summary
+    .replace("Architect review passed with no rule-based findings.", "규칙 기반 위험 없이 아키텍처 단건 검토를 완료했습니다.")
     .replace("Architecture review completed with no blocking findings.", "차단 사유 없이 아키텍처 단건 검토를 완료했습니다.")
     .replace("Architecture review completed", "아키텍처 단건 검토를 완료했습니다");
   if (summary.startsWith("Active task:")) return `현재 작업: ${summary.slice("Active task:".length).trim()}`;
