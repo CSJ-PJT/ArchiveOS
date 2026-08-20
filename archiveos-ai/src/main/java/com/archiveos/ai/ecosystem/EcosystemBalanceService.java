@@ -210,7 +210,7 @@ public class EcosystemBalanceService {
             case "market" -> "ROLLING_24H_RECOGNIZED_EVENTS".equals(scope);
             case "nexus" -> scope.equals("PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS")
                     || scope.startsWith("PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS_FALLBACK_");
-            case "logitics" -> "ROLLING_24H_RECOGNIZED_LOGISTICS_EVENTS".equals(scope);
+            case "logitics" -> "ROLLING_24H_RECOGNIZED_NON_RUNTIME_LOGISTICS_EVENTS".equals(scope);
             case "ledger" -> "WORKDAY".equals(scope);
             case "archiveos" -> "ARCHIVEOS_CONTROL_TOWER_CURRENT_24H".equals(scope);
             default -> false;

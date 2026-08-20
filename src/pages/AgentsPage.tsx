@@ -43,7 +43,7 @@ export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () =
       </header>
 
       <section className="summary-strip agent-summary">
-        <Summary label="DB 등록 에이전트" value={registeredAgents.length} status={registeredAgents.length ? "healthy" : "inactive"} />
+        <Summary label="DB 등록 이력" value={registeredAgents.length} status={registeredAgents.length ? "healthy" : "inactive"} />
         <Summary label="Runtime 에이전트" value={agents.length} status={agents.length ? "healthy" : "inactive"} />
         <Summary label="활성 에이전트" value={active} status={active > 0 ? "working" : "inactive"} />
         <Summary label="주의 필요" value={warning} status={warning > 0 ? "warning" : "healthy"} />
@@ -51,12 +51,13 @@ export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () =
       </section>
 
       <SectionCard title="DB 에이전트 레지스트리" eyebrow="ARCHIVEOS POSTGRESQL">
-        {registeredAgents.length ? <div className="agent-card-grid">{registeredAgents.map((agent) => (
-          <article className="agent-card" key={agent.id}>
+        {registeredAgents.length ? <div className="agent-card-grid">{registeredAgents.map((agent) => {
+          const stale = isStaleRegistryRecord(agent.updated_at, data.refreshedAt);
+          return <article className="agent-card" key={agent.id}>
             <div className="agent-card-icon"><Icon name="agents" size={20} /></div>
-            <div className="agent-card-main"><div className="agent-card-title"><div><strong>{agent.name}</strong><span>{agentRoleLabel(agent.role)}</span></div><StatusBadge status={agent.status === "failed" ? "warning" : agent.status === "working" ? "working" : "waiting"}>{agentStatusLabel(agent.status)}</StatusBadge></div><p>{agentTaskLabel(agent.current_task)}</p><div className="agent-evidence"><span>ArchiveOS PostgreSQL</span><span>갱신 {formatTimeAgo(agent.updated_at)}</span></div></div>
+            <div className="agent-card-main"><div className="agent-card-title"><div><strong>{agent.name}</strong><span>{agentRoleLabel(agent.role)}</span></div><StatusBadge status={stale ? "waiting" : agent.status === "failed" ? "warning" : agent.status === "working" ? "working" : "waiting"}>{stale ? "과거 기록" : agentStatusLabel(agent.status)}</StatusBadge></div><p>{stale ? `마지막 등록 작업: ${agentTaskLabel(agent.current_task)}` : agentTaskLabel(agent.current_task)}</p><div className="agent-evidence"><span>ArchiveOS PostgreSQL 등록 이력</span><span>마지막 갱신 {formatTimeAgo(agent.updated_at)}</span></div></div>
           </article>
-        ))}</div> : <div className="empty-state">등록된 DB 에이전트가 없습니다.</div>}
+        })}</div> : <div className="empty-state">등록된 DB 에이전트가 없습니다.</div>}
       </SectionCard>
 
       <SectionCard title="에이전트 모니터" eyebrow="운영 역할과 활동 기록">
@@ -159,4 +160,11 @@ function interactionTypeLabel(value: string) {
 
 function interactionSummaryLabel(value: string) {
   return ({ "queue task": "운영 큐 작업", "builder result -> review": "구현 결과를 검토로 인계", verdict: "검토 결과 전달", "architecture risk": "아키텍처 위험 점검", "related context": "관련 운영 문맥 제공", "review bridge": "검토 연동" } as Record<string, string>)[value] || value;
+}
+
+function isStaleRegistryRecord(updatedAt: string | null | undefined, refreshedAt: string | null | undefined) {
+  const updated = Date.parse(updatedAt || "");
+  const refreshed = Date.parse(refreshedAt || "");
+  if (!Number.isFinite(updated) || !Number.isFinite(refreshed)) return true;
+  return refreshed - updated > 60 * 60 * 1000;
 }
