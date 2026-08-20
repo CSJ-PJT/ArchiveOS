@@ -592,24 +592,24 @@ export function getGraphNodeImportanceReasons(node: KnowledgeGraphNode, graph: K
     return graph.nodes.find((candidate) => candidate.id === otherId)?.type === "nightly_review" || edge.type.includes("nightly");
   }).length;
   const reasons = [
-    `connected to ${relatedEdges.length} nodes`,
-    `referenced by ${decisionRefs} decisions`,
-    `referenced in ${architectRefs} architect reviews`,
-    `used in ${nightlyRefs} nightly reviews`,
+    `연결된 노드 ${relatedEdges.length}개`,
+    `참조한 결정 ${decisionRefs}건`,
+    `아키텍처 검토 참조 ${architectRefs}건`,
+    `야간 검토 사용 ${nightlyRefs}건`,
   ];
-  if (activeChain?.nodeIds.has(node.id)) reasons.push("part of active operational chain");
-  if (node.isRecent) reasons.push("recently created");
-  if (node.isHub) reasons.push("acts as a graph hub");
+  if (activeChain?.nodeIds.has(node.id)) reasons.push("활성 운영 체인에 포함됨");
+  if (node.isRecent) reasons.push("최근 생성된 노드");
+  if (node.isHub) reasons.push("운영 메모리 허브 역할");
   return reasons;
 }
 
 export function getGraphNodeImportanceReason(node: KnowledgeGraphNode) {
-  if (node.type === "decision") return "PM decisions anchor operational memory.";
-  if (node.type === "architecture_review") return "Architecture reviews explain design and risk decisions.";
-  if (node.type === "incident") return "Incidents identify operational risk.";
-  if (node.isHub) return "This node connects multiple memory records.";
-  if (node.isRecent) return "This node was created recently.";
-  return "Importance is derived from type, recency, and graph connections.";
+  if (node.type === "decision") return "PM 결정이 운영 메모리의 기준점입니다.";
+  if (node.type === "architecture_review") return "아키텍처 검토가 설계와 위험 판단의 근거입니다.";
+  if (node.type === "incident") return "장애 기록이 운영 위험을 보여줍니다.";
+  if (node.isHub) return "여러 운영 메모리 기록을 연결하는 중심 노드입니다.";
+  if (node.isRecent) return "최근 생성된 운영 메모리 노드입니다.";
+  return "유형, 최신성, 그래프 연결을 기준으로 중요도를 산정했습니다.";
 }
 
 export function truncateGraphLabel(value: string | null | undefined, maxLength = 28) {
