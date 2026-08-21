@@ -3,24 +3,33 @@ package com.archiveos.ai.security;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class SessionService {
     public static final String COOKIE_NAME = "ARCHIVEOS_SESSION";
     private final SecurityProperties properties;
+    private final AdminCredentialRepository credentials;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(12);
     private final String passwordHash;
     private final Map<String, PlatformSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, AttemptWindow> attempts = new ConcurrentHashMap<>();
 
-    public SessionService(SecurityProperties properties) {
+    @Autowired
+    public SessionService(SecurityProperties properties, AdminCredentialRepository credentials) {
         this.properties = properties;
+        this.credentials = credentials;
         this.passwordHash = properties.configured() ? normalizePasswordHash(properties.adminPassword()) : "";
+    }
+
+    SessionService(SecurityProperties properties) {
+        this(properties, null);
     }
 
     public PlatformSession login(String remoteAddress, String username, String password, PlatformRole requestedRole) {
@@ -31,12 +40,18 @@ public class SessionService {
             throw new LoginRejectedException("Too many login attempts. Try again later.", true);
         }
         String actor = normalizeUsername(username);
-        if (!"admin".equals(actor) || !properties.configured() || password == null || !encoder.matches(password, passwordHash)) {
+        AdminCredentialRepository.Credential stored = credentials == null ? null : credentials.find(actor).orElse(null);
+        boolean storedMatch = stored != null && stored.enabled() && password != null && encoder.matches(password, stored.passwordHash());
+        boolean bootstrapMatch = stored == null && "admin".equals(actor) && properties.configured()
+                && password != null && encoder.matches(password, passwordHash);
+        if (!storedMatch && !bootstrapMatch) {
             recordFailure(key, now, current);
-            throw new LoginRejectedException(properties.configured() ? "Invalid credentials." : "Admin login is not configured.", false);
+            throw new LoginRejectedException(properties.configured() || credentials != null ? "Invalid credentials." : "Admin login is not configured.", false);
         }
         attempts.remove(key);
-        PlatformRole role = requestedRole == null || requestedRole == PlatformRole.PUBLIC ? PlatformRole.ADMIN : requestedRole;
+        PlatformRole role = stored == null
+                ? (requestedRole == null || requestedRole == PlatformRole.PUBLIC ? PlatformRole.ADMIN : requestedRole)
+                : stored.role();
         Instant expiresAt = now.plus(Duration.ofMinutes(properties.sessionTimeoutMinutes()));
         PlatformSession session = new PlatformSession(UUID.randomUUID().toString(), actor, role, now, expiresAt);
         sessions.put(session.id(), session);
@@ -66,6 +81,22 @@ public class SessionService {
         return properties;
     }
 
+    public CredentialSummary createCredential(String username, String password, PlatformRole role, String updatedBy) {
+        if (credentials == null) throw new IllegalStateException("Persistent credential storage is unavailable.");
+        String actor = normalizeUsername(username);
+        if (!actor.matches("[a-z0-9][a-z0-9._-]{2,63}")) {
+            throw new IllegalArgumentException("username must be 3-64 lowercase letters, numbers, dot, underscore, or hyphen.");
+        }
+        if (password == null || password.length() < 16 || password.length() > 256) {
+            throw new IllegalArgumentException("password must be 16-256 characters.");
+        }
+        if (role == null || !List.of(PlatformRole.OPERATOR, PlatformRole.PM, PlatformRole.ADMIN).contains(role)) {
+            throw new IllegalArgumentException("role must be OPERATOR, PM, or ADMIN.");
+        }
+        credentials.upsert(actor, encoder.encode(password), role, updatedBy == null ? "archiveos-admin" : updatedBy);
+        return new CredentialSummary(actor, role, true);
+    }
+
     private void recordFailure(String key, Instant now, AttemptWindow current) {
         int count = current == null || current.windowStarted().plus(Duration.ofMinutes(properties.lockoutMinutes())).isBefore(now)
                 ? 1 : current.count() + 1;
@@ -89,6 +120,8 @@ public class SessionService {
     }
 
     private record AttemptWindow(int count, Instant windowStarted, Instant lockedUntil) {}
+
+    public record CredentialSummary(String username, PlatformRole role, boolean enabled) {}
 
     public static class LoginRejectedException extends RuntimeException {
         private final boolean rateLimited;

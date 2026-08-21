@@ -217,11 +217,27 @@ public class ExternalApprovalService {
 
     @Transactional
     public Map<String, Object> decide(String approvalRequestId, String decision, JsonNode body) {
+        return decide(approvalRequestId, decision, body, audit.actor().name());
+    }
+
+    @Transactional
+    public Map<String, Object> approveAll(int limit, JsonNode body, String actor) {
+        List<Map<String, Object>> actionable = repository.actionable(limit);
+        int approved = 0;
+        for (Map<String, Object> request : actionable) {
+            decide(string(request.get("approval_request_id")), "APPROVED", body, actor);
+            approved += 1;
+        }
+        return Map.of("approved", approved, "remaining", repository.summary().getOrDefault("actionable_pending", 0),
+                "actor", actor, "settlementExecuted", false);
+    }
+
+    private Map<String, Object> decide(String approvalRequestId, String decision, JsonNode body, String decisionActor) {
         Map<String, Object> request = detail(approvalRequestId);
         String normalized = decision.toUpperCase(Locale.ROOT);
         if (!List.of("APPROVED", "REJECTED", "HOLD").contains(normalized)) throw new ExternalApprovalValidationException("Unsupported approval decision.");
         String comment = body != null && body.isObject() && body.has("comment") && body.get("comment").isTextual() ? body.get("comment").textValue().trim() : null;
-        String actor = audit.actor().name();
+        String actor = decisionActor == null || decisionActor.isBlank() ? "archiveos-approval-agent" : decisionActor;
         repository.insertDecision(approvalRequestId, normalized, actor, comment);
         repository.updateDecisionState(approvalRequestId, normalized, actor);
         audit.recordEvent("APPROVED".equals(normalized) ? "external_approval_approved" : "REJECTED".equals(normalized) ? "external_approval_rejected" : "external_approval_held",

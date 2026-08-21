@@ -62,6 +62,7 @@ public class ObsidianRagService {
             for (MarkdownDocument document : documents) {
                 var existing = repository.findByPath(document.relativePath());
                 if (existing != null && existing.contentHash().equals(document.contentHash())) {
+                    repository.touchDocument(existing.id());
                     skipped += 1;
                     continue;
                 }

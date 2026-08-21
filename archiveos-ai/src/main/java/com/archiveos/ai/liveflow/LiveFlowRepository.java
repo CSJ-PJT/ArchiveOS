@@ -80,6 +80,26 @@ public class LiveFlowRepository {
                 this::row, clamp(limit));
     }
 
+    /** Route-balanced dashboard sample; chronological record views keep using recent(). */
+    public List<Map<String, Object>> recentBalanced(int limit) {
+        int safeLimit = clamp(limit);
+        int perRoute = Math.max(1, Math.min(6, safeLimit / 8 + 1));
+        return jdbc.query("""
+                select ranked.*
+                  from (
+                    select event.*,
+                           row_number() over (
+                             partition by lower(trim(coalesce(from_node, ''))), lower(trim(coalesce(to_node, '')))
+                             order by occurred_at desc, received_at desc, id desc
+                           ) as route_rank
+                      from public.ecosystem_flow_event event
+                  ) ranked
+                 where ranked.route_rank <= ?
+                 order by ranked.occurred_at desc, ranked.received_at desc, ranked.id desc
+                 limit ?
+                """, this::row, perRoute, safeLimit);
+    }
+
     public boolean existsEventId(String eventId) {
         Integer count = jdbc.queryForObject("select count(*) from public.ecosystem_flow_event where event_id = ?", Integer.class, eventId);
         return count != null && count > 0;

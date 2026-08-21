@@ -1,6 +1,7 @@
 package com.archiveos.ai.batch;
 
 import com.archiveos.ai.audit.AuditLogService;
+import com.archiveos.ai.activity.ActivityRepository;
 import com.archiveos.ai.obsidian.ObsidianRagService;
 import com.archiveos.ai.obsidian.ObsidianSyncResult;
 import com.archiveos.ai.runtime.AiRuntimeService;
@@ -34,7 +35,8 @@ public class ArchiveBatchConfiguration {
     public Step obsidianSyncStep(
             JobRepository jobRepository,
             PlatformTransactionManager transactionManager,
-            ObsidianRagService ragService) {
+            ObsidianRagService ragService,
+            ActivityRepository activityRepository) {
         return new StepBuilder("syncObsidianVault", jobRepository)
                 .tasklet((contribution, chunkContext) -> {
                     try {
@@ -49,6 +51,12 @@ public class ArchiveBatchConfiguration {
                                 result.embeddedChunks()));
                         contribution.getStepExecution().getExecutionContext().putInt("scanned", result.scanned());
                         contribution.getStepExecution().getExecutionContext().putInt("embeddedChunks", result.embeddedChunks());
+                        activityRepository.createWorkLog(
+                                "knowledge-daily-sync",
+                                "archiveos-knowledge-agent",
+                                "summary",
+                                String.format("운영 지식 동기화를 완료했습니다. 문서 %d개 확인, 신규 %d개, 갱신 %d개, 변경 없음 %d개, 임베딩 %d개입니다.",
+                                        result.scanned(), result.created(), result.updated(), result.skipped(), result.embeddedChunks()));
                         return RepeatStatus.FINISHED;
                     } catch (Exception error) {
                         throw new IllegalStateException("Obsidian sync batch failed: " + error.getMessage(), error);

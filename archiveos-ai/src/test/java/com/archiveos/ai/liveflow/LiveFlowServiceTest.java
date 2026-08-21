@@ -102,6 +102,17 @@ class LiveFlowServiceTest {
         verify(repository).recent(30);
     }
 
+    @Test void dashboardCanRequestRouteBalancedPersistedSample() {
+        LiveFlowRepository repository = repositoryBase(Map.of());
+        when(repository.recentBalanced(30)).thenReturn(List.of(Map.of("event_id", "balanced-1")));
+        LiveFlowService service = new LiveFlowService(repository, Mockito.mock(EcosystemService.class),
+                Mockito.mock(ExternalApprovalRepository.class), Mockito.mock(ApprovalCallbackOutboxRepository.class), audit());
+
+        assertThat((List<?>) service.recent(30, true).get("data")).hasSize(1);
+        verify(repository).recentBalanced(30);
+        verify(repository, never()).recent(30);
+    }
+
     @Test void runtimeUsesPerNodeBusinessAggregateInsteadOfGlobalLatestSample() {
         LiveFlowRepository repository = repositoryBase(Map.of(
                 "market", Instant.now().minusSeconds(1),

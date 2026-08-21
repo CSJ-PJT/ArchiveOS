@@ -109,6 +109,11 @@ public class ObsidianJdbcRepository {
         return key;
     }
 
+    /** Marks an unchanged document as observed by the current sync without rewriting its chunks. */
+    public void touchDocument(long documentId) {
+        jdbcTemplate.update("update public.obsidian_documents set updated_at = now() where id = ?", documentId);
+    }
+
     public int deleteChunks(long documentId) {
         return jdbcTemplate.update("delete from public.obsidian_chunks where document_id = ?", documentId);
     }
@@ -180,14 +185,15 @@ public class ObsidianJdbcRepository {
                   order by updated_at desc, id desc
                   limit ?
                 )
-                select c.id, c.document_id, c.chunk_index, c.heading, c.created_at
+                select c.id, c.document_id, c.chunk_index, c.heading, c.created_at, d.updated_at as document_updated_at
                 from public.obsidian_chunks c
-                join recent_documents d on d.id = c.document_id
+                join public.obsidian_documents d on d.id = c.document_id
+                join recent_documents recent on recent.id = c.document_id
                 order by c.created_at desc, c.id desc
                 limit ?
                 """, (rs, rowNum) -> new ProjectionChunk(
                 rs.getLong("id"), rs.getLong("document_id"), rs.getInt("chunk_index"),
-                rs.getString("heading"), instant(rs, "created_at")),
+                rs.getString("heading"), instant(rs, "created_at"), instant(rs, "document_updated_at")),
                 Math.min(Math.max(documentLimit, 1), 200), Math.min(Math.max(chunkLimit, 1), 500));
     }
 
@@ -360,7 +366,7 @@ public class ObsidianJdbcRepository {
 
     public record ProjectionDocument(long id, String filePath, String title, String updatedAt) {}
 
-    public record ProjectionChunk(long id, long documentId, int chunkIndex, String heading, String createdAt) {}
+    public record ProjectionChunk(long id, long documentId, int chunkIndex, String heading, String createdAt, String documentUpdatedAt) {}
 
     public record KnowledgeStatistics(
             int documents,

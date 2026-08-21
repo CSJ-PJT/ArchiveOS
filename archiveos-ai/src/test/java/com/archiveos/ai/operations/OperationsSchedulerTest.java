@@ -16,9 +16,11 @@ class OperationsSchedulerTest {
     @Test void recordsNightlyAndDailyWorkThroughSpringBatch() {
         scheduler.nightlyReview();
         scheduler.dailyReport();
+        scheduler.dailyKnowledgeSync();
 
         verify(batches).run(OperationsBatchConfiguration.NIGHTLY_REVIEW_JOB, "scheduler-nightly");
         verify(batches).run(OperationsBatchConfiguration.DAILY_REPORT_JOB, "scheduler-daily");
+        verify(batches).run(ArchiveBatchConfiguration.OBSIDIAN_SYNC_JOB, "scheduler-daily-knowledge");
     }
 
     @Test void recordsCurrentMaintenanceJobsInExecutionHistory() {

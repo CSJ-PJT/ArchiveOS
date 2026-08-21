@@ -63,6 +63,12 @@ public class ExternalApprovalController {
         return envelope(service.decide(approvalRequestId, "HOLD", body));
     }
 
+    @PostMapping("/api/approvals/external/approve-all")
+    public Map<String, Object> approveAll(@RequestParam(defaultValue = "200") int limit,
+                                           @RequestBody(required = false) JsonNode body) {
+        return envelope(service.approveAll(limit, body, "archiveos-admin-batch"));
+    }
+
     @ExceptionHandler(ExternalApprovalValidationException.class)
     public ResponseEntity<Map<String, Object>> validation(ExternalApprovalValidationException error) {
         return ResponseEntity.badRequest().body(Map.of("error", error.getMessage()));

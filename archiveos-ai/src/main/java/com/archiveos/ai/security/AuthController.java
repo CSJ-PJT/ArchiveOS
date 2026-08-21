@@ -57,6 +57,25 @@ public class AuthController {
         return Map.of("data", Map.of("loggedOut", true));
     }
 
+    @PostMapping("/admin/users")
+    public ResponseEntity<Map<String, Object>> createAdmin(@RequestBody CreateCredentialRequest body,
+                                                            Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof PlatformSession principal)
+                || principal.role() != PlatformRole.ADMIN) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Admin session required."));
+        }
+        try {
+            PlatformRole role = body == null || body.role() == null
+                    ? PlatformRole.ADMIN : PlatformRole.valueOf(body.role().trim().toUpperCase());
+            SessionService.CredentialSummary created = sessions.createCredential(
+                    body == null ? null : body.username(), body == null ? null : body.password(), role, principal.actor());
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("data", Map.of(
+                    "username", created.username(), "role", created.role().name(), "enabled", created.enabled())));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(Map.of("error", error.getMessage()));
+        }
+    }
+
     private Map<String, Object> describe(PlatformSession session) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("actor", session.actor());
@@ -88,4 +107,5 @@ public class AuthController {
     }
 
     public record LoginRequest(String username, String password, String role) {}
+    public record CreateCredentialRequest(String username, String password, String role) {}
 }
