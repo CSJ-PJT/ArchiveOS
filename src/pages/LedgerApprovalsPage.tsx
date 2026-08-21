@@ -9,13 +9,16 @@ import { formatTimeAgo, stringifyMeta } from "./pageUtils";
 
 export function LedgerApprovalsPage({ data, onRefresh }: { data: AppData; onRefresh: () => Promise<void> }) {
   const approvals = data.externalApprovals;
-  const [selectedId, setSelectedId] = useState<string | null>(approvals[0]?.approval_request_id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    approvals.find((item) => item.status === "PENDING")?.approval_request_id ?? approvals[0]?.approval_request_id ?? null,
+  );
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [detail, setDetail] = useState<ExternalApprovalRequest | null>(null);
   const [callbacks, setCallbacks] = useState<Array<Record<string, unknown>>>([]);
-  const selectedListItem = approvals.find((item) => item.approval_request_id === selectedId) ?? approvals[0] ?? null;
+  const firstPending = approvals.find((item) => item.status === "PENDING") ?? null;
+  const selectedListItem = approvals.find((item) => item.approval_request_id === selectedId) ?? firstPending ?? approvals[0] ?? null;
   const selected = detail?.approval_request_id === selectedListItem?.approval_request_id ? detail : selectedListItem;
   const canDecide = data.auth.role === "ADMIN" || data.auth.role === "PM";
   const summary = useMemo(() => ({
@@ -149,6 +152,7 @@ function ApprovalDetail({
   setComment: (value: string) => void;
   decide: (action: "approve" | "reject" | "hold") => Promise<void>;
 }) {
+  const isPending = approval.status === "PENDING";
   return <div className="detail-stack">
     <div className="detail-title">
       <div><h3>{approval.approval_request_id}</h3><span>{approval.correlation_id}</span></div>
@@ -188,14 +192,18 @@ function ApprovalDetail({
       <details className="details-box"><summary>메타데이터</summary><pre>{stringifyMeta(approval.metadata)}</pre></details>
     </SectionCard>
 
-    {canDecide ? <div className="settings-grid">
+    {canDecide && isPending ? <div className="settings-grid">
+      <p className="small-note">관리자·PM 결정 권한이 확인되었습니다.</p>
       <label>결정 메모<textarea rows={3} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="정책 근거를 검토한 뒤 결정 사유를 입력하세요." /></label>
       <div className="inline-actions">
-        <button className="button button-primary" type="button" disabled={busy !== null || approval.status !== "PENDING"} onClick={() => void decide("approve")}>{busy === "approve" ? "승인 중..." : "승인"}</button>
-        <button className="button button-secondary" type="button" disabled={busy !== null || approval.status !== "PENDING"} onClick={() => void decide("reject")}>{busy === "reject" ? "반려 중..." : "반려"}</button>
-        <button className="button button-secondary" type="button" disabled={busy !== null || approval.status !== "PENDING"} onClick={() => void decide("hold")}>{busy === "hold" ? "보류 중..." : "보류"}</button>
+        <button className="button button-primary" type="button" disabled={busy !== null} onClick={() => void decide("approve")}>{busy === "approve" ? "승인 중..." : "승인"}</button>
+        <button className="button button-secondary" type="button" disabled={busy !== null} onClick={() => void decide("reject")}>{busy === "reject" ? "반려 중..." : "반려"}</button>
+        <button className="button button-secondary" type="button" disabled={busy !== null} onClick={() => void decide("hold")}>{busy === "hold" ? "보류 중..." : "보류"}</button>
       </div>
       {message ? <p className="small-note">{message}</p> : null}
+    </div> : canDecide ? <div className="approval-decision-complete" role="status">
+      <strong>{statusLabel(approval.status)} 처리 완료</strong>
+      <p>이미 처리된 요청은 중복 결정할 수 없습니다. 승인 대기 요청이 생기면 해당 요청이 우선 표시되고 결정 버튼이 활성화됩니다.</p>
     </div> : <p className="small-note">승인 결정을 하려면 관리자 또는 PM 세션이 필요합니다.</p>}
   </div>;
 }

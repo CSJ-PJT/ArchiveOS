@@ -93,6 +93,12 @@ for (const contract of ["operatingMarginLabel(row)", 'number(row.revenue) === 0 
 for (const contract of ["approvalReasonLabel", "콜드체인 위험 비용 확인", "배송 지연 비용 확인", "긴급 배송 비용 확인"]) {
   if (!read("src/pages/LedgerApprovalsPage.tsx").includes(contract)) throw new Error(`Approval reason localization missing: ${contract}`);
 }
+for (const contract of ['firstPending', 'canDecide && isPending', '관리자·PM 결정 권한이 확인되었습니다.', '이미 처리된 요청은 중복 결정할 수 없습니다.']) {
+  if (!read("src/pages/LedgerApprovalsPage.tsx").includes(contract)) throw new Error(`Approval action-state contract missing: ${contract}`);
+}
+if (read("src/pages/LedgerApprovalsPage.tsx").includes('approval.status !== "PENDING"')) {
+  throw new Error("Completed approvals must not render misleading disabled decision buttons.");
+}
 for (const contract of ["operations.runtimeWorkforce.usedCapacity", "operations.runtimeWorkforce.effectiveCapacity", "외부 쓰기"]) {
   if (!services.includes(contract)) throw new Error(`Nested service metric/label contract missing: ${contract}`);
 }
