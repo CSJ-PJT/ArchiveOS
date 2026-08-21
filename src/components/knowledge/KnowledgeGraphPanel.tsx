@@ -98,7 +98,7 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
   const edgeTypes = useMemo(() => ["all", ...Array.from(new Set(graph?.edges.map((edge) => edge.type) || []))], [graph]);
   const latestNode = graph?.nodes
     .slice()
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())[0];
 
   const selectNode = (nodeId: string | null) => {
     setSelectedNodeId(nodeId);
@@ -255,7 +255,7 @@ export function KnowledgeGraphPanel({ overview }: { overview: KnowledgeOverview 
 
       <p className="graph-readonly-note">
         읽기 전용 운영 메모리입니다. 실제 PostgreSQL 지식 노드 또는 Obsidian 문서·청크 투영만 표시합니다.
-        {latestNode ? <span title={latestNode.createdAt}> 최근: {knowledgeNodeTypeLabel(latestNode.type)} · {formatRelativeTime(latestNode.createdAt)}</span> : null}
+        {latestNode ? <span title={latestNode.updatedAt || latestNode.createdAt}> 최근: {knowledgeNodeTypeLabel(latestNode.type)} · {formatRelativeTime(latestNode.updatedAt || latestNode.createdAt)}</span> : null}
       </p>
 
       {graphBody()}

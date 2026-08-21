@@ -311,7 +311,7 @@ function buildConnectedMemoryChains(graph: KnowledgeGraph): ActiveDecisionChain[
       if (degreeDelta !== 0) return degreeDelta;
       const importanceDelta = right.importanceScore - left.importanceScore;
       if (importanceDelta !== 0) return importanceDelta;
-      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+      return new Date(right.updatedAt || right.createdAt).getTime() - new Date(left.updatedAt || left.createdAt).getTime();
     });
   const covered = new Set<string>();
   const chains: ActiveDecisionChain[] = [];
@@ -330,7 +330,7 @@ function buildConnectedMemoryChains(graph: KnowledgeGraph): ActiveDecisionChain[
       chainNodes.push(current);
       const linked = (adjacency.get(current.id) || []).slice().sort((left, right) => {
         const importanceDelta = right.node.importanceScore - left.node.importanceScore;
-        return importanceDelta || new Date(right.node.createdAt).getTime() - new Date(left.node.createdAt).getTime();
+        return importanceDelta || new Date(right.node.updatedAt || right.node.createdAt).getTime() - new Date(left.node.updatedAt || left.node.createdAt).getTime();
       });
       for (const item of linked) {
         if (visited.has(item.node.id)) continue;

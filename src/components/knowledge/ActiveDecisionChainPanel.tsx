@@ -134,7 +134,7 @@ export function OperationalChainReplay({
                 <>
                   <strong title={step.node.title}>{truncateGraphLabel(step.node.title, 54)}</strong>
                   <small>
-                    {knowledgeNodeTypeLabel(step.node.type)} · {knowledgeImportanceLabel(step.node.importanceLevel)} · {formatRelativeTime(step.node.createdAt)}
+                    {knowledgeNodeTypeLabel(step.node.type)} · {knowledgeImportanceLabel(step.node.importanceLevel)} · {formatRelativeTime(step.node.updatedAt || step.node.createdAt)}
                   </small>
                 </>
               ) : (
