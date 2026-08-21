@@ -149,11 +149,6 @@ export function LiveFlowPage({ data, onRefresh }: { data: AppData; onRefresh: ()
         </div>
       </header>
 
-      <div className="live-flow-warning">
-        <strong>합성 런타임 이벤트만 사용합니다.</strong>
-        <span>실제 고객, 결제, 계좌, 금융 데이터는 사용하지 않습니다.</span>
-        <span>Safe-mode 기준으로 외부 쓰기는 차단되며, 현재 화면은 read-only 관제만 수행합니다.</span>
-      </div>
       {isRuntimeBlocked ? (
         <div className="live-flow-warning stale-warning">
           <strong>{freshnessStatus === "NO_RUNTIME_EVENTS" ? "최근 실행 이벤트가 없습니다." : freshnessStatus === "STALE" ? "운영 흐름이 정체되었습니다." : "일부 서비스 실행이 정체되었습니다."}</strong>
