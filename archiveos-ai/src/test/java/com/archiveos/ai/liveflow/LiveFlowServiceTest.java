@@ -165,6 +165,20 @@ class LiveFlowServiceTest {
                 .containsEntry("throughputSource", "runtime_tick");
     }
 
+    @Test void runtimeNormalizesTimezoneLessUpstreamWorkTimestampToUtc() {
+        LiveFlowRepository repository = repositoryBase(Map.of("logistics", Instant.parse("2026-08-21T06:50:22Z")));
+        LiveFlowService service = service(repository, healthyServices(Map.of("logitics", Map.of(
+                "runtime", Map.of(
+                        "runtimeActive", true,
+                        "schedulerStatus", "BACKLOG_LIMITED",
+                        "pipelineStatus", "LIVE_WITH_BACKLOG",
+                        "lastWorkAt", "2026-08-21T06:56:54.4832319")))));
+
+        Map<String, Object> logistics = runtimeService(service.refresh(), "Archive-Logistics");
+
+        assertThat(logistics).containsEntry("lastWorkAt", "2026-08-21T06:56:54.483231900Z");
+    }
+
     @Test void runtimeReadsMarketTickFromNestedOperationsContract() {
         LiveFlowRepository repository = repositoryBase(Map.of("market", Instant.now().minusSeconds(5)));
         when(repository.businessEventCountByNode("archive-market", 30)).thenReturn(0L);

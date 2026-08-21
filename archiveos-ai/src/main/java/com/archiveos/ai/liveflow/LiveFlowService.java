@@ -250,6 +250,8 @@ public class LiveFlowService {
         Map<String, Object> runtime = firstMap(body, "runtime", "pipeline", "scheduler");
         if (runtime.isEmpty()) runtime = firstMap(operations, "runtime", "pipeline", "scheduler");
         Map<String, Object> outbox = firstMap(body, "outbox", "outboxSummary");
+        Instant lastWorkAt = firstInstant(
+                runtime.get("lastWorkAt"), body.get("lastWorkAt"), operations.get("lastWorkAt"));
         Instant lastEventAt = firstInstant(
                 runtime.get("lastEventAt"), runtime.get("lastWorkAt"),
                 body.get("latestEventAt"), body.get("lastEventAt"), body.get("lastWorkAt"),
@@ -287,7 +289,7 @@ public class LiveFlowService {
         value.put("serviceStatus", serviceStatus);
         value.put("runtimeStatus", runtimeStatus);
         value.put("lastEventAt", lastEventAt == null ? null : lastEventAt.toString());
-        value.put("lastWorkAt", string(firstNonNull(runtime.get("lastWorkAt"), body.get("lastWorkAt")), null));
+        value.put("lastWorkAt", lastWorkAt == null ? null : lastWorkAt.toString());
         value.put("runtimeActive", runtimeActive);
         value.put("autoRunEnabled", autoRunEnabled);
         value.put("eventsProducedLastTick", produced);
