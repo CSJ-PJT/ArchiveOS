@@ -25,11 +25,12 @@ public class SecurityConfiguration {
                         .authenticationEntryPoint((request, response, error) -> json(response, 401, "Authentication required."))
                         .accessDeniedHandler((request, response, error) -> json(response, 403, "Insufficient role.")))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/health", "/actuator/health/**", "/api/auth/login").permitAll()
+                        .requestMatchers("/health", "/actuator/health/**", "/api/auth/login", "/api/mail/webhooks/resend").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/session").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/auth/admin/users").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/security/**", "/api/audit/**").hasRole("ADMIN")
+                        .requestMatchers("/api/mail/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/obsidian/documents", "/api/rag/search").hasAnyRole("AUTHENTICATED_READ", "OPERATOR", "PM", "ADMIN")
                         // The public Control Tower exposes question answering, not raw document search.
                         // The controller applies a per-remote rate limit and records a redacted audit event.

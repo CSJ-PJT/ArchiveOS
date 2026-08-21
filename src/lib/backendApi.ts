@@ -2013,6 +2013,81 @@ export async function getKpiOverview(range: KpiRange = "7d") {
   return response.data;
 }
 
+export type MailStatus = {
+  enabled: boolean;
+  mailbox: string;
+  outbound_ready: boolean;
+  inbound_ready: boolean;
+  slack_ready: boolean;
+  unread: number;
+};
+
+export type MailAttachment = {
+  id?: string;
+  filename?: string;
+  content_type?: string;
+  size?: number;
+};
+
+export type MailMessage = {
+  id: string;
+  provider_message_id: string;
+  direction: "inbound" | "outbound";
+  mailbox: string;
+  from_address: string;
+  to_addresses: string[];
+  cc_addresses: string[];
+  reply_to_addresses: string[];
+  subject: string;
+  text_body?: string;
+  html_body?: string;
+  attachments: MailAttachment[];
+  delivery_status: string;
+  is_read: boolean;
+  occurred_at: string;
+};
+
+export type MailMessagePage = {
+  items: MailMessage[];
+  page: number;
+  size: number;
+  total: number;
+  unread: number;
+};
+
+export async function getMailStatus() {
+  const response = await request<ApiEnvelope<MailStatus>>("/api/mail/status");
+  return response.data;
+}
+
+export async function getMailMessages(folder: "inbox" | "sent" | "all", page = 0, size = 20) {
+  const response = await request<ApiEnvelope<MailMessagePage>>(`/api/mail/messages?folder=${folder}&page=${page}&size=${size}`);
+  return response.data;
+}
+
+export async function getMailMessage(id: string) {
+  const response = await request<ApiEnvelope<MailMessage>>(`/api/mail/messages/${encodeURIComponent(id)}`);
+  return response.data;
+}
+
+export async function markMailRead(id: string, read = true) {
+  const response = await request<ApiEnvelope<{ id: string; read: boolean; unread: number }>>(`/api/mail/messages/${encodeURIComponent(id)}/read`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ read }),
+  });
+  return response.data;
+}
+
+export async function sendMail(input: { to: string[]; cc?: string[]; subject: string; text?: string; html?: string }) {
+  const response = await request<ApiEnvelope<MailMessage>>("/api/mail/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {

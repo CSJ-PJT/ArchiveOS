@@ -11,7 +11,8 @@ export type IconName =
   | "alert"
   | "activity"
   | "approval"
-  | "health";
+  | "health"
+  | "mail";
 
 const paths: Record<IconName, string[]> = {
   overview: ["M3 3h7v7H3z", "M14 3h7v4h-7z", "M14 11h7v10h-7z", "M3 14h7v7H3z"],
@@ -27,6 +28,7 @@ const paths: Record<IconName, string[]> = {
   activity: ["M3 12h4l2-6 4 12 2-6h6"],
   approval: ["M9 11l3 3L22 4", "M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"],
   health: ["M3 12h4l2-5 4 10 2-5h6"],
+  mail: ["M3 5h18v14H3z", "m3 3 6 5 6-5"],
 };
 
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
