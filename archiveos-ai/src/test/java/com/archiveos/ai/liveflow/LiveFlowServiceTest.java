@@ -259,6 +259,21 @@ class LiveFlowServiceTest {
         assertThat(runtimeStatus(service.refresh(), "Archive-Nexus")).isIn("HEALTHY", "WAITING");
     }
 
+    @Test void settlementUsesCanonicalLedgerIdAndShowsPersistedWorkAsProcessing() {
+        LiveFlowRepository repository = repositoryBase(Map.of());
+        when(repository.businessEventCountByNode("archive-ledger", 30)).thenReturn(42L);
+        LiveFlowService service = service(repository, healthyServices(Map.of()));
+
+        Map<String, Object> result = service.refresh();
+        Map<String, Object> settlement = runtimeService(result, "Settlement");
+
+        assertThat(settlement).containsEntry("runtimeStatus", "PROCESSING")
+                .containsEntry("recentThroughput", 42L)
+                .containsEntry("throughputSource", "ledger_persisted_business_events_30m");
+        verify(repository, atLeast(2)).businessEventCountByNode("archive-ledger", 30);
+        verify(repository, never()).businessEventCountByNode("Archive-Ledger", 30);
+    }
+
     private LiveFlowRepository repositoryBase(Map<String, Instant> latestByNode) {
         LiveFlowRepository repository = Mockito.mock(LiveFlowRepository.class);
         when(repository.upsert(any())).thenReturn(Map.of("event_id", "stored"));
