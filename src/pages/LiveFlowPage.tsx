@@ -7,11 +7,11 @@ import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { Pagination } from "../components/shared/Pagination";
 import { getLiveFlowCorrelation, getLiveFlowEntity, refreshLiveFlow, type LiveFlowEvent } from "../lib/backendApi";
+import { runtimeActivityLabel } from "../lib/runtimeActivity";
 import { formatTimeAgo, stringifyMeta } from "./pageUtils";
 
 type FlowNodeId = "market" | "nexus" | "logistics" | "ledger" | "archiveos" | "settlement";
 type FlowEdgeKind = "business" | "async" | "approval" | "settlement" | "monitoring";
-type RuntimeServiceState = NonNullable<NonNullable<NonNullable<AppData["liveFlow"]>["runtime"]>["services"]>[number];
 const flowEdgeColors: Record<FlowEdgeKind, string> = { business: "#22c55e", async: "#60a5fa", approval: "#a855f7", settlement: "#d97706", monitoring: "#0891b2" };
 
 const nodes: Array<{
@@ -411,19 +411,10 @@ function buildNodeStats(events: LiveFlowEvent[], runtimeServices: NonNullable<No
   }
   for (const node of nodes) {
     if (!runtimeServices.some((service) => runtimeServiceToNode(service.serviceId || service.serviceName) === node.id)) {
-      stats[node.id].activityLabel = node.id === "settlement" ? "정산 배치 대기" : stats[node.id].count > 0 ? `현재 처리 ${stats[node.id].count.toLocaleString()}건` : "신규 작업 대기";
+      stats[node.id].activityLabel = runtimeActivityLabel(node.id, stats[node.id].count);
     }
   }
   return stats;
-}
-
-function runtimeActivityLabel(node: FlowNodeId, count: number, service: RuntimeServiceState) {
-  if (count > 0) return `현재 처리 ${count.toLocaleString()}건`;
-  const scheduler = String(service.schedulerStatus || "").toUpperCase();
-  const pipeline = String(service.pipelineStatus || "").toUpperCase();
-  if (node === "nexus" && (scheduler === "DISABLED" || pipeline === "DISABLED")) return "시뮬레이터 안전 정지";
-  if (service.runtimeActive || ["PROCESSING", "RUNNING"].includes(String(service.runtimeStatus || "").toUpperCase())) return "실시간 감시 중";
-  return "신규 작업 대기";
 }
 
 function buildTokenGroups(events: LiveFlowEvent[]) {

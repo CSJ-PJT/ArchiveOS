@@ -5,6 +5,7 @@ const appShell = read("src/app/AppShell.tsx");
 const navigation = read("src/app/navigation.ts");
 const styles = read("src/styles.css");
 const api = read("src/lib/backendApi.ts");
+const runtimeActivity = read("src/lib/runtimeActivity.ts");
 const liveMesh = read("src/components/console/LiveMeshTopology.tsx");
 const liveFlowPage = read("src/pages/LiveFlowPage.tsx");
 const dashboard = read("src/pages/ConsoleDashboardPage.tsx");
@@ -164,16 +165,20 @@ if (!operations.includes('items={[["batch", "배치 작업"], ["rpa", "RPA 검�
 for (const contract of ["Archive-Market", "Archive-Nexus", "Archive-Logistics", "Archive-Ledger", "ArchiveOS", "Settlement", "events.slice(0, 30)"]) {
   if (!liveMesh.includes(contract)) throw new Error(`Mesh topology contract missing: ${contract}`);
 }
-for (const contract of ["nodeEventMetric", "state?.recentThroughput", "현재 처리", "mesh-edge-time-badge", "segment.fromX", "segment.toX"]) {
+for (const contract of ["runtimeActivityLabel", "mesh-edge-time-badge", "segment.fromX", "segment.toX"]) {
   if (!liveMesh.includes(contract)) throw new Error(`Mesh processing/direction contract missing: ${contract}`);
 }
+for (const contract of ["runtime_tick", "최근 실행", "최근 30분", "최근 수집", "시뮬레이터 안전 정지"]) {
+  if (!runtimeActivity.includes(contract)) throw new Error(`Runtime throughput semantics missing: ${contract}`);
+}
+if (runtimeActivity.indexOf('nodeId === "nexus"') > runtimeActivity.indexOf("throughput > 0")) throw new Error("Nexus safe-stop state must take precedence over stale throughput.");
 for (const contract of ["metric.count}건", "totalMinutes", "시간 ${minutes}분 전", "일 ${remainingHours}시간 전", "시간 정보 없음"]) {
   if (!liveMesh.includes(contract)) throw new Error(`Mesh elapsed-time readability contract missing: ${contract}`);
 }
 for (const removed of ["합성 런타임 이벤트만 사용합니다.", "실제 고객, 결제, 계좌, 금융 데이터는 사용하지 않습니다.", "현재 화면은 read-only 관제만 수행합니다."]) {
   if (liveFlowPage.includes(removed)) throw new Error(`Detailed topology contains removed safe-mode notice: ${removed}`);
 }
-for (const contract of ["detail-flow-arrow-", "markerEnd", "flowEdgePath", "parallelEdges", "parallelIndex", "parallelOffset", "mesh-flow-edge", "현재 처리"]) {
+for (const contract of ["detail-flow-arrow-", "markerEnd", "flowEdgePath", "parallelEdges", "parallelIndex", "parallelOffset", "mesh-flow-edge", "runtimeActivityLabel"]) {
   if (!liveFlowPage.includes(contract)) throw new Error(`Detailed topology arrow contract missing: ${contract}`);
 }
 for (const contract of [".mesh-edge-time-badge", ".polished-live-flow .mesh-edge-layer .mesh-flow-edge", "fill:none", "font-variant-numeric:tabular-nums"]) {
