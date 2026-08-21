@@ -325,7 +325,11 @@ public class LiveFlowService {
         String ledgerStatus = string(ledgerState.get("serviceStatus"), "UNKNOWN");
         String ledgerRuntime = string(ledgerState.get("runtimeStatus"), "UNKNOWN");
         long readyCount = number(ledgerState.get("backlogCount"));
-        long recentThroughput = repository.businessEventCountByNode("Archive-Ledger", 30);
+        // ecosystem_flow_event stores canonical lower-case service IDs. Keep the
+        // settlement projection on the same contract as the Ledger runtime row
+        // so real Ledger work is not misreported as an idle settlement batch.
+        String ledgerServiceId = string(ledgerState.get("serviceId"), "archive-ledger");
+        long recentThroughput = repository.businessEventCountByNode(ledgerServiceId, 30);
         boolean ledgerAvailable = !List.of("FAILED", "UNAVAILABLE").contains(ledgerStatus.toUpperCase(Locale.ROOT));
         String runtimeStatus = !ledgerAvailable ? "FAILED"
                 : "PROCESSING".equals(ledgerRuntime) || recentThroughput > 0 ? "PROCESSING"
