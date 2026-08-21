@@ -88,7 +88,7 @@ export function LedgerApprovalsPage({ data, onRefresh }: { data: AppData; onRefr
             <div><strong>{approval.approval_request_id}</strong><span>{approval.transaction_id}</span></div>
             <StatusBadge status={approval.status}>{statusLabel(approval.status)}</StatusBadge>
             <span>{formatAmount(approval)}</span>
-            <span>{String(approval.metadata?.eventType ?? "이벤트 정보 없음")}</span>
+            <span>{approvalReasonLabel(String(approval.metadata?.eventType ?? approval.reason ?? ""))}</span>
             <span>{formatTimeAgo(approval.created_at)}</span>
           </button>)}
           {!approvals.length ? <div className="empty-state">현재 Archive-Ledger 승인 요청이 없습니다.</div> : null}
@@ -154,7 +154,7 @@ function ApprovalDetail({
       <div><h3>{approval.approval_request_id}</h3><span>{approval.correlation_id}</span></div>
       <StatusBadge status={approval.status}>{statusLabel(approval.status)}</StatusBadge>
     </div>
-    <p className="body-copy">{approval.reason}</p>
+    <p className="body-copy">{approvalReasonLabel(approval.reason)}</p>
     <div className="detail-grid">
       <span>금액<strong>{formatAmount(approval)}</strong></span>
       <span>공장<strong>{String(approval.metadata?.factoryId ?? "정보 없음")}</strong></span>
@@ -212,4 +212,19 @@ function statusLabel(value: string) {
     HIGH: "높음", CRITICAL: "긴급", MEDIUM: "보통", LOW: "낮음", NORMAL: "정상",
   };
   return labels[String(value || "").toUpperCase()] || value;
+}
+
+function approvalReasonLabel(value: string) {
+  const normalized = String(value || "").trim();
+  const labels: Record<string, string> = {
+    COLD_CHAIN_RISK_COST_CONFIRMED: "콜드체인 위험 비용 확인",
+    DELAY_PENALTY_CONFIRMED: "배송 지연 비용 확인",
+    LOGISTICS_COST_CONFIRMED: "물류 비용 확인",
+    REFUND_REQUESTED: "환불 승인 요청",
+    ROUTE_DEVIATION_COST_CONFIRMED: "경로 이탈 비용 확인",
+    URGENT_DELIVERY_COST_CONFIRMED: "긴급 배송 비용 확인",
+    "controlled synthetic approval ingress verification": "통제된 합성 승인 수신 검증",
+    "Synthetic logistics cost confirmed by Archive-Logistics": "Archive-Logistics 합성 물류 비용 확인",
+  };
+  return labels[normalized] || (normalized ? normalized.replace(/_/g, " ") : "이벤트 정보 없음");
 }
