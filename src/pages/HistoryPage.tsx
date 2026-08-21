@@ -70,7 +70,7 @@ export function HistoryPage({ data }: { data: AppData }) {
             time: event.created_at,
             type: event.type,
             status: event.status,
-            target: event.title,
+            target: agentRunTitle(event.title),
             summary: event.description,
           }))} />
         </SectionCard>
@@ -165,4 +165,15 @@ function TimelineRows({
 
 function historyTypeLabel(value: string) {
   return ({ knowledge: "지식", task: "작업", approval: "승인", agent: "에이전트", batch: "배치", command: "명령", event: "이벤트", warning: "주의", error: "오류", slack_notification: "Slack 알림" } as Record<string, string>)[String(value || "").toLowerCase()] || value.replace(/_/g, " ");
+}
+
+function agentRunTitle(value: string) {
+  return ({
+    task_created: "에이전트 작업 생성",
+    nexus_action_callback: "에이전트 작업 완료",
+    pm_decision_approve: "PM 승인 완료",
+    pm_decision_reject: "PM 반려 완료",
+    pm_decision_hold: "PM 보류",
+    pm_decision_retry: "에이전트 재시도 요청",
+  } as Record<string, string>)[String(value || "").toLowerCase()] || value.replace(/_/g, " ");
 }

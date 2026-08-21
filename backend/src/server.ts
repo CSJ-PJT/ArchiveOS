@@ -1421,7 +1421,7 @@ type RuntimeEvent = {
   title: string;
   description: string;
   status: "info" | "success" | "warning" | "error";
-  source: "mcp" | "supabase" | "backend";
+  source: "mcp" | "supabase" | "backend" | "archiveos-ai";
   created_at: string;
 };
 
@@ -1748,7 +1748,7 @@ function scoreToGrade(score: number) {
 
 async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
   const checkedAt = new Date().toISOString();
-  const [runtimeResult, commandsResult, decisionsResult, batchRuns, taskEvents] = await Promise.all([
+  const [runtimeResult, commandsResult, decisionsResult, batchRuns, taskEvents, agentTaskRuns] = await Promise.all([
     withTimeout(getLocalRuntimeStatus(), 2500, "Runtime status timed out.").catch(() => null),
     withTimeout(
       supabaseAdmin
@@ -1773,6 +1773,7 @@ async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
     ).catch(() => ({ data: [], error: null })),
     withTimeout(getRecentBatchRuns(5), 2500, "Batch runs timed out.").catch(() => []),
     withTimeout(getTaskEvents(10), 2500, "Task events timed out.").catch(() => []),
+    withTimeout(getArchiveOsAiTaskRuns(10), 2500, "ArchiveOS AI task runs timed out.").catch(() => []),
   ]);
   const runtime =
     runtimeResult ??
@@ -1908,9 +1909,53 @@ async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
     });
   }
 
+  for (const task of agentTaskRuns) {
+    events.push({
+      id: `archiveos-agent-task-${task.id}`,
+      type: "task",
+      title: agentTaskRunTitle(task.status),
+      description: summarizeEventDescription(`${task.title} - ${task.description}`),
+      status: ["done", "approved"].includes(task.status)
+        ? "success"
+        : task.status === "failed"
+          ? "error"
+          : ["hold", "rejected"].includes(task.status)
+            ? "warning"
+            : "info",
+      source: "archiveos-ai",
+      created_at: task.completed_at ?? task.updated_at ?? task.created_at,
+    });
+  }
+
   return events
     .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
     .slice(0, 20);
+}
+
+type ArchiveOsAiTaskRun = {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  created_at: string;
+  updated_at: string | null;
+  completed_at: string | null;
+};
+
+async function getArchiveOsAiTaskRuns(limit: number): Promise<ArchiveOsAiTaskRun[]> {
+  const baseUrl = process.env.ARCHIVEOS_AI_BASE_URL?.trim() || "http://localhost:4100";
+  const response = await fetch(`${baseUrl}/api/tasks`);
+  if (!response.ok) throw new Error(`ArchiveOS AI task runs returned ${response.status}.`);
+  const payload = await response.json() as { data?: ArchiveOsAiTaskRun[] };
+  return (payload.data ?? []).slice(0, Math.min(Math.max(limit, 1), 100));
+}
+
+function agentTaskRunTitle(status: string) {
+  if (["done", "approved"].includes(status)) return "에이전트 실행 완료";
+  if (status === "failed") return "에이전트 실행 실패";
+  if (status === "hold") return "에이전트 실행 보류";
+  if (status === "rejected") return "에이전트 실행 반려";
+  return "에이전트 실행 중";
 }
 
 function summarizeEventDescription(value: string) {
