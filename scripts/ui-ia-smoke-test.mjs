@@ -29,14 +29,21 @@ const agents = read("src/pages/AgentsPage.tsx");
 const workflows = read("src/pages/WorkflowsPage.tsx");
 const sidebar = read("src/components/shared/Sidebar.tsx");
 const consoleSettings = read("src/pages/ConsoleSettingsPage.tsx");
+const mailPage = read("src/pages/MailPage.tsx");
 const mcpRegistry = read("src/pages/McpRegistryPage.tsx");
 const pageUtils = read("src/pages/pageUtils.ts");
 const i18n = read("src/i18n/I18nProvider.tsx");
 
-for (const label of ["대시보드", "서비스", "운영", "재무", "기록", "설정"]) {
+for (const label of ["대시보드", "서비스", "운영", "재무", "기록", "메일", "설정"]) {
   if (!navigation.includes(`label: "${label}"`)) throw new Error(`Missing Console V3 navigation label: ${label}`);
 }
-if ((navigation.match(/\{ id: "/g) ?? []).length !== 6) throw new Error("Console V3 must expose exactly six top-level navigation items.");
+if ((navigation.match(/\{ id: "/g) ?? []).length !== 7) throw new Error("ArchiveOS must expose the six core sections plus the admin-only mail section.");
+for (const contract of ['item.id !== "mail" || role === "ADMIN"', "관리자 전용 ArchiveOS 메일"]) {
+  if (!sidebar.includes(contract) && !navigation.includes(contract)) throw new Error(`Admin-only mail navigation contract missing: ${contract}`);
+}
+for (const contract of ["getMailStatus", "getMailMessages", "getMailMessage", "markMailRead", "sendMail", "관리자 로그인이 필요합니다", "외부 메일 발송"]) {
+  if (!mailPage.includes(contract) && !api.includes(contract)) throw new Error(`ArchiveOS mail UI contract missing: ${contract}`);
+}
 for (const route of ["overview", "liveflow", "ecosystem", "agents", "approvals", "history", "mcp"]) {
   if (!navigation.includes(`${route}:`)) throw new Error(`Legacy redirect missing: ${route}`);
 }

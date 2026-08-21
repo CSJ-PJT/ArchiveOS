@@ -193,6 +193,9 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Hold External Approval", method: "POST", path: "/api/approvals/external/:id/hold", service: "runtime", description: "PM/Admin hold decision without Ledger mutation." },
   { name: "Approve All External Approvals", method: "POST", path: "/api/approvals/external/approve-all", service: "runtime", description: "Admin-only audited approval backlog drain." },
   { name: "Create Named Admin", method: "POST", path: "/api/auth/admin/users", service: "runtime", description: "Admin-only named credential creation." },
+  { name: "Mail Status", method: "GET", path: "/api/mail/status", service: "runtime", description: "Admin-only ArchiveOS mailbox readiness." },
+  { name: "Mail Messages", method: "GET", path: "/api/mail/messages", service: "runtime", description: "Admin-only inbox and sent mail listing." },
+  { name: "Send Mail", method: "POST", path: "/api/mail/send", service: "runtime", description: "Admin-only external mail delivery." },
   { name: "Queue Summary", method: "GET", path: "/api/queue/summary", service: "queue", description: "Semi-auto queue summary." },
   { name: "Queue Run Once", method: "POST", path: "/api/queue/run-once", service: "queue", description: "State transition and instruction generation only." },
   { name: "Queue Nightly Summary", method: "POST", path: "/api/queue/nightly-summary", service: "queue", description: "Slack queue summary without execution." },
@@ -261,6 +264,18 @@ app.use(
     },
   }),
 );
+app.post("/api/mail/webhooks/resend", express.raw({ type: "application/json", limit: "1mb" }), async (request, response) => {
+  const headers = new Headers({ "content-type": "application/json" });
+  for (const name of ["svix-id", "svix-timestamp", "svix-signature"]) {
+    const value = request.header(name);
+    if (value) headers.set(name, value);
+  }
+  await relayArchiveOsAi(response, "/api/mail/webhooks/resend", {
+    method: "POST",
+    headers,
+    body: Buffer.isBuffer(request.body) ? request.body : Buffer.from(String(request.body ?? "")),
+  });
+});
 app.use(express.json());
 
 app.post("/api/auth/login", async (request, response) => {
@@ -320,6 +335,30 @@ app.use("/api", async (request, response, next) => {
   } catch {
     response.status(503).json({ error: "Authorization service is unavailable." });
   }
+});
+
+app.get("/api/mail/status", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/mail/status", undefined, undefined, request);
+});
+
+app.get("/api/mail/messages", async (request, response) => {
+  const params = new URLSearchParams();
+  params.set("folder", String(request.query.folder ?? "inbox"));
+  params.set("page", String(request.query.page ?? "0"));
+  params.set("size", String(request.query.size ?? "20"));
+  await relayArchiveOsAi(response, `/api/mail/messages?${params}`, undefined, undefined, request);
+});
+
+app.get("/api/mail/messages/:id", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/mail/messages/${encodeURIComponent(request.params.id)}`, undefined, undefined, request);
+});
+
+app.patch("/api/mail/messages/:id/read", async (request, response) => {
+  await relayArchiveOsAi(response, `/api/mail/messages/${encodeURIComponent(request.params.id)}/read`, jsonProxyRequest("PATCH", request.body), undefined, request);
+});
+
+app.post("/api/mail/send", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/mail/send", jsonProxyRequest("POST", request.body), undefined, request);
 });
 
 app.get("/health", (_request, response) => {

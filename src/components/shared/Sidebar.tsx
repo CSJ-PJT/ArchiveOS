@@ -46,7 +46,7 @@ export function Sidebar({
         </div>
       </div>
       <nav className="sidebar-nav" aria-label="ArchiveOS 메뉴">
-        {navigationItems.map((item) => (
+        {navigationItems.filter((item) => item.id !== "mail" || role === "ADMIN").map((item) => (
           <button
             className={`sidebar-link ${route === item.id ? "active" : ""}`}
             key={item.id}

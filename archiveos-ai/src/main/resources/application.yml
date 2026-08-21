@@ -58,6 +58,12 @@ archiveos:
     slack-webhook-url: ${SLACK_WEBHOOK_URL:}
     slack-bot-token: ${SLACK_BOT_TOKEN:}
     slack-channel: ${SLACK_CHANNEL:}
+  mail:
+    enabled: ${ARCHIVEOS_MAIL_ENABLED:false}
+    address: ${ARCHIVEOS_MAIL_ADDRESS:}
+    sender-name: ${ARCHIVEOS_MAIL_SENDER_NAME:ArchiveOS}
+    resend-api-key: ${RESEND_API_KEY:}
+    resend-webhook-secret: ${RESEND_WEBHOOK_SECRET:}
   ledger:
     base-url: ${ARCHIVE_LEDGER_BASE_URL:}
     callback-token: ${ARCHIVE_TOKEN_OS_TO_LEDGER:}
