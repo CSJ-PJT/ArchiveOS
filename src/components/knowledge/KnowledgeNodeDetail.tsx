@@ -58,8 +58,8 @@ export function KnowledgeGraphNodeDetail({
         <strong>{node.source || "알 수 없음"}</strong>
         <span>중요도</span>
         <strong>{node.importanceScore}</strong>
-        <span>생성</span>
-        <strong title={formatExactDate(node.createdAt)}>{formatRelativeTime(node.createdAt)}</strong>
+        <span>최근 갱신</span>
+        <strong title={formatExactDate(node.updatedAt || node.createdAt)}>{formatRelativeTime(node.updatedAt || node.createdAt)}</strong>
       </div>
 
       {node.summary ? <p className="detail-summary">{node.summary}</p> : null}

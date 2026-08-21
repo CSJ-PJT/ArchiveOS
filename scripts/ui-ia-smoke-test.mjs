@@ -17,6 +17,8 @@ const knowledgeUi = read("src/components/knowledge/KnowledgeUi.tsx");
 const knowledgePanel = read("src/components/knowledge/KnowledgeGraphPanel.tsx");
 const knowledgeGraph = read("src/components/knowledge/KnowledgeGraphSvg.tsx");
 const knowledgeUtils = read("src/components/knowledge/knowledgeGraphUtils.ts");
+const activeDecisionChain = read("src/components/knowledge/ActiveDecisionChainPanel.tsx");
+const knowledgeNodeDetail = read("src/components/knowledge/KnowledgeNodeDetail.tsx");
 const records = read("src/pages/ConsoleRecordsPage.tsx");
 const history = read("src/pages/HistoryPage.tsx");
 const pagination = read("src/components/shared/Pagination.tsx");
@@ -135,6 +137,10 @@ for (const contract of ["hoveredNodeId", "hoverEdgeIds", "onMouseEnter", "graph-
 for (const contract of ["buildConnectedMemoryChains", 'kind: "memory"', "chainNodes.length < 2", "memory-chain-"]) {
   if (!knowledgeUtils.includes(contract)) throw new Error(`Truthful active memory chain contract missing: ${contract}`);
 }
+for (const contract of ["step.node.updatedAt || step.node.createdAt", "updatedAt || right.createdAt", "updatedAt || left.createdAt"]) {
+  if (!activeDecisionChain.includes(contract) && !knowledgeUtils.includes(contract)) throw new Error(`Knowledge refresh timestamp contract missing: ${contract}`);
+}
+if (!knowledgeNodeDetail.includes("node.updatedAt || node.createdAt")) throw new Error("Knowledge node detail must display the latest synchronization time.");
 for (const contract of [".settings-list>div", ".memory-chain-card", ".knowledge-graph-panel .panel-header"]) {
   if (!styles.includes(contract)) throw new Error(`Knowledge layout restoration missing: ${contract}`);
 }
