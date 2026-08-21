@@ -21,6 +21,7 @@ const activeDecisionChain = read("src/components/knowledge/ActiveDecisionChainPa
 const knowledgeNodeDetail = read("src/components/knowledge/KnowledgeNodeDetail.tsx");
 const records = read("src/pages/ConsoleRecordsPage.tsx");
 const history = read("src/pages/HistoryPage.tsx");
+const backendServer = read("backend/src/server.ts");
 const pagination = read("src/components/shared/Pagination.tsx");
 const operations = read("src/pages/ConsoleOperationsPage.tsx");
 const agents = read("src/pages/AgentsPage.tsx");
@@ -79,6 +80,12 @@ for (const contract of ["Atlas Platform", "ATLAS PROJECT", "latestAtlasCheck", "
 }
 for (const contract of ["data.kpi.runtime", "data.kpi.knowledge", "지식 노드", "지식 관계", "Runtime 상태"]) {
   if (!history.includes(contract)) throw new Error(`Complete KPI history contract missing: ${contract}`);
+}
+for (const contract of ["agentRunTitle", "에이전트 작업 생성", "에이전트 작업 완료", "에이전트 재시도 요청"]) {
+  if (!history.includes(contract)) throw new Error(`Agent run localization contract missing: ${contract}`);
+}
+for (const contract of ["getArchiveOsAiTaskRuns", "archiveos-agent-task-", "에이전트 실행 완료", 'source: "archiveos-ai"']) {
+  if (!backendServer.includes(contract)) throw new Error(`Persisted ArchiveOS AI task-run projection missing: ${contract}`);
 }
 for (const contract of ["operatingMarginLabel(row)", 'number(row.revenue) === 0 && number(row.profit) < 0', 'return "적자"']) {
   if (!finance.includes(contract)) throw new Error(`Valid zero-revenue loss must not be rendered as missing finance data: ${contract}`);
