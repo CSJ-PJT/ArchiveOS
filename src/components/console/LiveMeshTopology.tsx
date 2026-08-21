@@ -84,7 +84,7 @@ export function LiveMeshTopology({ topology, summary, events, onNavigate, onAsk 
         const from = nodeMap.get(edge.from); const to = nodeMap.get(edge.to); if (!from || !to) return null;
         const metric = edgeMetrics.get(edgeKey(edge.from, edge.to)); if (!metric?.count) return null;
         const anchor = edgeAnchor(edgeSegment(from, to), edgeIndex(edge, edges));
-        return <button type="button" key={`badge-${edgeKey(edge.from, edge.to)}`} className="mesh-edge-time-badge" style={{ left: `${anchor.x}%`, top: `${anchor.y}%` }} onClick={(event) => openSelection({ type: "edge", edge }, event.currentTarget)} title={`${edge.label} · ${metric.count}건 · ${shortAge(metric.lastAt)}`}>{metric.count}<span>·</span>{shortAge(metric.lastAt)}</button>;
+        return <button type="button" key={`badge-${edgeKey(edge.from, edge.to)}`} className="mesh-edge-time-badge" style={{ left: `${anchor.x}%`, top: `${anchor.y}%` }} onClick={(event) => openSelection({ type: "edge", edge }, event.currentTarget)} title={`${edge.label} · ${metric.count}건 · ${shortAge(metric.lastAt)}`}>{metric.count}건<span>·</span>{shortAge(metric.lastAt)}</button>;
       })}
       {nodes.map((node) => {
         const runtimeState = runtime.find((state) => normalizeNode(state.serviceId || state.serviceName) === node.id);
@@ -137,7 +137,21 @@ function edgeTone(from: string, to: string) { if ((from === "ledger" && to === "
 function tokenTone(event: LiveFlowEvent) { const value = `${event.status} ${event.severity}`.toLowerCase(); if (value.includes("fail") || value.includes("critical")) return "critical"; if (value.includes("delay") || value.includes("warning")) return "warning"; if (value.includes("approval")) return "approval"; if (value.includes("wait")) return "waiting"; if (value.includes("complete") || value.includes("settled")) return "completed"; return "normal"; }
 function runtimeLabel(value?: string | null) { const text = String(value || "").toUpperCase(); if (["PROCESSING", "RUNNING", "MOVING"].includes(text)) return "처리 중"; if (["STALLED", "STALE"].includes(text)) return "정체"; if (["WARNING", "DEGRADED", "SLOW", "DELAYED"].includes(text)) return "주의"; if (["FAILED", "UNAVAILABLE"].includes(text)) return "실패"; if (["HEALTHY", "LIVE", "COMPLETED"].includes(text)) return "정상"; return "대기"; }
 function shortNodeLabel(value?: string | null) { const id = normalizeNode(value); return ({ market: "Market", nexus: "Nexus", logistics: "Logistics", ledger: "Ledger", archiveos: "ArchiveOS", settlement: "Settlement" } as Record<string, string>)[id]; }
-function shortAge(value?: string | null) { if (!value) return "-"; const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000)); if (seconds < 60) return `${seconds}초`; return `${Math.floor(seconds / 60)}분`; }
+function shortAge(value?: string | null) {
+  if (!value) return "시간 정보 없음";
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return "시간 정보 없음";
+  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (seconds < 60) return `${seconds}초 전`;
+  const totalMinutes = Math.floor(seconds / 60);
+  if (totalMinutes < 60) return `${totalMinutes}분 전`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours < 24) return minutes ? `${hours}시간 ${minutes}분 전` : `${hours}시간 전`;
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours ? `${days}일 ${remainingHours}시간 전` : `${days}일 전`;
+}
 function nodeEventMetric(nodeId: string, count: number, state?: RuntimeService) {
   const throughput = typeof state?.recentThroughput === "number" ? state.recentThroughput : count;
   if (throughput > 0) return `현재 처리 ${throughput.toLocaleString()}건`;

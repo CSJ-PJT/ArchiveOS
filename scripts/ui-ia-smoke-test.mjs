@@ -167,6 +167,12 @@ for (const contract of ["Archive-Market", "Archive-Nexus", "Archive-Logistics", 
 for (const contract of ["nodeEventMetric", "state?.recentThroughput", "현재 처리", "mesh-edge-time-badge", "segment.fromX", "segment.toX"]) {
   if (!liveMesh.includes(contract)) throw new Error(`Mesh processing/direction contract missing: ${contract}`);
 }
+for (const contract of ["metric.count}건", "totalMinutes", "시간 ${minutes}분 전", "일 ${remainingHours}시간 전", "시간 정보 없음"]) {
+  if (!liveMesh.includes(contract)) throw new Error(`Mesh elapsed-time readability contract missing: ${contract}`);
+}
+for (const removed of ["합성 런타임 이벤트만 사용합니다.", "실제 고객, 결제, 계좌, 금융 데이터는 사용하지 않습니다.", "현재 화면은 read-only 관제만 수행합니다."]) {
+  if (liveFlowPage.includes(removed)) throw new Error(`Detailed topology contains removed safe-mode notice: ${removed}`);
+}
 for (const contract of ["detail-flow-arrow-", "markerEnd", "flowEdgePath", "parallelEdges", "parallelIndex", "parallelOffset", "mesh-flow-edge", "현재 처리"]) {
   if (!liveFlowPage.includes(contract)) throw new Error(`Detailed topology arrow contract missing: ${contract}`);
 }
