@@ -2929,6 +2929,12 @@ body {
 /* Bounded runtime event lists: page instead of compressing or hiding rows. */
 .list-pagination { display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-top:.65rem;padding-top:.55rem;border-top:1px solid var(--color-border);color:var(--color-text-muted);font-size:.76rem }
 .list-pagination>div { display:flex;gap:.4rem }
+.mesh-node-runtime-active{box-shadow:0 0 0 1px rgba(72,211,160,.22),0 8px 24px rgba(0,0,0,.2)}
+.mesh-node-runtime-active::after{content:"";position:absolute;right:.45rem;top:.45rem;width:.42rem;height:.42rem;border-radius:50%;background:#48d3a0;box-shadow:0 0 0 .22rem rgba(72,211,160,.14);animation:runtime-node-pulse 2.2s ease-in-out infinite}
+@keyframes runtime-node-pulse{50%{opacity:.48;transform:scale(.84)}}
+.page-host{position:relative}.page-loading-overlay{position:absolute;inset:.35rem;z-index:40;display:flex;min-height:12rem;align-items:center;justify-content:center;gap:.7rem;border-radius:1rem;background:color-mix(in srgb,var(--color-background) 88%,transparent);backdrop-filter:blur(2px);color:var(--color-text)}
+.page-loading-spinner{width:1.65rem;height:1.65rem;border:.2rem solid color-mix(in srgb,var(--color-info) 22%,transparent);border-top-color:var(--color-info);border-radius:50%;animation:page-loading-spin .72s linear infinite}
+.manual-refresh-only{font-size:.76rem;color:var(--color-text-muted);white-space:nowrap}@keyframes page-loading-spin{to{transform:rotate(360deg)}}
 .list-pagination button { min-width:3.6rem;border:1px solid var(--color-border);border-radius:.5rem;background:var(--color-surface);color:var(--color-text);padding:.38rem .58rem;cursor:pointer }
 .list-pagination button:disabled { opacity:.42;cursor:not-allowed }
 .dashboard-event-table { min-width:0;overflow-x:auto }

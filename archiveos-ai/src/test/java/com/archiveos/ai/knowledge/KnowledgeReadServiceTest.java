@@ -41,7 +41,7 @@ class KnowledgeReadServiceTest {
         when(obsidian.projectionDocuments(org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(
                 new ObsidianJdbcRepository.ProjectionDocument(7L, "operations/runbook.md", "운영 런북", "2026-08-20T00:00:00Z")));
         when(obsidian.projectionChunks(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(List.of(
-                new ObsidianJdbcRepository.ProjectionChunk(11L, 7L, 0, "복구 절차", "2026-08-20T00:00:00Z")));
+                new ObsidianJdbcRepository.ProjectionChunk(11L, 7L, 0, "복구 절차", "2026-08-20T00:00:00Z", "2026-08-21T00:00:00Z")));
 
         KnowledgeReadService service = new KnowledgeReadService(repository, obsidian);
         Map<String, Object> overview = service.overview();

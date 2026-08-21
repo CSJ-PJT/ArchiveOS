@@ -820,8 +820,8 @@ export async function getLiveFlowTopology() {
   return response.data;
 }
 
-export async function getLiveFlowRecentEvents(limit = 100) {
-  const response = await request<ApiEnvelope<{ data: LiveFlowEvent[] }>>(`/api/live-flow/events/recent?limit=${limit}`);
+export async function getLiveFlowRecentEvents(limit = 100, balanced = false) {
+  const response = await request<ApiEnvelope<{ data: LiveFlowEvent[] }>>(`/api/live-flow/events/recent?limit=${limit}&balanced=${balanced}`);
   return response.data.data;
 }
 
@@ -1444,6 +1444,7 @@ export type KnowledgeGraphNode = {
   source: string | null;
   externalRef: string | null;
   createdAt: string;
+  updatedAt?: string | null;
   metadata: Record<string, unknown>;
   importanceScore: number;
   importanceLevel: ImportanceLevel;

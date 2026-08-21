@@ -107,9 +107,10 @@ public class LiveFlowService {
                         edge("ledger", "archiveos", "health / summary")));
     }
 
-    public Map<String, Object> recent(int limit) {
-        return Map.of("data", repository.recent(limit));
+    public Map<String, Object> recent(int limit, boolean balanced) {
+        return Map.of("data", balanced ? repository.recentBalanced(limit) : repository.recent(limit));
     }
+    public Map<String, Object> recent(int limit) { return recent(limit, false); }
     public Map<String, Object> replay(String from, String to, int limit) { return Map.of("mode", "REPLAY", "data", repository.replay(from, to, limit)); }
     public Map<String, Object> correlation(String correlationId) { return Map.of("correlationId", correlationId, "data", repository.byCorrelation(correlationId, 200)); }
     public Map<String, Object> entity(String entityId) { return Map.of("entityId", entityId, "data", repository.byEntity(entityId, 200)); }
@@ -191,6 +192,15 @@ public class LiveFlowService {
             serviceStates.add(archiveOs);
             if (List.of("PROCESSING", "WAITING", "HEALTHY").contains(string(archiveOs.get("runtimeStatus"), ""))) activeServices.add("ArchiveOS");
             if ("STALLED".equals(string(archiveOs.get("runtimeStatus"), ""))) stalledServices.add("ArchiveOS");
+
+            Map<String, Object> ledgerState = serviceStates.stream()
+                    .filter(state -> "archive-ledger".equalsIgnoreCase(string(state.get("serviceId"), "")))
+                    .findFirst().orElse(Map.of());
+            Map<String, Object> settlement = settlementRuntimeState(latestByNode.get("settlement"), ledgerState);
+            serviceStates.add(settlement);
+            if (List.of("PROCESSING", "WAITING", "HEALTHY").contains(string(settlement.get("runtimeStatus"), ""))) {
+                activeServices.add("Settlement");
+            }
         } catch (RuntimeException error) {
             stalledServices.add("ArchiveOS collector");
         }
@@ -308,6 +318,35 @@ public class LiveFlowService {
         value.put("schedulerStatus", "RUNNING");
         value.put("pipelineStatus", "LIVE_FLOW_COLLECTING");
         value.put("reason", runtimeStatusReason(runtimeStatus, "HEALTHY", latestNodeEventAt, "RUNNING", 0));
+        return value;
+    }
+
+    private Map<String, Object> settlementRuntimeState(Instant latestNodeEventAt, Map<String, Object> ledgerState) {
+        String ledgerStatus = string(ledgerState.get("serviceStatus"), "UNKNOWN");
+        String ledgerRuntime = string(ledgerState.get("runtimeStatus"), "UNKNOWN");
+        long readyCount = number(ledgerState.get("backlogCount"));
+        long recentThroughput = repository.businessEventCountByNode("Archive-Ledger", 30);
+        boolean ledgerAvailable = !List.of("FAILED", "UNAVAILABLE").contains(ledgerStatus.toUpperCase(Locale.ROOT));
+        String runtimeStatus = !ledgerAvailable ? "FAILED"
+                : "PROCESSING".equals(ledgerRuntime) || recentThroughput > 0 ? "PROCESSING"
+                : readyCount > 0 ? "WAITING" : "HEALTHY";
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("serviceId", "settlement");
+        value.put("serviceName", "Settlement");
+        value.put("serviceStatus", ledgerAvailable ? "HEALTHY" : ledgerStatus);
+        value.put("runtimeStatus", runtimeStatus);
+        value.put("lastEventAt", latestNodeEventAt == null ? ledgerState.get("lastWorkAt") : latestNodeEventAt.toString());
+        value.put("lastWorkAt", ledgerState.get("lastWorkAt"));
+        value.put("runtimeActive", ledgerAvailable);
+        value.put("autoRunEnabled", ledgerState.getOrDefault("autoRunEnabled", false));
+        value.put("eventsProducedLastTick", 0);
+        value.put("eventsConsumedLastTick", 0);
+        value.put("backlogCount", readyCount);
+        value.put("recentThroughput", recentThroughput);
+        value.put("throughputSource", "ledger_persisted_business_events_30m");
+        value.put("schedulerStatus", ledgerState.getOrDefault("schedulerStatus", "UNKNOWN"));
+        value.put("pipelineStatus", "LEDGER_SETTLEMENT_MONITORING");
+        value.put("reason", ledgerAvailable ? "Ledger settlement and approval flow is being monitored." : "Ledger is unavailable.");
         return value;
     }
 

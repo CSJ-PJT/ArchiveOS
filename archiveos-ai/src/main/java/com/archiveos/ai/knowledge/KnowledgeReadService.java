@@ -169,7 +169,7 @@ public class KnowledgeReadService {
             String chunkId = chunkId(chunk.id());
             nodes.add(new KnowledgeNode(chunkId, "obsidian_chunk", title,
                     documentTitle + " 문서에서 인덱싱된 운영 지식 청크", "obsidian", safePath(document.filePath()) + "#chunk-" + chunk.chunkIndex(),
-                    map("origin", "obsidian_index", "documentId", chunk.documentId(), "chunkIndex", chunk.chunkIndex()), chunk.createdAt(), chunk.createdAt()));
+                    map("origin", "obsidian_index", "documentId", chunk.documentId(), "chunkIndex", chunk.chunkIndex()), chunk.createdAt(), chunk.documentUpdatedAt()));
             edges.add(new KnowledgeEdge("obsidian-edge-" + chunk.id(), documentId(chunk.documentId()), chunkId,
                     "contains_chunk", 1.0, map("origin", "obsidian_index"), chunk.createdAt()));
         }
@@ -184,13 +184,13 @@ public class KnowledgeReadService {
     private Map<String, Object> graphNode(KnowledgeNode node, List<KnowledgeEdge> edges, Map<String, KnowledgeNode> byId) {
         List<KnowledgeEdge> related = edges.stream().filter(edge -> edge.from_node_id().equals(node.id()) || edge.to_node_id().equals(node.id())).toList();
         int in = (int) related.stream().filter(edge -> edge.to_node_id().equals(node.id())).count(); int out = related.size() - in;
-        boolean recent = recent(node.created_at()) || related.stream().anyMatch(edge -> recent(edge.created_at()));
+        boolean recent = recent(node.updated_at()) || recent(node.created_at()) || related.stream().anyMatch(edge -> recent(edge.created_at()));
         boolean decision = "decision".equals(node.node_type()) || related.stream().map(edge -> byId.get(edge.from_node_id().equals(node.id()) ? edge.to_node_id() : edge.from_node_id())).anyMatch(item -> item != null && "decision".equals(item.node_type()));
         List<KnowledgeNode> relatedNodes = related.stream().map(edge -> byId.get(edge.from_node_id().equals(node.id()) ? edge.to_node_id() : edge.from_node_id())).filter(java.util.Objects::nonNull).toList();
         int score = related.size() + switch (node.node_type()) { case "decision", "architecture_review" -> 3; case "incident", "daily_report", "nightly_review" -> 2; default -> 0; } + (related.size() >= 2 ? 2 : 0) + (recent ? 2 : 0) + (decision ? 3 : 0)
                 + (relatedNodes.stream().anyMatch(item -> "architecture_review".equals(item.node_type())) ? 3 : 0)
                 + (relatedNodes.stream().anyMatch(item -> "incident".equals(item.node_type())) ? 3 : 0);
-        return map("id", node.id(), "type", node.node_type(), "label", label(node), "title", node.title(), "summary", node.summary(), "source", node.source(), "externalRef", node.external_ref(), "createdAt", node.created_at(), "metadata", sanitize(node.metadata()), "importanceScore", score, "importanceLevel", level(score), "degree", related.size(), "inDegree", in, "outDegree", out, "lastReferencedAt", related.stream().map(KnowledgeEdge::created_at).max(String::compareTo).orElse(null), "isRecent", recent, "isHub", related.size() >= 3, "isDecisionRelevant", decision);
+        return map("id", node.id(), "type", node.node_type(), "label", label(node), "title", node.title(), "summary", node.summary(), "source", node.source(), "externalRef", node.external_ref(), "createdAt", node.created_at(), "updatedAt", node.updated_at(), "metadata", sanitize(node.metadata()), "importanceScore", score, "importanceLevel", level(score), "degree", related.size(), "inDegree", in, "outDegree", out, "lastReferencedAt", related.stream().map(KnowledgeEdge::created_at).max(String::compareTo).orElse(node.updated_at()), "isRecent", recent, "isHub", related.size() >= 3, "isDecisionRelevant", decision);
     }
 
     private Map<String, Object> graphEdge(KnowledgeEdge edge, Map<String, KnowledgeNode> byId) {

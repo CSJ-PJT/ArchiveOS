@@ -49,11 +49,11 @@ export function LedgerApprovalsPage({ data, onRefresh }: { data: AppData; onRefr
     setMessage(null);
     try {
       await decideExternalApproval(selected.approval_request_id, action, comment);
-      setMessage(`External approval ${action} recorded.`);
+      setMessage(action === "approve" ? "승인을 기록했습니다." : action === "reject" ? "반려를 기록했습니다." : "보류를 기록했습니다.");
       setComment("");
       await onRefresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : `Failed to ${action} approval.`);
+      setMessage(error instanceof Error ? error.message : "승인 결정을 기록하지 못했습니다.");
     } finally {
       setBusy(null);
     }
@@ -62,22 +62,22 @@ export function LedgerApprovalsPage({ data, onRefresh }: { data: AppData; onRefr
   return <div className="page-stack">
     <header className="page-heading">
       <div>
-        <span className="eyebrow">Archive-Ledger integration gateway</span>
-        <h2>Ledger Approval Queue</h2>
-        <p>ArchiveOS records policy evidence and PM decisions. Ledger remains responsible for transaction, settlement, reconciliation, and ledger mutation.</p>
+        <span className="eyebrow">ARCHIVE-LEDGER 승인 연동</span>
+        <h2>승인·정산 대기열</h2>
+        <p>ArchiveOS는 정책 근거와 승인 결정을 기록하고, Ledger는 거래·정산·대사를 책임집니다.</p>
       </div>
-      <button className="button button-secondary" type="button" onClick={() => void onRefresh()}>Refresh</button>
+      <button className="button button-secondary" type="button" onClick={() => void onRefresh()}>새로고침</button>
     </header>
 
     <section className="kpi-command-grid">
-      <MetricCard label="Pending" value={totalPending} status={totalPending ? "blocked" : "healthy"} description="Current PostgreSQL approval queue" />
-      <MetricCard label="High Risk" value={summary.high} status={summary.high ? "warning" : "healthy"} description="Loaded 50-item window" />
-      <MetricCard label="Callback Failed" value={summary.callbackFailed} status={summary.callbackFailed ? "critical" : "healthy"} description="Loaded 50-item window" />
-      <MetricCard label="Fallback Evidence" value={summary.fallback} status={summary.fallback ? "warning" : "healthy"} description="Loaded 50-item window" />
+      <MetricCard label="승인 대기" value={totalPending} status={totalPending ? "blocked" : "healthy"} description="현재 PostgreSQL 승인 대기열" />
+      <MetricCard label="고위험" value={summary.high} status={summary.high ? "warning" : "healthy"} description="최근 50건 기준" />
+      <MetricCard label="콜백 실패" value={summary.callbackFailed} status={summary.callbackFailed ? "critical" : "healthy"} description="최근 50건 기준" />
+      <MetricCard label="규칙 기반 근거" value={summary.fallback} status={summary.fallback ? "warning" : "healthy"} description="최근 50건 기준" />
     </section>
 
     <section className="workflows-layout">
-      <SectionCard title="Approval Requests" eyebrow="Synthetic transaction approvals">
+      <SectionCard title="승인 요청" eyebrow="합성 거래 승인">
         <div className="workflow-list">
           {approvals.map((approval) => <button
             className={`workflow-row ledger-approval-row ${selected?.approval_request_id === approval.approval_request_id ? "selected" : ""}`}
@@ -86,16 +86,16 @@ export function LedgerApprovalsPage({ data, onRefresh }: { data: AppData; onRefr
             onClick={() => setSelectedId(approval.approval_request_id)}
           >
             <div><strong>{approval.approval_request_id}</strong><span>{approval.transaction_id}</span></div>
-            <StatusBadge status={approval.status}>{approval.status}</StatusBadge>
+            <StatusBadge status={approval.status}>{statusLabel(approval.status)}</StatusBadge>
             <span>{formatAmount(approval)}</span>
-            <span>{String(approval.metadata?.eventType ?? "event n/a")}</span>
+            <span>{String(approval.metadata?.eventType ?? "이벤트 정보 없음")}</span>
             <span>{formatTimeAgo(approval.created_at)}</span>
           </button>)}
-          {!approvals.length ? <div className="empty-state">No Archive-Ledger approval requests recorded yet.</div> : null}
+          {!approvals.length ? <div className="empty-state">현재 Archive-Ledger 승인 요청이 없습니다.</div> : null}
         </div>
       </SectionCard>
 
-      <SectionCard title="Approval Detail" eyebrow="Evidence + callback + decision">
+      <SectionCard title="승인 상세" eyebrow="근거 · 콜백 · 결정">
         {selected ? <ApprovalDetail
           approval={selected}
           canDecide={canDecide}
@@ -104,28 +104,28 @@ export function LedgerApprovalsPage({ data, onRefresh }: { data: AppData; onRefr
           message={message}
           setComment={setComment}
           decide={decide}
-        /> : <div className="empty-state">Select an approval request to inspect policy evidence.</div>}
+        /> : <div className="empty-state">정책 근거를 확인할 승인 요청을 선택하세요.</div>}
       </SectionCard>
 
-      <SectionCard title="Callback Outbox" eyebrow="Ledger callback retry queue">
+      <SectionCard title="콜백 발신함" eyebrow="Ledger 콜백 재시도 대기열">
         <div className="history-table">
           {callbacks.map((callback) => <article className="history-row" key={String(callback.callback_id)}>
             <summary>
               <strong>{String(callback.callback_id)}</strong>
-              <StatusBadge status={String(callback.status)}>{String(callback.status)}</StatusBadge>
+              <StatusBadge status={String(callback.status)}>{statusLabel(String(callback.status))}</StatusBadge>
               <span>{String(callback.approval_request_id)}</span>
-              <p>{String(callback.last_error || "No error recorded.")}</p>
+              <p>{String(callback.last_error || "기록된 오류 없음")}</p>
             </summary>
             <div className="detail-grid">
-              <span>Target<strong>{String(callback.target_service)}</strong></span>
-              <span>Retry<strong>{String(callback.retry_count)}</strong></span>
-              <span>Updated<strong>{callback.updated_at ? formatTimeAgo(String(callback.updated_at)) : "n/a"}</strong></span>
+              <span>대상<strong>{String(callback.target_service)}</strong></span>
+              <span>재시도<strong>{String(callback.retry_count)}</strong></span>
+              <span>갱신<strong>{callback.updated_at ? formatTimeAgo(String(callback.updated_at)) : "정보 없음"}</strong></span>
             </div>
             {data.auth.role === "ADMIN" && String(callback.status) !== "SENT" ? <button className="button button-secondary" type="button" onClick={async () => { await retryApprovalCallback(String(callback.callback_id)); await onRefresh(); }}>
-              Retry callback
+              콜백 재시도
             </button> : null}
           </article>)}
-          {!callbacks.length ? <div className="empty-state">No callback outbox item recorded yet.</div> : null}
+          {!callbacks.length ? <div className="empty-state">현재 콜백 발신 대기 항목이 없습니다.</div> : null}
         </div>
       </SectionCard>
     </section>
@@ -152,19 +152,19 @@ function ApprovalDetail({
   return <div className="detail-stack">
     <div className="detail-title">
       <div><h3>{approval.approval_request_id}</h3><span>{approval.correlation_id}</span></div>
-      <StatusBadge status={approval.status}>{approval.status}</StatusBadge>
+      <StatusBadge status={approval.status}>{statusLabel(approval.status)}</StatusBadge>
     </div>
     <p className="body-copy">{approval.reason}</p>
     <div className="detail-grid">
-      <span>Amount<strong>{formatAmount(approval)}</strong></span>
-      <span>Factory<strong>{String(approval.metadata?.factoryId ?? "n/a")}</strong></span>
-      <span>Vendor<strong>{String(approval.metadata?.vendorId ?? "n/a")}</strong></span>
-      <span>Severity<strong>{String(approval.metadata?.severity ?? "n/a")}</strong></span>
-      <span>Evidence<strong>{approval.evidence_type || approval.evidence?.[0]?.evidence_type || "n/a"}</strong></span>
-      <span>Callback<strong>{approval.callback_status || "n/a"}</strong></span>
+      <span>금액<strong>{formatAmount(approval)}</strong></span>
+      <span>공장<strong>{String(approval.metadata?.factoryId ?? "정보 없음")}</strong></span>
+      <span>공급사<strong>{String(approval.metadata?.vendorId ?? "정보 없음")}</strong></span>
+      <span>위험도<strong>{statusLabel(String(approval.metadata?.severity ?? "정보 없음"))}</strong></span>
+      <span>정책 근거<strong>{statusLabel(approval.evidence_type || approval.evidence?.[0]?.evidence_type || "정보 없음")}</strong></span>
+      <span>콜백<strong>{statusLabel(approval.callback_status || "정보 없음")}</strong></span>
     </div>
 
-    <SectionCard title="RAG / Fallback Evidence" eyebrow="Policy basis">
+    <SectionCard title="RAG / 규칙 기반 근거" eyebrow="정책 판단 근거">
       <div className="history-table">
         {(approval.evidence || []).map((evidence) => <article className="history-row" key={evidence.id}>
           <summary>
@@ -174,32 +174,42 @@ function ApprovalDetail({
             <p>{evidence.content}</p>
           </summary>
         </article>)}
-        {!approval.evidence?.length ? <div className="empty-state">Evidence will appear in detail after selecting a persisted request.</div> : null}
+        {!approval.evidence?.length ? <div className="empty-state">저장된 요청의 근거가 아직 없습니다.</div> : null}
       </div>
     </SectionCard>
 
-    <SectionCard title="Audit / Callback Summary" eyebrow="No secret values">
+    <SectionCard title="감사·콜백 요약" eyebrow="민감정보 미표시">
       <div className="detail-grid">
-        <span>Decided by<strong>{approval.decided_by || "pending"}</strong></span>
-        <span>Decided at<strong>{approval.decided_at ? formatTimeAgo(approval.decided_at) : "pending"}</strong></span>
-        <span>Callback attempts<strong>{approval.callback_attempt_count}</strong></span>
-        <span>Last callback error<strong>{approval.callback_last_error || "none"}</strong></span>
+        <span>결정자<strong>{approval.decided_by || "승인 대기"}</strong></span>
+        <span>결정 시각<strong>{approval.decided_at ? formatTimeAgo(approval.decided_at) : "승인 대기"}</strong></span>
+        <span>콜백 시도<strong>{approval.callback_attempt_count}</strong></span>
+        <span>최근 콜백 오류<strong>{approval.callback_last_error || "없음"}</strong></span>
       </div>
-      <details className="details-box"><summary>Metadata</summary><pre>{stringifyMeta(approval.metadata)}</pre></details>
+      <details className="details-box"><summary>메타데이터</summary><pre>{stringifyMeta(approval.metadata)}</pre></details>
     </SectionCard>
 
     {canDecide ? <div className="settings-grid">
-      <label>Decision comment<textarea rows={3} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Policy evidence reviewed. Decision rationale..." /></label>
+      <label>결정 메모<textarea rows={3} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="정책 근거를 검토한 뒤 결정 사유를 입력하세요." /></label>
       <div className="inline-actions">
-        <button className="button button-primary" type="button" disabled={busy !== null || approval.status !== "PENDING"} onClick={() => void decide("approve")}>{busy === "approve" ? "Approving..." : "Approve"}</button>
-        <button className="button button-secondary" type="button" disabled={busy !== null || approval.status !== "PENDING"} onClick={() => void decide("reject")}>{busy === "reject" ? "Rejecting..." : "Reject"}</button>
-        <button className="button button-secondary" type="button" disabled={busy !== null || approval.status !== "PENDING"} onClick={() => void decide("hold")}>{busy === "hold" ? "Holding..." : "Hold"}</button>
+        <button className="button button-primary" type="button" disabled={busy !== null || approval.status !== "PENDING"} onClick={() => void decide("approve")}>{busy === "approve" ? "승인 중..." : "승인"}</button>
+        <button className="button button-secondary" type="button" disabled={busy !== null || approval.status !== "PENDING"} onClick={() => void decide("reject")}>{busy === "reject" ? "반려 중..." : "반려"}</button>
+        <button className="button button-secondary" type="button" disabled={busy !== null || approval.status !== "PENDING"} onClick={() => void decide("hold")}>{busy === "hold" ? "보류 중..." : "보류"}</button>
       </div>
       {message ? <p className="small-note">{message}</p> : null}
-    </div> : <p className="small-note">Admin unlock or PM session is required for approval decisions.</p>}
+    </div> : <p className="small-note">승인 결정을 하려면 관리자 또는 PM 세션이 필요합니다.</p>}
   </div>;
 }
 
 function formatAmount(approval: ExternalApprovalRequest) {
   return `${Number(approval.amount).toLocaleString()} ${approval.currency}`;
+}
+
+function statusLabel(value: string) {
+  const labels: Record<string, string> = {
+    PENDING: "승인 대기", APPROVED: "승인됨", REJECTED: "반려됨", HOLD: "보류",
+    CALLBACK_PENDING: "콜백 대기", CALLBACK_SUCCEEDED: "콜백 완료", CALLBACK_FAILED: "콜백 실패",
+    CALLBACK_SKIPPED: "콜백 생략", SENT: "전송 완료", RULE_FALLBACK: "규칙 기반", RAG: "RAG 근거",
+    HIGH: "높음", CRITICAL: "긴급", MEDIUM: "보통", LOW: "낮음", NORMAL: "정상",
+  };
+  return labels[String(value || "").toUpperCase()] || value;
 }

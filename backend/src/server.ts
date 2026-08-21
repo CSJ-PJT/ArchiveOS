@@ -191,6 +191,8 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Approve External Approval", method: "POST", path: "/api/approvals/external/:id/approve", service: "runtime", description: "PM/Admin approval decision for Ledger callback." },
   { name: "Reject External Approval", method: "POST", path: "/api/approvals/external/:id/reject", service: "runtime", description: "PM/Admin rejection decision for Ledger callback." },
   { name: "Hold External Approval", method: "POST", path: "/api/approvals/external/:id/hold", service: "runtime", description: "PM/Admin hold decision without Ledger mutation." },
+  { name: "Approve All External Approvals", method: "POST", path: "/api/approvals/external/approve-all", service: "runtime", description: "Admin-only audited approval backlog drain." },
+  { name: "Create Named Admin", method: "POST", path: "/api/auth/admin/users", service: "runtime", description: "Admin-only named credential creation." },
   { name: "Queue Summary", method: "GET", path: "/api/queue/summary", service: "queue", description: "Semi-auto queue summary." },
   { name: "Queue Run Once", method: "POST", path: "/api/queue/run-once", service: "queue", description: "State transition and instruction generation only." },
   { name: "Queue Nightly Summary", method: "POST", path: "/api/queue/nightly-summary", service: "queue", description: "Slack queue summary without execution." },
@@ -271,6 +273,10 @@ app.get("/api/auth/session", async (request, response) => {
 
 app.post("/api/auth/logout", async (request, response) => {
   await relayArchiveOsAi(response, "/api/auth/logout", { method: "POST" }, undefined, request);
+});
+
+app.post("/api/auth/admin/users", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/auth/admin/users", jsonProxyRequest("POST", request.body), undefined, request);
 });
 
 app.use("/api", async (request, response, next) => {
@@ -942,14 +948,18 @@ app.get("/api/live-flow/topology", async (request, response) => {
 });
 
 app.get("/api/live-flow/events/recent", async (request, response) => {
-  const limit = request.query.limit ? `?limit=${encodeURIComponent(String(request.query.limit))}` : "";
-  await relayArchiveOsAi(response, `/api/live-flow/events/recent${limit}`, undefined, undefined, request);
+  const params = new URLSearchParams();
+  if (request.query.limit) params.set("limit", String(request.query.limit));
+  if (request.query.balanced) params.set("balanced", String(request.query.balanced));
+  await relayArchiveOsAi(response, `/api/live-flow/events/recent?${params.toString()}`, undefined, undefined, request);
 });
 
 // Backward-compatible short alias used by console smoke checks and read-only clients.
 app.get("/api/live-flow/recent", async (request, response) => {
-  const limit = request.query.limit ? `?limit=${encodeURIComponent(String(request.query.limit))}` : "";
-  await relayArchiveOsAi(response, `/api/live-flow/events/recent${limit}`, undefined, undefined, request);
+  const params = new URLSearchParams();
+  if (request.query.limit) params.set("limit", String(request.query.limit));
+  if (request.query.balanced) params.set("balanced", String(request.query.balanced));
+  await relayArchiveOsAi(response, `/api/live-flow/events/recent?${params.toString()}`, undefined, undefined, request);
 });
 
 app.get("/api/live-flow/stream", async (request, response) => {
@@ -1087,6 +1097,11 @@ app.post("/api/approvals/external/:id/reject", async (request, response) => {
 
 app.post("/api/approvals/external/:id/hold", async (request, response) => {
   await relayArchiveOsAi(response, `/api/approvals/external/${encodeURIComponent(request.params.id)}/hold`, jsonProxyRequest("POST", request.body), undefined, request);
+});
+
+app.post("/api/approvals/external/approve-all", async (request, response) => {
+  const limit = request.query.limit ? `?limit=${encodeURIComponent(String(request.query.limit))}` : "";
+  await relayArchiveOsAi(response, `/api/approvals/external/approve-all${limit}`, jsonProxyRequest("POST", request.body), undefined, request);
 });
 
 app.get("/api/queue/summary", async (_request, response) => {

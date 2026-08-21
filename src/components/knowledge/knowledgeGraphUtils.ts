@@ -127,6 +127,7 @@ function toGraphNode(node: KnowledgeNode, edges: KnowledgeOverview["latestEdges"
     source: node.source,
     externalRef: node.external_ref,
     createdAt: node.created_at,
+    updatedAt: node.updated_at,
     metadata: node.metadata || {},
     importanceScore,
     importanceLevel: getImportanceLevel(importanceScore),
@@ -134,7 +135,7 @@ function toGraphNode(node: KnowledgeNode, edges: KnowledgeOverview["latestEdges"
     inDegree: 0,
     outDegree: 0,
     lastReferencedAt: node.updated_at || node.created_at,
-    isRecent: isRecent(node.created_at),
+    isRecent: isRecent(node.updated_at || node.created_at),
     isHub: false,
     isDecisionRelevant: false,
   };
@@ -154,7 +155,7 @@ function getNodeImportanceScore(node: KnowledgeNode, edges: KnowledgeOverview["l
     command: 8,
     task: 18,
   };
-  const recency = isRecent(node.created_at) ? 5 : 0;
+  const recency = isRecent(node.updated_at || node.created_at) ? 5 : 0;
   return (typeWeight[node.node_type] || 10) + connected * 4 + recency;
 }
 
@@ -411,7 +412,7 @@ function getChainWarning(
 
 function getLatestChainTimestamp(steps: ActiveDecisionStep[]) {
   const timestamps = steps
-    .map((step) => step.node?.createdAt)
+    .map((step) => step.node?.updatedAt || step.node?.createdAt)
     .filter((value): value is string => Boolean(value))
     .sort((left, right) => new Date(right).getTime() - new Date(left).getTime());
   return timestamps[0] || null;

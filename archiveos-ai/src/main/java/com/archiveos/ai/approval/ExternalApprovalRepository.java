@@ -187,6 +187,14 @@ public class ExternalApprovalRepository {
                 """, this::requestRow, clamp(limit));
     }
 
+    public List<Map<String, Object>> actionable(int limit) {
+        return jdbc.query("""
+                select * from public.external_approval_requests
+                 where status in ('PENDING', 'HOLD')
+                 order by created_at asc, id asc limit ?
+                """, this::requestRow, Math.min(Math.max(limit, 1), 500));
+    }
+
     public List<Map<String, Object>> callbackFailed(int limit) {
         return jdbc.query("""
                 select * from public.external_approval_requests

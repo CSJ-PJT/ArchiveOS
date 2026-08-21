@@ -5,6 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import java.util.Optional;
 
 class SessionServiceTest {
     @Test
@@ -47,6 +50,20 @@ class SessionServiceTest {
         assertThatThrownBy(() -> service.login("127.0.0.1", "operator", "test-password", PlatformRole.ADMIN))
                 .isInstanceOf(SessionService.LoginRejectedException.class)
                 .hasMessage("Invalid credentials.");
+    }
+
+    @Test
+    void authenticatesNamedPersistentAdminWithStoredRole() {
+        AdminCredentialRepository repository = mock(AdminCredentialRepository.class);
+        String hash = new BCryptPasswordEncoder(12).encode("persistent-password");
+        when(repository.find("portfolio-admin")).thenReturn(Optional.of(
+                new AdminCredentialRepository.Credential("portfolio-admin", hash, PlatformRole.ADMIN, true)));
+        SessionService service = new SessionService(new SecurityProperties("bootstrap-password", "", 30, 5, 15, false), repository);
+
+        PlatformSession session = service.login("127.0.0.1", "portfolio-admin", "persistent-password", PlatformRole.OPERATOR);
+
+        assertThat(session.actor()).isEqualTo("portfolio-admin");
+        assertThat(session.role()).isEqualTo(PlatformRole.ADMIN);
     }
 
     @Test

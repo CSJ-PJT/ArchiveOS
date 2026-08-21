@@ -66,6 +66,22 @@ class ExternalApprovalServiceTest {
         verify(repository, never()).createRequest(any());
     }
 
+    @Test void approvalAgentDrainsActionableRequestsWithExplicitActor() {
+        ExternalApprovalRepository repository = Mockito.mock(ExternalApprovalRepository.class);
+        ExternalApprovalService service = new ExternalApprovalService(repository, audit(), Mockito.mock(NotificationService.class), HttpClient.newHttpClient(), "", "", false);
+        when(repository.actionable(200)).thenReturn(List.of(request("APR-1"), request("APR-2")));
+        when(repository.detail(any())).thenAnswer(invocation -> request(invocation.getArgument(0)));
+        when(repository.find(any())).thenAnswer(invocation -> request(invocation.getArgument(0)));
+        when(repository.insertDecision(any(), eq("APPROVED"), eq("archiveos-approval-agent"), any())).thenReturn(Map.of("decision", "APPROVED"));
+        when(repository.summary()).thenReturn(Map.of("actionable_pending", 0));
+
+        Map<String, Object> result = service.approveAll(200, null, "archiveos-approval-agent");
+
+        assertThat(result).containsEntry("approved", 2).containsEntry("remaining", 0);
+        verify(repository).updateDecisionState("APR-1", "APPROVED", "archiveos-approval-agent");
+        verify(repository).updateDecisionState("APR-2", "APPROVED", "archiveos-approval-agent");
+    }
+
     @Test void approveRecordsDecisionAndSkipsCallbackWhenLedgerBaseUrlIsMissing() throws Exception {
         ExternalApprovalRepository repository = Mockito.mock(ExternalApprovalRepository.class);
         ExternalApprovalService service = new ExternalApprovalService(repository, audit(), Mockito.mock(NotificationService.class), HttpClient.newHttpClient(), "", "", false);

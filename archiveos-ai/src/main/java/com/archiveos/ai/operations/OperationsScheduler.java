@@ -24,6 +24,9 @@ public class OperationsScheduler {
     @Scheduled(cron = "${archiveos.scheduler.daily-cron:0 0 9 * * *}", zone = "Asia/Seoul")
     public void dailyReport() { run(OperationsBatchConfiguration.DAILY_REPORT_JOB, "scheduler-daily"); }
 
+    @Scheduled(cron = "${archiveos.scheduler.knowledge-sync-cron:0 15 9 * * *}", zone = "Asia/Seoul")
+    public void dailyKnowledgeSync() { run(ArchiveBatchConfiguration.OBSIDIAN_SYNC_JOB, "scheduler-daily-knowledge"); }
+
     @Scheduled(
             fixedDelayString = "${archiveos.scheduler.maintenance-delay-ms:900000}",
             initialDelayString = "${archiveos.scheduler.maintenance-initial-delay-ms:20000}")

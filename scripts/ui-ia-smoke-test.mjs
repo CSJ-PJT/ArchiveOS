@@ -39,7 +39,7 @@ for (const route of ["overview", "liveflow", "ecosystem", "agents", "approvals",
 for (const contract of ["getEcosystemSummary", "getLiveFlowSummary", "getLiveFlowTopology", "getLiveFlowRecentEvents", "liveFlowStreamUrl", "getEcosystemBalanceSummary"]) {
   if (!api.includes(contract)) throw new Error(`Console V3 API contract missing: ${contract}`);
 }
-for (const contract of ["EventSource", "runtime-event", "fallback", "getLiveFlowRecentEvents(30)", "reconnectAttempt", "30_000", "mergeLiveFlowEvents", "window.addEventListener(\"online\""]) {
+for (const contract of ["EventSource", "runtime-event", "fallback", "getLiveFlowRecentEvents(30, true)", "reconnectAttempt", "30_000", "mergeLiveFlowEvents", "window.addEventListener(\"online\""]) {
   if (!appShell.includes(contract)) throw new Error(`Live Flow SSE contract missing: ${contract}`);
 }
 if (!/route === "records"[^\n]+\["aiRuntime", getAiRuntime\]/.test(appShell)) {
@@ -48,10 +48,10 @@ if (!/route === "records"[^\n]+\["aiRuntime", getAiRuntime\]/.test(appShell)) {
 for (const contract of ["archiveos.refresh.seconds", "자동 새로고침 간격", "getManagedSystemsOverview", "getRecentRuntimeEvents", "getRecentCommands", "getKpiOverview"]) {
   if (!appShell.includes(contract)) throw new Error(`Restored console contract missing: ${contract}`);
 }
-for (const contract of ["REFRESH_PREFERENCE_VERSION", 'storedValue === "10"', "? stored : 5", "refreshGeneration", "refreshInFlight", "active?.route === route", "window.setTimeout", "result.key !== \"auth\"", "getLiveFlowRecentEvents(30)"]) {
+for (const contract of ["REFRESH_PREFERENCE_VERSION", 'storedValue === "10"', "? stored : 5", "refreshGeneration", "refreshInFlight", "active?.route === route", "window.setTimeout", "result.key !== \"auth\"", "getLiveFlowRecentEvents(30, true)"]) {
   if (!appShell.includes(contract)) throw new Error(`Five-second progressive dashboard contract missing: ${contract}`);
 }
-for (const contract of ["mergeLiveFlowEvents", "MAX_LIVE_FLOW_EVENTS", "loadDashboardDetails", "getLiveFlowRecentEvents(MAX_LIVE_FLOW_EVENTS)", "getWorkforceOverview", "streamConnected", "fallbackInFlight", "routeEpoch", "newestEventTime"]) {
+for (const contract of ["mergeLiveFlowEvents", "MAX_LIVE_FLOW_EVENTS", "loadDashboardDetails", "getLiveFlowRecentEvents(MAX_LIVE_FLOW_EVENTS, true)", "getWorkforceOverview", "streamConnected", "fallbackInFlight", "routeEpoch", "newestEventTime"]) {
   if (!appShell.includes(contract)) throw new Error(`Race-safe live-flow/lazy-detail contract missing: ${contract}`);
 }
 for (const contract of ["mergeLiveFlowSummary(current.liveFlow, payload)", "approvalBacklog: incoming.approvalBacklog ?? current.approvalBacklog", "processingBacklog: incoming.processingBacklog ?? current.processingBacklog", "services: incoming.runtime.services ?? current.runtime?.services"]) {
@@ -60,6 +60,9 @@ for (const contract of ["mergeLiveFlowSummary(current.liveFlow, payload)", "appr
 if (appShell.includes("liveFlow: payload")) throw new Error("Compact SSE snapshots must not replace the detailed live-flow summary.");
 if (appShell.includes("window.setInterval(() => { void refresh()")) throw new Error("Dashboard polling must schedule only after the prior refresh completes.");
 if (appShell.includes("liveFlowEvents: events")) throw new Error("Live-flow polling must merge events instead of replacing newer stream data.");
+for (const contract of ['route !== "dashboard"', "page-loading-overlay", "page-loading-spinner", "수동 갱신"]) {
+  if (!appShell.includes(contract)) throw new Error(`Route loading/refresh policy contract missing: ${contract}`);
+}
 if ((appShell.match(/mergeLiveFlowEvents\(/g) ?? []).length < 4) throw new Error("Every live-flow event ingress path must use the shared merge policy.");
 const dashboardLoader = appShell.match(/if \(route === "dashboard"\) return \[([^\n]+)\];/)?.[1] ?? "";
 if (dashboardLoader.includes("getWorkforceOverview") || dashboardLoader.includes("MAX_LIVE_FLOW_EVENTS")) throw new Error("Initial dashboard loading must keep workforce and full event history lazy.");

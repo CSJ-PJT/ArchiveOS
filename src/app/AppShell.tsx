@@ -51,6 +51,7 @@ function AppShellInner() {
   const [route, setRouteState] = useState<CoreRoute>(() => routeFromLocation());
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [data, setData] = useState<AppData>(emptyData);
+  const [pageLoading, setPageLoading] = useState(true);
   const [streamState, setStreamState] = useState<"connecting" | "connected" | "fallback">("connecting");
   const fallbackTimer = useRef<number | null>(null);
   const reconnectTimer = useRef<number | null>(null);
@@ -83,11 +84,15 @@ function AppShellInner() {
   useEffect(() => { const onPopState = () => setRouteState(routeFromLocation()); window.addEventListener("popstate", onPopState); window.addEventListener("hashchange", onPopState); return () => { window.removeEventListener("popstate", onPopState); window.removeEventListener("hashchange", onPopState); }; }, []);
   useEffect(() => { document.body.classList.toggle("sidebar-open", sidebarOpen); return () => document.body.classList.remove("sidebar-open"); }, [sidebarOpen]);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((showPageLoading = true) => {
     const active = refreshInFlight.current;
-    if (active?.route === route) return active.promise;
+    if (active?.route === route) {
+      if (showPageLoading) setPageLoading(true);
+      return active.promise.finally(() => { if (showPageLoading) setPageLoading(false); });
+    }
     const generation = ++refreshGeneration.current;
     const loaders = loadersFor(route);
+    if (showPageLoading) setPageLoading(true);
     setData((current) => current.refreshedAt ? current : ({ ...current, loading: true }));
     setData((current) => ({ ...current, errors: {} }));
     const promise = (async () => {
@@ -98,6 +103,7 @@ function AppShellInner() {
       }));
       if (generation === refreshGeneration.current) {
         setData((current) => ({ ...current, loading: false, refreshedAt: new Date().toISOString() }));
+        if (showPageLoading) setPageLoading(false);
       }
     })();
     refreshInFlight.current = { route, generation, promise };
@@ -115,7 +121,7 @@ function AppShellInner() {
     const promise = (async () => {
       const results = await Promise.all([
         settle("workforce", getWorkforceOverview),
-        settle("liveFlowEvents", () => getLiveFlowRecentEvents(MAX_LIVE_FLOW_EVENTS)),
+        settle("liveFlowEvents", () => getLiveFlowRecentEvents(MAX_LIVE_FLOW_EVENTS, true)),
       ]);
       if (routeRef.current !== requestedRoute || routeEpoch.current !== requestedRouteEpoch) return;
       setData((current) => {
@@ -134,10 +140,16 @@ function AppShellInner() {
   useEffect(() => {
     window.localStorage.setItem("archiveos.refresh.seconds", String(refreshSeconds));
     window.localStorage.setItem("archiveos.refresh.preference.version", REFRESH_PREFERENCE_VERSION);
+    if (route !== "dashboard") {
+      void refresh(true);
+      return;
+    }
     let disposed = false;
     let timer: number | null = null;
+    let initial = true;
     const poll = async () => {
-      await refresh();
+      await refresh(initial);
+      initial = false;
       if (!disposed && refreshSeconds > 0) timer = window.setTimeout(() => { void poll(); }, refreshSeconds * 1000);
     };
     void poll();
@@ -173,7 +185,7 @@ function AppShellInner() {
       if (disposed || streamConnected || fallbackInFlight) return;
       fallbackInFlight = true;
       try {
-        const events = await getLiveFlowRecentEvents(30);
+        const events = await getLiveFlowRecentEvents(30, true);
         if (!disposed && !streamConnected) setData((current) => ({ ...current, liveFlowEvents: mergeLiveFlowEvents(current.liveFlowEvents, events) }));
       } catch { /* the next fallback poll retries after the normal delay. */ }
       finally {
@@ -222,7 +234,7 @@ function AppShellInner() {
     return Object.keys(data.errors).length ? "warning" : "healthy";
   }, [data.ecosystem, data.errors, data.loading]);
   const page = route === "dashboard" ? <ConsoleDashboardPage data={data} onNavigate={navigate} onRefresh={refresh} onLoadTopologyDetails={loadDashboardDetails} /> : route === "services" ? <ConsoleServicesPage data={data} /> : route === "operations" ? <ConsoleOperationsPage data={data} onRefresh={refresh} /> : route === "finance" ? <ConsoleFinancePage data={data} onRefresh={refresh} /> : route === "records" ? <ConsoleRecordsPage data={data} /> : <ConsoleSettingsPage data={data} onRefresh={refresh} backendOrigin={configuredBackendUrl} />;
-  return <div className="app-shell"><Sidebar route={route} open={sidebarOpen} onNavigate={navigate} health={health} loading={data.loading} role={data.auth.role} />{sidebarOpen ? <button className="sidebar-scrim" type="button" aria-label={consoleText(locale, "common.closeMenu")} onClick={() => setSidebarOpen(false)} /> : null}<div className="content-shell"><header className="topbar"><button className="mobile-menu-button" type="button" aria-label={consoleText(locale, "common.openMenu")} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>☰</button><div><span className="eyebrow">ARCHIVEOS CONTROL TOWER</span><h1>{consoleText(locale, `nav.${route}`)}</h1></div><div className="topbar-status">{route === "dashboard" ? <span className={`stream-state stream-${streamState}`}>{streamState === "connected" ? `${consoleText(locale, "common.live")}${data.lastEventLatencyMs === null ? "" : ` · ${data.lastEventLatencyMs}ms`}` : streamState === "fallback" ? consoleText(locale, "common.reconnecting") : consoleText(locale, "common.connecting")}</span> : null}<label className="refresh-interval"><span>자동 갱신</span><select value={refreshSeconds} onChange={(event) => setRefreshSeconds(Number(event.target.value))} aria-label="자동 새로고침 간격"><option value={0}>끄기</option><option value={5}>5초</option><option value={10}>10초</option><option value={30}>30초</option><option value={60}>60초</option></select></label><button className={`auth-session-trigger ${data.auth.authenticated ? "authenticated" : ""}`} type="button" onClick={() => navigate("settings")} aria-label={data.auth.authenticated ? `${data.auth.role} 세션 설정` : "운영자 로그인"}>{data.auth.authenticated ? data.auth.role : "로그인"}</button><LanguagePopover locale={locale} setLocale={setLocale} /><span className="last-sync">{data.refreshedAt ? `${consoleText(locale, "common.updated")} ${new Date(data.refreshedAt).toLocaleTimeString()}` : consoleText(locale, "common.loading")}</span><button className="icon-button" type="button" onClick={refresh} aria-label={consoleText(locale, "common.refresh")} title={consoleText(locale, "common.refresh")}><Icon name="refresh" /></button></div></header><main className="page-host" id="main-content">{page}</main></div></div>;
+  return <div className="app-shell"><Sidebar route={route} open={sidebarOpen} onNavigate={navigate} health={health} loading={data.loading} role={data.auth.role} />{sidebarOpen ? <button className="sidebar-scrim" type="button" aria-label={consoleText(locale, "common.closeMenu")} onClick={() => setSidebarOpen(false)} /> : null}<div className="content-shell"><header className="topbar"><button className="mobile-menu-button" type="button" aria-label={consoleText(locale, "common.openMenu")} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>☰</button><div><span className="eyebrow">ARCHIVEOS CONTROL TOWER</span><h1>{consoleText(locale, `nav.${route}`)}</h1></div><div className="topbar-status">{route === "dashboard" ? <span className={`stream-state stream-${streamState}`}>{streamState === "connected" ? `${consoleText(locale, "common.live")}${data.lastEventLatencyMs === null ? "" : ` · ${data.lastEventLatencyMs}ms`}` : streamState === "fallback" ? consoleText(locale, "common.reconnecting") : consoleText(locale, "common.connecting")}</span> : null}{route === "dashboard" ? <label className="refresh-interval"><span>자동 갱신</span><select value={refreshSeconds} onChange={(event) => setRefreshSeconds(Number(event.target.value))} aria-label="자동 새로고침 간격"><option value={0}>끄기</option><option value={5}>5초</option><option value={10}>10초</option><option value={30}>30초</option><option value={60}>60초</option></select></label> : <span className="manual-refresh-only">수동 갱신</span>}<button className={`auth-session-trigger ${data.auth.authenticated ? "authenticated" : ""}`} type="button" onClick={() => navigate("settings")} aria-label={data.auth.authenticated ? `${data.auth.role} 세션 설정` : "운영자 로그인"}>{data.auth.authenticated ? data.auth.role : "로그인"}</button><LanguagePopover locale={locale} setLocale={setLocale} /><span className="last-sync">{data.refreshedAt ? `${consoleText(locale, "common.updated")} ${new Date(data.refreshedAt).toLocaleTimeString()}` : consoleText(locale, "common.loading")}</span><button className="icon-button" type="button" onClick={() => void refresh(true)} aria-label={consoleText(locale, "common.refresh")} title={consoleText(locale, "common.refresh")}><Icon name="refresh" /></button></div></header><main className="page-host" id="main-content">{pageLoading ? <div className="page-loading-overlay" role="status" aria-live="polite"><span className="page-loading-spinner" aria-hidden="true" /><strong>페이지를 불러오는 중입니다.</strong></div> : null}{page}</main></div></div>;
 }
 
 function LanguagePopover({ locale, setLocale }: { locale: Locale; setLocale: (locale: Locale) => void }) {
@@ -238,7 +250,7 @@ function LanguagePopover({ locale, setLocale }: { locale: Locale; setLocale: (lo
 
 function loadersFor(route: CoreRoute): Array<[keyof AppData, () => Promise<unknown>]> {
   const auth: [keyof AppData, () => Promise<unknown>] = ["auth", getAuthSession];
-  if (route === "dashboard") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["liveFlowTopology", getLiveFlowTopology], ["liveFlowEvents", () => getLiveFlowRecentEvents(30)], ["balance", getEcosystemBalanceSummary]];
+  if (route === "dashboard") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["liveFlowTopology", getLiveFlowTopology], ["liveFlowEvents", () => getLiveFlowRecentEvents(30, true)], ["balance", getEcosystemBalanceSummary]];
   if (route === "services") return [auth, ["ecosystem", getEcosystemSummary], ["ecosystemTopology", getEcosystemTopology], ["atlas", getAtlasOverview], ["managedSystems", getManagedSystemsOverview]];
   if (route === "operations") return [auth, ["dashboard", getDashboardData], ["mesh", getMeshOverview], ["workforce", getWorkforceOverview], ["queue", getQueueSummary], ["tasks", getPmTasks]];
   if (route === "finance") return [auth, ["ecosystem", getEcosystemSummary], ["liveFlow", getLiveFlowSummary], ["balance", getEcosystemBalanceSummary], ["gameFinance", getGameFinanceSummary], ["externalApprovals", () => getExternalApprovals(50)]];

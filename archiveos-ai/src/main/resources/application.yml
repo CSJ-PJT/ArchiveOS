@@ -37,6 +37,11 @@ spring:
         initialize-schema: false
 
 archiveos:
+  approval:
+    auto-approve-all-enabled: ${ARCHIVEOS_AUTO_APPROVE_ALL_ENABLED:false}
+    auto-approval-batch-size: ${ARCHIVEOS_AUTO_APPROVAL_BATCH_SIZE:200}
+    auto-approval-initial-delay-ms: ${ARCHIVEOS_AUTO_APPROVAL_INITIAL_DELAY_MS:60000}
+    auto-approval-delay-ms: ${ARCHIVEOS_AUTO_APPROVAL_DELAY_MS:60000}
   openai-api-key: ${OPENAI_API_KEY:}
   obsidian-vault-path: ${OBSIDIAN_VAULT_PATH:}
   obsidian-chunk-size: ${OBSIDIAN_CHUNK_SIZE:1200}
