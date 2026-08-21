@@ -10,7 +10,7 @@ $history = Join-Path $root 'history'
 $latest = Join-Path $root 'latest.json'
 $log = Join-Path $root 'monitor.log'
 $archiveOsBaseUrl = 'http://localhost:4000'
-$publicUrl = 'https://161.33.45.1/archiveos/'
+$publicUrl = 'https://archiveos.kr/'
 
 function Invoke-SafeApi([string]$Path) {
     try {
