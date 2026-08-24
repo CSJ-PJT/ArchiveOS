@@ -42,7 +42,10 @@ function EcosystemFinanceView({ data }: { data: AppData }) {
     </section>
     {partial ? <div className="finance-data-note"><strong>부분 수집 상태</strong><span>데이터가 없거나 전기간 누적·비활성 런타임처럼 비교할 수 없는 값은 합계에서 제외합니다. 제외는 실제 0원을 뜻하지 않습니다.</span></div> : null}
     <section className="finance-overview-grid">
-      <SectionCard title="수집 범위" eyebrow="DATA AVAILABILITY"><div className="finance-availability-list">{rows.map((row) => <div key={row.serviceId}><strong>{row.serviceName}</strong><StatusBadge status={row.balance === "NO_DATA" ? "empty" : row.status}>{row.balance === "NO_DATA" ? "데이터 없음" : "수집됨"}</StatusBadge><span>{row.balanceReason || "계산 범위 정보 없음"}</span></div>)}{!rows.length ? <p className="empty-copy">재무 Runtime Mesh를 아직 수집하지 못했습니다.</p> : null}</div></SectionCard>
+      <SectionCard title="수집 범위" eyebrow="DATA AVAILABILITY"><div className="finance-availability-list">{rows.map((row) => {
+        const notApplicable = row.balance === "NOT_APPLICABLE" || row.aggregationStatus === "NOT_APPLICABLE";
+        return <div key={row.serviceId}><strong>{row.serviceName}</strong><StatusBadge status={row.balance === "NO_DATA" || notApplicable ? "empty" : row.status}>{notApplicable ? "대상 아님" : row.balance === "NO_DATA" ? "데이터 없음" : "수집됨"}</StatusBadge><span>{row.balanceReason || "계산 범위 정보 없음"}</span></div>;
+      })}{!rows.length ? <p className="empty-copy">재무 Runtime Mesh를 아직 수집하지 못했습니다.</p> : null}</div></SectionCard>
       <SectionCard title="최근 재무 스냅샷" eyebrow="READ ONLY"><FinanceSnapshot systems={data.gameFinance?.systems ?? {}} /></SectionCard>
     </section>
   </div>;
