@@ -48,7 +48,30 @@ function EcosystemFinanceView({ data }: { data: AppData }) {
   </div>;
 }
 
-function ProfitView({ data }: { data: AppData }) { const rows = data.balance?.services ?? []; const noDataRows = rows.filter((row) => row.balance === "NO_DATA"); if (!rows.length) return <DataState kind={data.loading ? "loading" : Object.keys(data.errors).length ? "error" : "empty"} title={data.loading ? "손익 데이터를 수집하는 중입니다." : "서비스별 손익 데이터가 없습니다."} description={data.loading ? "각 서비스 Runtime Mesh의 재무 요약을 기다리고 있습니다." : "데이터 없음은 실제 0원이 아니며, 서비스별 재무 계약이 제공되면 표시됩니다."} />; return <section className="finance-table-card finance-profit-view"><header><div><span className="eyebrow">SYNTHETIC FINANCE / READ ONLY</span><h2>서비스별 손익과 균형</h2><p>수수료와 비용 구조를 변경하지 않는 읽기 전용 분석입니다.</p></div><span className={`finance-status finance-${data.balance?.balanceStatus?.toLowerCase()}`}>{balanceLabel(data.balance?.balanceStatus)}</span></header>{noDataRows.length ? <div className="finance-data-note"><strong>데이터 없음과 0의 구분</strong><span>{noDataRows.map((row) => row.serviceName).join(", ")}은 실제 0원이 아니라 수집되지 않은 상태입니다.</span></div> : null}<div className="table-scroll"><table><thead><tr><th>서비스</th><th>매출</th><th>비용</th><th>영업이익</th><th>이익률</th><th>목표 범위</th><th>상태</th></tr></thead><tbody>{rows.map((row) => <tr key={row.serviceId} className={row.balance === "NO_DATA" ? "no-data-row" : ""}><td><strong>{row.serviceName}</strong><small>{row.balanceReason || "계산 범위 정보 없음"}</small></td><td>{amount(row.revenue)}</td><td>{amount(row.cost)}</td><td>{amount(row.profit)}</td><td>{operatingMarginLabel(row)}</td><td>{row.balance === "NO_DATA" ? "데이터 없음" : `${row.targetMinMargin}% ~ ${row.targetMaxMargin}%`}</td><td><span className={`finance-cell-badge balance-${row.balance.toLowerCase()}`}>{rowLabel(row.balance)}</span></td></tr>)}</tbody></table></div><div className="finance-recommendation-grid">{data.balanceRecommendations?.recommendations.map((item) => <article className="recommendation-card" key={`${item.serviceId}-${item.title}`}><strong>{item.title}</strong><p>{item.reason}</p><small>{item.serviceId} · {modeLabel(item.mode)}</small></article>)}{!data.balanceRecommendations?.recommendations.length ? <p className="empty-copy">현재 수집 범위에서 추가 권장 조치가 없습니다.</p> : null}</div></section>; }
+function ProfitView({ data }: { data: AppData }) {
+  const rows = data.balance?.services ?? [];
+  const noDataRows = rows.filter((row) => row.balance === "NO_DATA");
+  if (!rows.length) {
+    return <DataState kind={data.loading ? "loading" : Object.keys(data.errors).length ? "error" : "empty"} title={data.loading ? "손익 데이터를 수집하는 중입니다." : "서비스별 손익 데이터가 없습니다."} description={data.loading ? "각 서비스 Runtime Mesh의 재무 요약을 기다리고 있습니다." : "데이터 없음은 실제 0원이 아니며, 서비스별 재무 계약이 제공되면 표시됩니다."} />;
+  }
+  return <section className="finance-table-card finance-profit-view">
+    <header><div><span className="eyebrow">SYNTHETIC FINANCE / READ ONLY</span><h2>서비스별 손익과 균형</h2><p>수수료와 비용 구조를 변경하지 않는 읽기 전용 분석입니다.</p></div><span className={`finance-status finance-${data.balance?.balanceStatus?.toLowerCase()}`}>{balanceLabel(data.balance?.balanceStatus)}</span></header>
+    {noDataRows.length ? <div className="finance-data-note"><strong>데이터 없음과 0의 구분</strong><span>{noDataRows.map((row) => row.serviceName).join(", ")}은 실제 0원이 아니라 수집되지 않은 상태입니다.</span></div> : null}
+    <div className="table-scroll"><table><thead><tr><th>서비스</th><th>매출</th><th>비용</th><th>영업이익</th><th>이익률</th><th>목표 범위</th><th>상태</th></tr></thead><tbody>{rows.map((row) => {
+      const notApplicable = row.balance === "NOT_APPLICABLE" || row.aggregationStatus === "NOT_APPLICABLE";
+      const unavailable = row.balance === "NO_DATA";
+      const value = (entry: unknown) => notApplicable ? "대상 아님" : amount(entry);
+      return <tr key={row.serviceId} className={unavailable || notApplicable ? "no-data-row" : ""}>
+        <td><strong>{row.serviceName}</strong><small>{row.balanceReason || "계산 범위 정보 없음"}</small></td>
+        <td>{value(row.revenue)}</td><td>{value(row.cost)}</td><td>{value(row.profit)}</td>
+        <td>{notApplicable ? "대상 아님" : operatingMarginLabel(row)}</td>
+        <td>{notApplicable ? "대상 아님" : unavailable ? "데이터 없음" : `${row.targetMinMargin}% ~ ${row.targetMaxMargin}%`}</td>
+        <td><span className={`finance-cell-badge balance-${row.balance.toLowerCase()}`}>{rowLabel(row.balance)}</span></td>
+      </tr>;
+    })}</tbody></table></div>
+    <div className="finance-recommendation-grid">{data.balanceRecommendations?.recommendations.map((item) => <article className="recommendation-card" key={`${item.serviceId}-${item.title}`}><strong>{item.title}</strong><p>{item.reason}</p><small>{item.serviceId} · {modeLabel(item.mode)}</small></article>)}{!data.balanceRecommendations?.recommendations.length ? <p className="empty-copy">현재 수집 범위에서 추가 권장 조치가 없습니다.</p> : null}</div>
+  </section>;
+}
 
 function ReconciliationView({ data }: { data: AppData }) {
   const ledger = data.ecosystem?.services?.ledger?.summary ?? {};
@@ -76,6 +99,6 @@ function number(value: string | number | null | undefined) { const parsed = Numb
 function amount(value: unknown) { if (value == null || value === "") return "데이터 없음"; const parsed = Number(value); return Number.isFinite(parsed) ? `${parsed.toLocaleString()} KRW` : String(value); }
 function operatingMarginLabel(row: NonNullable<AppData["balance"]>["services"][number]) { if (row.balance === "NO_DATA") return "데이터 없음"; if (row.operatingMargin != null) return `${row.operatingMargin}%`; if (number(row.revenue) === 0 && number(row.profit) < 0) return "적자"; if (number(row.revenue) === 0 && number(row.profit) === 0) return "0%"; return "산정 불가"; }
 function balanceLabel(value?: string) { if (value === "COMPLETE_BALANCED" || value === "BALANCED") return "균형"; if (value === "PARTIAL_DATA") return "부분 수집"; if (value === "NO_DATA" || !value) return "데이터 없음"; return "검토"; }
-function rowLabel(value: string) { return value === "WITHIN_RANGE" ? "목표 범위" : value === "CONCENTRATED" ? "집중 검토" : value === "UNDER_PRESSURE" ? "손익 주의" : value === "NO_DATA" ? "데이터 없음" : value; }
+function rowLabel(value: string) { return value === "WITHIN_RANGE" ? "목표 범위" : value === "CONCENTRATED" ? "집중 검토" : value === "UNDER_PRESSURE" ? "손익 주의" : value === "NO_DATA" ? "데이터 없음" : value === "NOT_APPLICABLE" ? "대상 아님" : value; }
 function modeLabel(value: string) { const normalized = String(value || "").toLowerCase(); if (normalized.includes("read")) return "읽기 전용"; if (normalized.includes("propos")) return "제안 전용"; if (normalized.includes("safe")) return "안전 모드"; return value ? value.replace(/_/g, " ") : "운영 모드 미수집"; }
 function humanize(value: string) { return value.replace(/([A-Z])/g, " $1").replace(/_/g, " ").trim(); }

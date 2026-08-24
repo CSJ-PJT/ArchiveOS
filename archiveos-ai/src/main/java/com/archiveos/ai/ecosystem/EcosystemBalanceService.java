@@ -36,8 +36,8 @@ public class EcosystemBalanceService {
         for (String key : List.of("market", "nexus", "logitics", "ledger", "archiveos")) {
             Map<String, Object> source = "archiveos".equals(key) ? Map.of("status", "HEALTHY", "name", "ArchiveOS") : map(services.get(key));
             Map<String, Object> body = financeBody(key, map(source.get("summary")));
-            BigDecimal revenue = amount(body, "recognizedRevenue");
-            BigDecimal cost = amount(body, "realizedOperatingCost");
+            BigDecimal revenue = "archiveos".equals(key) ? null : amount(body, "recognizedRevenue");
+            BigDecimal cost = "archiveos".equals(key) ? null : amount(body, "realizedOperatingCost");
             BigDecimal profit = revenue == null || cost == null ? null : revenue.subtract(cost);
             BigDecimal cash = amount(body, "cashBalance", "availableCash", "cash", "balance");
             BigDecimal backlog = amount(body, "backlog", "pending", "approvalRequired");
@@ -66,10 +66,11 @@ public class EcosystemBalanceService {
             enrichBalance(row);
         }
         Map<String, Object> targetMargins = new LinkedHashMap<>();
-        for (String key : List.of("market", "nexus", "logistics", "ledger", "archiveos")) {
+        for (String key : List.of("market", "nexus", "logistics", "ledger")) {
             EcosystemBalanceProperties.Margin margin = policy.marginFor(key);
             targetMargins.put(key, margin.getMinMargin() + "-" + margin.getMaxMargin() + "%");
         }
+        targetMargins.put("archiveos", "대상 아님");
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("syntheticData", true);
         result.put("targetMargins", targetMargins);
@@ -133,6 +134,11 @@ public class EcosystemBalanceService {
     }
 
     private void enrichBalance(Map<String, Object> row) {
+        if ("NOT_APPLICABLE".equals(row.get("aggregationStatus"))) {
+            row.put("balance", "NOT_APPLICABLE");
+            row.put("balanceReason", row.get("aggregationReason"));
+            return;
+        }
         if (!Boolean.TRUE.equals(row.get("includedInTotals"))) {
             row.put("balance", "NO_DATA");
             row.put("balanceReason", row.get("aggregationReason"));
@@ -163,11 +169,14 @@ public class EcosystemBalanceService {
     }
 
     private Map<String, Object> action(String service, String title, String reason, String mode) { return Map.of("serviceId", service, "title", title, "reason", reason, "mode", mode); }
-    private String balanceStatus(List<Map<String, Object>> rows) { long available = rows.stream().filter(row -> !"NO_DATA".equals(row.get("balance"))).count(); if (available == 0) return "NO_DATA"; if (available < rows.size()) return "PARTIAL_DATA"; return rows.stream().anyMatch(row -> "UNDER_PRESSURE".equals(row.get("balance")) || "CONCENTRATED".equals(row.get("balance")) || concentrationExceeded(row)) ? "COMPLETE_REVIEW" : "COMPLETE_BALANCED"; }
-    private String reviewReason(List<Map<String, Object>> rows) { long missing = rows.stream().filter(row -> "NO_DATA".equals(row.get("balance"))).count(); if (missing == rows.size()) return "수집된 재무 데이터가 없어 생태계 균형을 평가할 수 없습니다."; if (missing > 0) return "일부 서비스의 재무 데이터가 아직 수집되지 않아 생태계 균형은 부분 평가 상태입니다."; return rows.stream().filter(row -> "UNDER_PRESSURE".equals(row.get("balance"))).findFirst().map(row -> row.get("serviceName") + " 손익이 권장 범위 아래입니다.").orElse("현재 수집된 합성 지표는 균형 범위에 있습니다."); }
+    private String balanceStatus(List<Map<String, Object>> rows) { List<Map<String, Object>> applicable = rows.stream().filter(row -> !"NOT_APPLICABLE".equals(row.get("balance"))).toList(); long available = applicable.stream().filter(row -> !"NO_DATA".equals(row.get("balance"))).count(); if (available == 0) return "NO_DATA"; if (available < applicable.size()) return "PARTIAL_DATA"; return applicable.stream().anyMatch(row -> "UNDER_PRESSURE".equals(row.get("balance")) || "CONCENTRATED".equals(row.get("balance")) || concentrationExceeded(row)) ? "COMPLETE_REVIEW" : "COMPLETE_BALANCED"; }
+    private String reviewReason(List<Map<String, Object>> rows) { List<Map<String, Object>> applicable = rows.stream().filter(row -> !"NOT_APPLICABLE".equals(row.get("balance"))).toList(); long missing = applicable.stream().filter(row -> "NO_DATA".equals(row.get("balance"))).count(); if (missing == applicable.size()) return "수집된 재무 데이터가 없어 생태계 균형을 평가할 수 없습니다."; if (missing > 0) return "일부 서비스의 재무 데이터가 아직 수집되지 않아 생태계 균형은 부분 평가 상태입니다."; return applicable.stream().filter(row -> "UNDER_PRESSURE".equals(row.get("balance"))).findFirst().map(row -> row.get("serviceName") + " 손익이 권장 범위 아래입니다.").orElse("현재 수집된 합성 지표는 균형 범위에 있습니다."); }
     private boolean concentrationExceeded(Map<String, Object> row) { BigDecimal share = decimal(row.get("profitShare")); return share != null && share.compareTo(BigDecimal.valueOf(policy.getProfitConcentrationPercent())) > 0; }
     private AggregationGate aggregationGate(String key, Map<String, Object> source, Map<String, Object> body,
                                             BigDecimal revenue, BigDecimal cost, BigDecimal profit) {
+        if ("archiveos".equals(key)) {
+            return new AggregationGate(false, "NOT_APPLICABLE", "ArchiveOS는 관제·오케스트레이션 서비스로 서비스별 매출·손익 산정 대상이 아닙니다.");
+        }
         if (revenue == null || cost == null || profit == null) {
             return new AggregationGate(false, "INCOMPLETE_FINANCE_CONTRACT", "현재 기간의 인식 매출과 실현 비용 계약이 완전하지 않습니다.");
         }
@@ -208,11 +217,10 @@ public class EcosystemBalanceService {
     private boolean allowedScope(String key, String scope) {
         return switch (key) {
             case "market" -> "ROLLING_24H_RECOGNIZED_EVENTS".equals(scope);
-            case "nexus" -> scope.equals("PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS")
-                    || scope.startsWith("PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS_FALLBACK_");
-            case "logitics" -> "ROLLING_24H_RECOGNIZED_NON_RUNTIME_LOGISTICS_EVENTS".equals(scope);
+            case "nexus" -> scope.equals("PERSISTED_OUTBOX_EVENTS_LAST_24_HOURS")
+                    || scope.startsWith("PERSISTED_OUTBOX_EVENTS_LAST_24_HOURS_FALLBACK_");
+            case "logitics" -> "ROLLING_24H_RECOGNIZED_LOGISTICS_EVENTS".equals(scope);
             case "ledger" -> "WORKDAY".equals(scope);
-            case "archiveos" -> "ARCHIVEOS_CONTROL_TOWER_CURRENT_24H".equals(scope);
             default -> false;
         };
     }

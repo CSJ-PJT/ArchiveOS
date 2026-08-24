@@ -25,7 +25,7 @@ class EcosystemBalanceServiceTest {
                         Map.of("recognizedRevenue", 100, "totalExpense", 70, "operatingProfit", 999)))),
                 "nexus", service("Archive-Nexus", Map.of()),
                 "logitics", service("Archive-Logistics", Map.of("economy", current24(
-                        "ROLLING_24H_RECOGNIZED_NON_RUNTIME_LOGISTICS_EVENTS", "dataAvailable",
+                        "ROLLING_24H_RECOGNIZED_LOGISTICS_EVENTS", "dataAvailable",
                         Map.of("recognizedRevenue", 100, "realizedOperatingCost", 92, "operatingProfit", 999)))),
                 "ledger", service("Archive-Ledger", Map.of("balance", currentWorkday(
                         Map.of("recognizedRevenue", 100, "realizedOperatingCost", 95, "operatingProfit", 999)))))));
@@ -45,7 +45,7 @@ class EcosystemBalanceServiceTest {
                 .containsEntry("operatingMargin", null)
                 .containsEntry("includedInTotals", false);
         assertThat(summary).containsEntry("balanceStatus", "PARTIAL_DATA");
-        assertThat(totals(summary)).containsEntry("includedServices", 4L);
+        assertThat(totals(summary)).containsEntry("includedServices", 3L);
     }
 
     @Test
@@ -55,7 +55,7 @@ class EcosystemBalanceServiceTest {
         when(ecosystem.summary()).thenReturn(Map.of("services", Map.of(
                 "market", service("Archive-Market", Map.of()),
                 "nexus", service("Archive-Nexus", Map.of("economy", current24(
-                        "PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS", "available",
+                        "PERSISTED_OUTBOX_EVENTS_LAST_24_HOURS", "available",
                         Map.of("manufacturingRevenue", 0, "totalCost", 200, "operatingProfit", 9_999)))),
                 "logitics", service("Archive-Logistics", Map.of()),
                 "ledger", service("Archive-Ledger", Map.of()))));
@@ -99,7 +99,7 @@ class EcosystemBalanceServiceTest {
         assertThat(totals(summary)).containsEntry("revenue", BigDecimal.valueOf(100))
                 .containsEntry("cost", BigDecimal.valueOf(70))
                 .containsEntry("profit", BigDecimal.valueOf(30))
-                .containsEntry("includedServices", 2L);
+                .containsEntry("includedServices", 1L);
     }
 
     @Test
@@ -107,7 +107,7 @@ class EcosystemBalanceServiceTest {
         EcosystemService ecosystem = Mockito.mock(EcosystemService.class);
         EcosystemBalanceProperties properties = new EcosystemBalanceProperties();
         Map<String, Object> logisticsEconomy = current24(
-                "ROLLING_24H_RECOGNIZED_NON_RUNTIME_LOGISTICS_EVENTS", "dataAvailable",
+                "ROLLING_24H_RECOGNIZED_LOGISTICS_EVENTS", "dataAvailable",
                 Map.of(
                         "recognizedRevenue", 250,
                         "realizedOperatingCost", 150,
@@ -132,7 +132,7 @@ class EcosystemBalanceServiceTest {
         assertThat(totals(summary)).containsEntry("revenue", BigDecimal.valueOf(250))
                 .containsEntry("cost", BigDecimal.valueOf(150))
                 .containsEntry("profit", BigDecimal.valueOf(100))
-                .containsEntry("includedServices", 2L);
+                .containsEntry("includedServices", 1L);
     }
 
     @Test
@@ -141,7 +141,7 @@ class EcosystemBalanceServiceTest {
         EcosystemBalanceProperties properties = new EcosystemBalanceProperties();
         Instant staleEnd = Instant.now().minus(Duration.ofHours(2));
         Map<String, Object> unavailableLogistics = current24(
-                "ROLLING_24H_RECOGNIZED_NON_RUNTIME_LOGISTICS_EVENTS", "dataAvailable",
+                "ROLLING_24H_RECOGNIZED_LOGISTICS_EVENTS", "dataAvailable",
                 Map.of("recognizedRevenue", 300, "realizedOperatingCost", 200));
         unavailableLogistics.put("dataAvailable", false);
         Map<String, Object> legacyLedger = currentWorkday(
@@ -154,7 +154,7 @@ class EcosystemBalanceServiceTest {
                         "operatingProfit", 999_999_990))),
                 "nexus", service("Archive-Nexus", Map.of("economy", current24At(
                         staleEnd,
-                        "PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS", "available",
+                        "PERSISTED_OUTBOX_EVENTS_LAST_24_HOURS", "available",
                         Map.of("manufacturingRevenue", 100, "totalCost", 80)))),
                 "logitics", service("Archive-Logistics", Map.of("economy", unavailableLogistics)),
                 "ledger", service("Archive-Ledger", Map.of("balance", legacyLedger)));
@@ -181,11 +181,11 @@ class EcosystemBalanceServiceTest {
         assertThat(totals(summary)).containsEntry("revenue", BigDecimal.ZERO)
                 .containsEntry("cost", BigDecimal.ZERO)
                 .containsEntry("profit", BigDecimal.ZERO)
-                .containsEntry("includedServices", 1L);
+                .containsEntry("includedServices", 0L);
     }
 
     @Test
-    void includesVerifiedZeroActivityForNexusAndArchiveOsWithoutInventingRevenue() {
+    void includesVerifiedZeroActivityForNexusAndMarksArchiveOsNotApplicable() {
         EcosystemService ecosystem = Mockito.mock(EcosystemService.class);
         EcosystemBalanceProperties properties = new EcosystemBalanceProperties();
         Instant end = Instant.now();
@@ -193,7 +193,7 @@ class EcosystemBalanceServiceTest {
         nexusEconomy.put("manufacturingRevenue", 0);
         nexusEconomy.put("totalCost", 0);
         nexusEconomy.put("currency", "SYNTHETIC_KRW");
-        nexusEconomy.put("calculationScope", "PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS");
+        nexusEconomy.put("calculationScope", "PERSISTED_OUTBOX_EVENTS_LAST_24_HOURS");
         nexusEconomy.put("periodStart", end.minus(Duration.ofHours(24)).toString());
         nexusEconomy.put("periodEnd", end.toString());
         nexusEconomy.put("available", true);
@@ -212,10 +212,11 @@ class EcosystemBalanceServiceTest {
                 .containsEntry("operatingMargin", BigDecimal.ZERO.setScale(2))
                 .containsEntry("balance", "WITHIN_RANGE")
                 .containsEntry("includedInTotals", true);
-        assertThat(archiveOs).containsEntry("revenue", BigDecimal.ZERO)
-                .containsEntry("cost", BigDecimal.ZERO)
-                .containsEntry("balance", "WITHIN_RANGE")
-                .containsEntry("includedInTotals", true);
+        assertThat(archiveOs).containsEntry("revenue", null)
+                .containsEntry("cost", null)
+                .containsEntry("balance", "NOT_APPLICABLE")
+                .containsEntry("aggregationStatus", "NOT_APPLICABLE")
+                .containsEntry("includedInTotals", false);
     }
 
     @Test
