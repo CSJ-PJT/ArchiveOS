@@ -22,7 +22,8 @@ export function ConsoleDashboardPage({ data, onNavigate, onRefresh, onLoadTopolo
   const runtime = data.liveFlow?.runtime;
   const balance = data.balance;
   const allEvents = data.liveFlowEvents;
-  const filteredEvents = useMemo(() => allEvents.filter((event) => matchesFilter(event, eventFilter)), [allEvents, eventFilter]);
+  const dashboardEvents = useMemo(() => balanceDashboardEvents(allEvents), [allEvents]);
+  const filteredEvents = useMemo(() => dashboardEvents.filter((event) => matchesFilter(event, eventFilter)), [dashboardEvents, eventFilter]);
   const eventPageSize = 5;
   const safeEventPage = Math.min(eventPage, Math.max(0, Math.ceil(filteredEvents.length / eventPageSize) - 1));
   const events = filteredEvents.slice(safeEventPage * eventPageSize, (safeEventPage + 1) * eventPageSize);
@@ -110,6 +111,57 @@ function DashboardViewTabs({ value, onChange }: { value: "overview" | "topology"
 }
 
 function interpolate(template: string, variables: Record<string, string>) { return Object.entries(variables).reduce((text, [key, value]) => text.split(`{${key}}`).join(value), template); }
+
+const DASHBOARD_EVENT_BUCKETS = ["MARKET", "NEXUS", "LOGISTICS", "LEDGER", "ARCHIVEOS"] as const;
+type DashboardEventBucket = typeof DASHBOARD_EVENT_BUCKETS[number];
+type DashboardEvent = AppData["liveFlowEvents"][number];
+
+/**
+ * Keep the dashboard representative without rewriting event facts. Each round contributes the
+ * newest real event from every core service that has data; events inside a service remain in
+ * chronological order. The Records page continues to use the unmodified global chronology.
+ */
+export function balanceDashboardEvents(events: DashboardEvent[]) {
+  const buckets = new Map<DashboardEventBucket, DashboardEvent[]>(DASHBOARD_EVENT_BUCKETS.map((bucket) => [bucket, []]));
+  const other: DashboardEvent[] = [];
+  for (const event of events) {
+    const bucket = dashboardEventBucket(event);
+    if (bucket) buckets.get(bucket)?.push(event);
+    else other.push(event);
+  }
+  for (const values of buckets.values()) values.sort(newestEventFirst);
+  other.sort(newestEventFirst);
+
+  const balanced: DashboardEvent[] = [];
+  for (let round = 0; ; round += 1) {
+    const serviceRound = DASHBOARD_EVENT_BUCKETS
+      .map((bucket) => buckets.get(bucket)?.[round])
+      .filter((event): event is DashboardEvent => Boolean(event))
+      .sort(newestEventFirst);
+    if (!serviceRound.length) break;
+    balanced.push(...serviceRound);
+  }
+  return [...balanced, ...other];
+}
+
+function dashboardEventBucket(event: DashboardEvent): DashboardEventBucket | null {
+  return bucketFromServiceId(event.source_system_id) ?? bucketFromServiceId(event.from_node);
+}
+
+function bucketFromServiceId(value?: string | null): DashboardEventBucket | null {
+  const canonical = String(value || "").toLowerCase().replace(/[^a-z]/g, "");
+  if (canonical.includes("market")) return "MARKET";
+  if (canonical.includes("nexus")) return "NEXUS";
+  if (canonical.includes("logit")) return "LOGISTICS";
+  if (canonical.includes("ledger")) return "LEDGER";
+  if (canonical.includes("archiveos")) return "ARCHIVEOS";
+  return null;
+}
+
+function newestEventFirst(left: DashboardEvent, right: DashboardEvent) {
+  const time = Date.parse(right.occurred_at) - Date.parse(left.occurred_at);
+  return time || left.event_id.localeCompare(right.event_id);
+}
 
 function DashboardKpi({ icon, label, value, helper, helperTitle, status, badgeLabel, trend, trendTone, trendLabel, mobileTrendLabel, note, action, onClick, valueCompact = false }: { icon: IconName; label: string; value: string; helper: string; helperTitle?: string; status: SemanticStatus; badgeLabel?: string; trend?: number[]; trendTone?: "activity" | "approval" | "backlog"; trendLabel?: string; mobileTrendLabel?: string; note?: string; action: string; onClick: () => void; valueCompact?: boolean }) {
   const hasTrend = Boolean(trend?.some((value) => value > 0));

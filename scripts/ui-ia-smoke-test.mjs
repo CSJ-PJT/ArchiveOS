@@ -80,6 +80,9 @@ if (dashboardLoader.includes("getWorkforceOverview") || dashboardLoader.includes
 for (const contract of ["라이브 토폴로지 상세", "LiveFlowPage", "onLoadTopologyDetails", "refreshTopology"]) {
   if (!dashboard.includes(contract)) throw new Error(`Dashboard topology detail contract missing: ${contract}`);
 }
+for (const contract of ["balanceDashboardEvents", "DASHBOARD_EVENT_BUCKETS", "dashboardEventBucket", "serviceRound", "newestEventFirst"]) {
+  if (!dashboard.includes(contract)) throw new Error(`Service-balanced recent-event contract missing: ${contract}`);
+}
 for (const contract of ["integrationConnectors", "등록 시스템", "역량 사용률", "시뮬레이터 정지"]) {
   if (!services.includes(contract)) throw new Error(`Service integration/metric contract missing: ${contract}`);
 }
