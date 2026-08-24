@@ -96,7 +96,7 @@ public class LiveFlowRepository {
                            case
                              when source_key like '%market%' then 'market'
                              when source_key like '%nexus%' then 'nexus'
-                             when source_key like '%logit%' then 'logistics'
+                             when source_key like '%logistics%' or source_key like '%logitics%' then 'logistics'
                              when source_key like '%ledger%' then 'ledger'
                              when source_key like '%archiveos%' or source_key like '%archive-os%' then 'archiveos'
                              else 'other'

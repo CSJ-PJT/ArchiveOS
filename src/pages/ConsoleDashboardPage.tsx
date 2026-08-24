@@ -152,7 +152,7 @@ function bucketFromServiceId(value?: string | null): DashboardEventBucket | null
   const canonical = String(value || "").toLowerCase().replace(/[^a-z]/g, "");
   if (canonical.includes("market")) return "MARKET";
   if (canonical.includes("nexus")) return "NEXUS";
-  if (canonical.includes("logit")) return "LOGISTICS";
+  if (canonical.includes("logistics") || canonical.includes("logitics")) return "LOGISTICS";
   if (canonical.includes("ledger")) return "LEDGER";
   if (canonical.includes("archiveos")) return "ARCHIVEOS";
   return null;

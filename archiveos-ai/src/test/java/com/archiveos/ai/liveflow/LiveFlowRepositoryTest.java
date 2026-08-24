@@ -67,6 +67,7 @@ class LiveFlowRepositoryTest {
                 .contains("partition by service_bucket")
                 .contains("ranked.service_rank asc")
                 .contains("ranked.service_bucket = 'other'")
+                .contains("source_key like '%logistics%' or source_key like '%logitics%'")
                 .contains("partition by lower(trim(coalesce(from_node, '')))");
     }
 }
