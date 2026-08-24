@@ -341,6 +341,10 @@ export type LiveFlowSummary = {
   pending_approvals?: number;
   delayed_shipments?: number;
   failed_callbacks?: number;
+  historical_pending_approvals?: number;
+  historical_delayed_shipments?: number;
+  historical_failed_callbacks?: number;
+  incidentMetricScope?: string;
   degraded_systems?: number;
   latest_event_at?: string | null;
   mode: "LIVE" | "REPLAY" | "DEMO" | string;
@@ -376,7 +380,7 @@ export type LiveFlowSummary = {
       reason?: string;
     }>;
   };
-  /** Current queue count; unlike pending_approvals this is not a historic event snapshot count. */
+  /** Current actionable approval queue count. */
   approvalBacklog?: number | null;
   approvalBacklogSource?: string;
   processingBacklog?: number | null;

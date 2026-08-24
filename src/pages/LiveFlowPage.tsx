@@ -162,9 +162,9 @@ export function LiveFlowPage({ data, onRefresh }: { data: AppData; onRefresh: ()
       <section className="live-flow-metrics compact-mesh-kpis">
         <MetricCard label="최근 30분 이벤트" value={summary.active_flows ?? 0} status={(summary.active_flows ?? 0) > 0 ? "working" : "idle"} description="business 이벤트 30분 집계" />
         <MetricCard label="최근 24시간 이벤트" value={summary.recent_events ?? 0} status={(summary.recent_events ?? 0) > 0 ? "healthy" : "empty"} description="최근 24시간 수신 이벤트" />
-        <MetricCard label="미결 승인" value={summary.pending_approvals ?? 0} status={(summary.pending_approvals ?? 0) > 0 ? "blocked" : "healthy"} description="외부 승인 PENDING 누적" />
-        <MetricCard label="지연/병목" value={summary.delayed_shipments ?? 0} status={(summary.delayed_shipments ?? 0) > 0 ? "warning" : (data.workforce?.summary.totalBacklog ?? 0) > 0 ? "warning" : "healthy"} description={workforceWarning} />
-        <MetricCard label="오류/실패" value={summary.failed_callbacks ?? 0} status={(summary.failed_callbacks ?? 0) > 0 ? "critical" : "healthy"} description="콜백·수집 실패" />
+        <MetricCard label="현재 미결 승인" value={summary.pending_approvals ?? 0} status={(summary.pending_approvals ?? 0) > 0 ? "blocked" : "healthy"} description="지금 조치 가능한 승인 큐" />
+        <MetricCard label="현재 지연/병목" value={summary.delayed_shipments ?? 0} status={(summary.delayed_shipments ?? 0) > 0 ? "warning" : "healthy"} description={(summary.delayed_shipments ?? 0) > 0 ? workforceWarning : "현재 병목 없음"} />
+        <MetricCard label="현재 오류/실패" value={summary.failed_callbacks ?? 0} status={(summary.failed_callbacks ?? 0) > 0 ? "critical" : "healthy"} description="현재 재시도·실패 콜백 큐" />
         <MetricCard label="최근 이벤트 시각" value={latestEvent ? formatTimeAgo(latestEvent) : "없음"} status={freshnessBadgeStatus(freshnessStatus)} description={`파이프라인: ${pipelineStatusLabel(runtime?.pipelineStatus || freshnessStatus)}`} />
       </section>
 
@@ -403,11 +403,11 @@ function buildNodeStats(events: LiveFlowEvent[], runtimeServices: NonNullable<No
   for (const service of runtimeServices || []) {
     const node = runtimeServiceToNode(service.serviceId || service.serviceName);
     const mapped = runtimeStatusToBadge(service.runtimeStatus);
-    stats[node].status = mapped.priority >= statusPriority(stats[node].status) ? mapped.status : stats[node].status;
+    if (mapped.priority > 0) stats[node].status = mapped.status;
     stats[node].runtimeLabel = runtimeStatusLabel(service.runtimeStatus);
     if (typeof service.recentThroughput === "number") stats[node].count = service.recentThroughput;
     stats[node].activityLabel = runtimeActivityLabel(node, stats[node].count, service);
-    if (typeof service.backlogCount === "number" && service.backlogCount > stats[node].backlog) stats[node].backlog = service.backlogCount;
+    if (typeof service.backlogCount === "number") stats[node].backlog = Math.max(0, service.backlogCount);
   }
   for (const node of nodes) {
     if (!runtimeServices.some((service) => runtimeServiceToNode(service.serviceId || service.serviceName) === node.id)) {
@@ -585,16 +585,6 @@ function runtimeStatusLabel(value: string) {
   if (status === "FAILED") return "실패";
   if (status === "HEALTHY") return "정상";
   return "대기";
-}
-
-function statusPriority(value: string) {
-  const status = String(value || "").toLowerCase();
-  if (status === "critical" || status === "failed") return 5;
-  if (status === "warning" || status === "degraded") return 4;
-  if (status === "waiting" || status === "blocked") return 3;
-  if (status === "working" || status === "running") return 2;
-  if (status === "healthy") return 1;
-  return 0;
 }
 
 function statusLabel(value: string) {
