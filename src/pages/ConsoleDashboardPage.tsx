@@ -195,7 +195,16 @@ function processingBacklogStatus(summary: AppData["liveFlow"]): SemanticStatus {
 function displayCount(value: number | null | undefined) { return typeof value === "number" ? value.toLocaleString() : "데이터 없음"; }
 function shortId(value: string | null | undefined) { return value ? `${value.slice(0, 12)}…` : null; }
 function displayServiceName(value: string) { const normalized = value.toLowerCase(); if (normalized.includes("market")) return "Market"; if (normalized.includes("nexus")) return "Nexus"; if (normalized.includes("logis") || normalized.includes("logit")) return "Logistics"; if (normalized.includes("ledger")) return "Ledger"; if (normalized.includes("settle")) return "Settlement"; if (normalized.includes("archiveos")) return "ArchiveOS"; return value; }
-function formatTime(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+function formatTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const now = new Date();
+  const isToday = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+  const options: Intl.DateTimeFormatOptions = isToday
+    ? { hour: "2-digit", minute: "2-digit", second: "2-digit" }
+    : { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" };
+  return date.toLocaleString([], options);
+}
 function timeAgo(value: string) { const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000)); return seconds < 60 ? `${seconds}초 전` : `${Math.floor(seconds / 60)}분 전`; }
 function isFresh(value: string) { const timestamp = new Date(value).getTime(); return !Number.isNaN(timestamp) && Date.now() - timestamp < 10_000; }
 function matchesFilter(event: AppData["liveFlowEvents"][number], filter: EventFilter) { if (filter === "ALL") return true; if (filter === "WARNING") return /warning|failed|critical|delayed|stale/i.test(`${event.status} ${event.severity}`); return `${event.source_system_id} ${event.from_node} ${event.to_node}`.toUpperCase().includes(filter); }
