@@ -2,6 +2,7 @@ package com.archiveos.ai.liveflow;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -49,5 +50,23 @@ class LiveFlowRepositoryTest {
         verify(jdbc).queryForMap(sql.capture());
         assertThat(sql.getValue()).doesNotContain("andnot", "wherenot");
         assertThat(sql.getValue()).contains("and (", "where (");
+    }
+
+    @Test
+    void balancedRecentEventsRotateAcrossServicesBeforeRepeatingNoisySources() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.query(anyString(), any(RowMapper.class), anyInt(), anyInt())).thenReturn(List.of());
+        LiveFlowRepository repository = new LiveFlowRepository(
+                jdbc, mock(LiveFlowEventBroadcaster.class), mock(WorldEventBroadcaster.class));
+
+        repository.recentBalanced(30);
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbc).query(sql.capture(), any(RowMapper.class), anyInt(), anyInt());
+        assertThat(sql.getValue())
+                .contains("partition by service_bucket")
+                .contains("ranked.service_rank asc")
+                .contains("ranked.service_bucket = 'other'")
+                .contains("partition by lower(trim(coalesce(from_node, '')))");
     }
 }

@@ -80,22 +80,52 @@ public class LiveFlowRepository {
                 this::row, clamp(limit));
     }
 
-    /** Route-balanced dashboard sample; chronological record views keep using recent(). */
+    /**
+     * Service- and route-balanced dashboard sample; chronological record views keep using recent().
+     *
+     * A high-volume source (normally Ledger) must not occupy the first dashboard page while
+     * real events from the other Archive services are still available. Events remain newest-first
+     * inside each service round, and the route cap prevents one path from dominating a service.
+     */
     public List<Map<String, Object>> recentBalanced(int limit) {
         int safeLimit = clamp(limit);
         int perRoute = Math.max(1, Math.min(6, safeLimit / 8 + 1));
         return jdbc.query("""
-                select ranked.*
-                  from (
+                with classified as (
                     select event.*,
+                           case
+                             when source_key like '%market%' then 'market'
+                             when source_key like '%nexus%' then 'nexus'
+                             when source_key like '%logit%' then 'logistics'
+                             when source_key like '%ledger%' then 'ledger'
+                             when source_key like '%archiveos%' or source_key like '%archive-os%' then 'archiveos'
+                             else 'other'
+                           end as service_bucket
+                      from (
+                        select source_event.*,
+                               lower(trim(coalesce(source_system_id, '') || ' ' || coalesce(from_node, ''))) as source_key
+                          from public.ecosystem_flow_event source_event
+                      ) event
+                ), ranked as (
+                    select classified.*,
+                           row_number() over (
+                             partition by service_bucket
+                             order by occurred_at desc, received_at desc, id desc
+                           ) as service_rank,
                            row_number() over (
                              partition by lower(trim(coalesce(from_node, ''))), lower(trim(coalesce(to_node, '')))
                              order by occurred_at desc, received_at desc, id desc
                            ) as route_rank
-                      from public.ecosystem_flow_event event
-                  ) ranked
+                      from classified
+                )
+                select ranked.*
+                  from ranked
                  where ranked.route_rank <= ?
-                 order by ranked.occurred_at desc, ranked.received_at desc, ranked.id desc
+                 order by ranked.service_rank asc,
+                          case when ranked.service_bucket = 'other' then 1 else 0 end asc,
+                          ranked.occurred_at desc,
+                          ranked.received_at desc,
+                          ranked.id desc
                  limit ?
                 """, this::row, perRoute, safeLimit);
     }
