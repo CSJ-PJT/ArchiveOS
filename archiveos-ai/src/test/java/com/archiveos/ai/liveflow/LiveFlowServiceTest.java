@@ -288,6 +288,57 @@ class LiveFlowServiceTest {
         verify(repository, never()).businessEventCountByNode("Archive-Ledger", 30);
     }
 
+    @Test void summarySeparatesCurrentQueuesFromImmutableIncidentHistory() {
+        LiveFlowRepository repository = repositoryBase(Map.of(
+                "logistics", Instant.now().minusSeconds(600),
+                "ledger", Instant.now().minusSeconds(600)));
+        when(repository.summary()).thenReturn(Map.of(
+                "active_flows", 3,
+                "recent_events", 20,
+                "pending_approvals", 8,
+                "delayed_shipments", 7,
+                "failed_callbacks", 6,
+                "historical_pending_approvals", 1_639,
+                "historical_delayed_shipments", 325,
+                "historical_failed_callbacks", 4_927));
+        EcosystemService ecosystem = Mockito.mock(EcosystemService.class);
+        when(ecosystem.summary()).thenReturn(healthyServices(Map.of(
+                "logitics", Map.of("runtime", Map.of(
+                        "runtimeActive", true,
+                        "autoRunEnabled", true,
+                        "schedulerStatus", "BACKLOG_LIMITED",
+                        "pipelineStatus", "LIVE_WITH_BACKLOG",
+                        "backlogCount", 50)),
+                "ledger", Map.of("runtime", Map.of(
+                        "runtimeActive", false,
+                        "autoRunEnabled", false,
+                        "schedulerStatus", "DISABLED",
+                        "pipelineStatus", "PAUSED",
+                        "backlogCount", 100)),
+                "nexus", Map.of("runtime", Map.of(
+                        "runtimeActive", false,
+                        "autoRunEnabled", false,
+                        "schedulerStatus", "DISABLED",
+                        "pipelineStatus", "DISABLED",
+                        "backlogCount", 190)))));
+        ExternalApprovalRepository approvals = Mockito.mock(ExternalApprovalRepository.class);
+        when(approvals.summary()).thenReturn(Map.of("actionable_pending", 0));
+        ApprovalCallbackOutboxRepository callbacks = Mockito.mock(ApprovalCallbackOutboxRepository.class);
+        when(callbacks.summary()).thenReturn(Map.of("actionable", 0));
+        LiveFlowService service = new LiveFlowService(repository, ecosystem, approvals, callbacks, audit());
+
+        Map<String, Object> result = service.summary();
+
+        assertThat(result).containsEntry("pending_approvals", 0L)
+                .containsEntry("delayed_shipments", 50L)
+                .containsEntry("failed_callbacks", 0L)
+                .containsEntry("degraded_systems", 0L)
+                .containsEntry("historical_pending_approvals", 1_639)
+                .containsEntry("historical_delayed_shipments", 325)
+                .containsEntry("historical_failed_callbacks", 4_927)
+                .containsEntry("processingBacklog", 150L);
+    }
+
     private LiveFlowRepository repositoryBase(Map<String, Instant> latestByNode) {
         LiveFlowRepository repository = Mockito.mock(LiveFlowRepository.class);
         when(repository.upsert(any())).thenReturn(Map.of("event_id", "stored"));

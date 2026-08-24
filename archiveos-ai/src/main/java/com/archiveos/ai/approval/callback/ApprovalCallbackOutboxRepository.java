@@ -44,6 +44,21 @@ public class ApprovalCallbackOutboxRepository {
                 """, this::row, clamp(limit));
     }
 
+    public Map<String, Object> summary() {
+        try {
+            return jdbc.queryForMap("""
+                    select
+                      count(*) filter (where status in ('PENDING', 'RETRY'))::int as pending_or_retry,
+                      count(*) filter (where status = 'FAILED')::int as failed,
+                      count(*) filter (where status in ('PENDING', 'RETRY', 'FAILED'))::int as actionable,
+                      count(*)::int as total
+                    from public.approval_callback_outbox
+                    """);
+        } catch (DataAccessException error) {
+            return Map.of("pending_or_retry", 0, "failed", 0, "actionable", 0, "total", 0);
+        }
+    }
+
     public void markSent(String callbackId) {
         jdbc.update("""
                 update public.approval_callback_outbox

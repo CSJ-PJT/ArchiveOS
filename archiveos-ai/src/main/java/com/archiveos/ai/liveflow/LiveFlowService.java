@@ -74,10 +74,20 @@ public class LiveFlowService {
         Map<String, Object> approvalSummary = approvals.summary();
         if (approvalSummary == null) approvalSummary = Map.of();
         Long actionablePending = optionalLong(approvalSummary, "actionable_pending", "pending");
-        value.put("approvalBacklog", actionablePending == null ? null : actionablePending);
+        long currentApprovals = actionablePending == null ? 0L : actionablePending;
+        Map<String, Object> callbackSummary = callbacks.summary();
+        if (callbackSummary == null) callbackSummary = Map.of();
+        long currentCallbackFailures = number(callbackSummary.get("actionable"));
+        long currentDelayBacklog = problemBacklog(runtime);
+        value.put("pending_approvals", currentApprovals);
+        value.put("delayed_shipments", currentDelayBacklog);
+        value.put("failed_callbacks", currentCallbackFailures);
+        value.put("degraded_systems", degradedServiceCount(runtime));
+        value.put("incidentMetricScope", "current actionable queues");
+        value.put("approvalBacklog", currentApprovals);
         value.put("approvalBacklogSource", "current actionable approvals");
         value.put("processingBacklog", processingBacklog(runtime));
-        value.put("processingBacklogSource", "current service outbox and processing backlog");
+        value.put("processingBacklogSource", "current service outbox and processing backlog; settlement projection excluded");
         return value;
     }
 
@@ -234,12 +244,51 @@ public class LiveFlowService {
             if (!(item instanceof Map<?, ?> state)) continue;
             Object status = state.get("serviceStatus");
             if ("UNAVAILABLE".equalsIgnoreCase(String.valueOf(status)) || "DISABLED".equalsIgnoreCase(String.valueOf(status))) continue;
+            if ("settlement".equalsIgnoreCase(String.valueOf(state.get("serviceId")))) continue;
+            if ("DISABLED".equalsIgnoreCase(String.valueOf(state.get("pipelineStatus")))
+                    && !Boolean.TRUE.equals(state.get("autoRunEnabled"))) continue;
             Object backlog = state.get("backlogCount");
             if (backlog == null) continue;
             total += number(backlog);
             available = true;
         }
         return available ? total : null;
+    }
+
+    private long problemBacklog(Map<String, Object> runtime) {
+        Object values = runtime.get("services");
+        if (!(values instanceof List<?> services)) return 0L;
+        long total = 0L;
+        for (Object item : services) {
+            if (!(item instanceof Map<?, ?> state)) continue;
+            if ("settlement".equalsIgnoreCase(String.valueOf(state.get("serviceId")))) continue;
+            String runtimeStatus = String.valueOf(state.get("runtimeStatus")).toUpperCase(Locale.ROOT);
+            String schedulerStatus = String.valueOf(state.get("schedulerStatus")).toUpperCase(Locale.ROOT);
+            String pipelineStatus = String.valueOf(state.get("pipelineStatus")).toUpperCase(Locale.ROOT);
+            boolean explicitProblem = List.of("STALLED", "WARNING", "FAILED", "ERROR", "UNAVAILABLE")
+                    .contains(runtimeStatus)
+                    || "BACKLOG_LIMITED".equals(schedulerStatus)
+                    || pipelineStatus.contains("STALLED")
+                    || pipelineStatus.contains("DEGRADED");
+            if (!explicitProblem) continue;
+            total += Math.max(0L, number(state.get("backlogCount")));
+        }
+        return total;
+    }
+
+    private long degradedServiceCount(Map<String, Object> runtime) {
+        Object values = runtime.get("services");
+        if (!(values instanceof List<?> services)) return 0L;
+        long total = 0L;
+        for (Object item : services) {
+            if (!(item instanceof Map<?, ?> state)) continue;
+            String serviceStatus = String.valueOf(state.get("serviceStatus")).toUpperCase(Locale.ROOT);
+            String runtimeStatus = String.valueOf(state.get("runtimeStatus")).toUpperCase(Locale.ROOT);
+            boolean serviceHealthy = List.of("HEALTHY", "UP", "OK").contains(serviceStatus);
+            boolean runtimeFailed = List.of("STALLED", "FAILED", "ERROR", "UNAVAILABLE").contains(runtimeStatus);
+            if (!serviceHealthy || runtimeFailed) total++;
+        }
+        return total;
     }
 
     private Map<String, Object> runtimeServiceState(String key, Map<String, Object> service, Instant latestNodeEventAt, Map<String, Object> throughputMetrics) {

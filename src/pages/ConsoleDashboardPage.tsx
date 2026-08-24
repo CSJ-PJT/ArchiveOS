@@ -80,8 +80,8 @@ export function ConsoleDashboardPage({ data, onNavigate, onRefresh, onLoadTopolo
     <section className="dashboard-kpi-grid" aria-label="핵심 운영 지표">
       <DashboardKpi icon="health" label="정상 서비스" value={`${healthy}/${services.length + 1}`} helper="핵심 서비스와 Control Tower" status={healthy === services.length + 1 ? "healthy" : "warning"} note="마지막 확인 기준" action="서비스" onClick={() => onNavigate("services")} />
       <DashboardKpi icon="activity" label="최근 30분 이벤트" value={displayCount(data.liveFlow?.active_flows)} helper={data.liveFlow?.latest_event_at ? `마지막 수신 ${timeAgo(data.liveFlow.latest_event_at)}` : "최근 이벤트 없음"} status={runtime?.freshnessStatus === "LIVE" ? "working" : runtime?.freshnessStatus === "NO_RUNTIME_EVENTS" ? "empty" : "warning"} trend={activeTrend} trendTone="activity" trendLabel="최근 30분" mobileTrendLabel="최근 30분" action="이벤트" onClick={() => onNavigate("records")} />
-      <DashboardKpi icon="approval" label="미결 승인" value={displayCount(data.liveFlow?.approvalBacklog)} helper="전체 기간 기준" status={numberStatus(data.liveFlow?.approvalBacklog)} trend={approvalTrend} trendTone="approval" trendLabel="최근 30분" mobileTrendLabel="현재 승인 큐 기준" action={translate("copilot.analyze")} onClick={() => setCopilotQuestion(translate("copilot.questionApproval"))} />
-      <DashboardKpi icon="workflow" label="처리 적체" value={displayCount(data.liveFlow?.processingBacklog)} helper="현재 처리 대기 기준" status={numberStatus(data.liveFlow?.processingBacklog)} trend={backlogTrend} trendTone="backlog" trendLabel="최근 30분" mobileTrendLabel="처리 대기 기준" action={translate("copilot.analyze")} onClick={() => setCopilotQuestion(translate("copilot.questionBacklog"))} />
+      <DashboardKpi icon="approval" label="미결 승인" value={displayCount(data.liveFlow?.approvalBacklog)} helper="현재 승인 큐 기준" status={numberStatus(data.liveFlow?.approvalBacklog)} trend={approvalTrend} trendTone="approval" trendLabel="최근 30분" mobileTrendLabel="현재 승인 큐 기준" action={translate("copilot.analyze")} onClick={() => setCopilotQuestion(translate("copilot.questionApproval"))} />
+      <DashboardKpi icon="workflow" label="처리 적체" value={displayCount(data.liveFlow?.processingBacklog)} helper="현재 처리 대기 기준" status={processingBacklogStatus(data.liveFlow)} trend={backlogTrend} trendTone="backlog" trendLabel="최근 30분" mobileTrendLabel="처리 대기 기준" action={translate("copilot.analyze")} onClick={() => setCopilotQuestion(translate("copilot.questionBacklog"))} />
       <DashboardKpi icon="overview" label="생태계 균형" value={balanceView.label} valueCompact helper={balanceShortSummary(balance?.balanceStatus)} helperTitle={balance?.reviewReason || balanceView.description} status={balanceView.status} badgeLabel={balanceView.badge} note={balance ? "마지막 계산 기준" : "재무 Runtime Mesh 수집 대기"} action={translate("copilot.analyze")} onClick={() => setCopilotQuestion(interpolate(translate("copilot.questionBalance"), { status: balance?.balanceStatus || "NO_DATA" }))} />
     </section>
 
@@ -134,6 +134,12 @@ function buildTrend(events: AppData["liveFlowEvents"], predicate: (event: AppDat
 
 function sparklinePoints(values: number[]) { const max = Math.max(...values, 1); return values.map((value, index) => `${index * (100 / Math.max(values.length - 1, 1))},${25 - (value / max) * 20}`).join(" "); }
 function numberStatus(value: number | null | undefined): SemanticStatus { return typeof value !== "number" ? "empty" : value > 0 ? "warning" : "healthy"; }
+function processingBacklogStatus(summary: AppData["liveFlow"]): SemanticStatus {
+  if (typeof summary?.processingBacklog !== "number") return "empty";
+  if (summary.processingBacklog === 0) return "healthy";
+  const hasCurrentIncident = (summary.delayed_shipments ?? 0) > 0 || (summary.failed_callbacks ?? 0) > 0 || (summary.degraded_systems ?? 0) > 0;
+  return hasCurrentIncident ? "warning" : "working";
+}
 function displayCount(value: number | null | undefined) { return typeof value === "number" ? value.toLocaleString() : "데이터 없음"; }
 function shortId(value: string | null | undefined) { return value ? `${value.slice(0, 12)}…` : null; }
 function displayServiceName(value: string) { const normalized = value.toLowerCase(); if (normalized.includes("market")) return "Market"; if (normalized.includes("nexus")) return "Nexus"; if (normalized.includes("logis") || normalized.includes("logit")) return "Logistics"; if (normalized.includes("ledger")) return "Ledger"; if (normalized.includes("settle")) return "Settlement"; if (normalized.includes("archiveos")) return "ArchiveOS"; return value; }

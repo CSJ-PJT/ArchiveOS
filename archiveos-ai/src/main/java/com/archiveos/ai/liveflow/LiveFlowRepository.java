@@ -155,10 +155,19 @@ public class LiveFlowRepository {
                            %1$s
                          )
                       )::int as recent_events,
-                      count(*) filter (where status = 'approval_required')::int as pending_approvals,
-                      count(*) filter (where status = 'delayed')::int as delayed_shipments,
-                      count(*) filter (where event_type in ('CALLBACK_FAILED', 'ledger_callback_failed') or status = 'failed')::int as failed_callbacks,
-                      count(distinct source_system_id) filter (where status = 'unavailable')::int as degraded_systems,
+                      count(*) filter (where occurred_at > now() - interval '24 hours' and status = 'approval_required')::int as pending_approvals,
+                      count(*) filter (where occurred_at > now() - interval '24 hours' and status = 'delayed')::int as delayed_shipments,
+                      count(*) filter (where occurred_at > now() - interval '24 hours' and (event_type in ('CALLBACK_FAILED', 'ledger_callback_failed') or status = 'failed'))::int as failed_callbacks,
+                      count(*) filter (where status = 'approval_required')::int as historical_pending_approvals,
+                      count(*) filter (where status = 'delayed')::int as historical_delayed_shipments,
+                      count(*) filter (where event_type in ('CALLBACK_FAILED', 'ledger_callback_failed') or status = 'failed')::int as historical_failed_callbacks,
+                      (select count(*)::int from (
+                         select distinct on (lower(source_system_id)) lower(status) as latest_status
+                           from public.ecosystem_flow_event
+                          where source_system_id is not null
+                          order by lower(source_system_id), occurred_at desc, id desc
+                       ) latest_source where latest_status = 'unavailable') as degraded_systems,
+                      count(distinct source_system_id) filter (where status = 'unavailable')::int as historical_degraded_systems,
                       max(occurred_at) filter (where (
                         %1$s
                       )) as latest_event_at
@@ -172,17 +181,29 @@ public class LiveFlowRepository {
                         select
                           count(distinct event_id) filter (where occurred_at > now() - interval '30 minutes')::int as active_flows,
                           count(*) filter (where occurred_at > now() - interval '24 hours')::int as recent_events,
-                          count(*) filter (where lower(status) = 'approval_required')::int as pending_approvals,
-                          count(*) filter (where lower(status) = 'delayed')::int as delayed_shipments,
-                          count(*) filter (where event_type in ('CALLBACK_FAILED', 'ledger_callback_failed') or lower(status) = 'failed')::int as failed_callbacks,
-                          count(distinct source_system_id) filter (where lower(status) = 'unavailable')::int as degraded_systems,
+                          count(*) filter (where occurred_at > now() - interval '24 hours' and lower(status) = 'approval_required')::int as pending_approvals,
+                          count(*) filter (where occurred_at > now() - interval '24 hours' and lower(status) = 'delayed')::int as delayed_shipments,
+                          count(*) filter (where occurred_at > now() - interval '24 hours' and (event_type in ('CALLBACK_FAILED', 'ledger_callback_failed') or lower(status) = 'failed'))::int as failed_callbacks,
+                          count(*) filter (where lower(status) = 'approval_required')::int as historical_pending_approvals,
+                          count(*) filter (where lower(status) = 'delayed')::int as historical_delayed_shipments,
+                          count(*) filter (where event_type in ('CALLBACK_FAILED', 'ledger_callback_failed') or lower(status) = 'failed')::int as historical_failed_callbacks,
+                          (select count(*)::int from (
+                             select distinct on (lower(source_system_id)) lower(status) as latest_status
+                               from public.ecosystem_flow_event
+                              where source_system_id is not null
+                              order by lower(source_system_id), occurred_at desc, id desc
+                           ) latest_source where latest_status = 'unavailable') as degraded_systems,
+                          count(distinct source_system_id) filter (where lower(status) = 'unavailable')::int as historical_degraded_systems,
                           max(occurred_at) as latest_event_at
                         from public.ecosystem_flow_event
                         """);
             } catch (DataAccessException fallbackError) {
                 log.error("Persisted event summary fallback failed", fallbackError);
                 return Map.of("active_flows", 0, "recent_events", 0, "pending_approvals", 0,
-                        "delayed_shipments", 0, "failed_callbacks", 0, "degraded_systems", 0);
+                        "delayed_shipments", 0, "failed_callbacks", 0, "degraded_systems", 0,
+                        "historical_degraded_systems", 0,
+                        "historical_pending_approvals", 0, "historical_delayed_shipments", 0,
+                        "historical_failed_callbacks", 0);
             }
         }
     }
