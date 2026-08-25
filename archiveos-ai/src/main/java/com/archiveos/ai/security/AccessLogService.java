@@ -1,6 +1,5 @@
 package com.archiveos.ai.security;
 
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,13 +36,12 @@ public class AccessLogService {
                     where actor = ?
                       and role = ?
                       and route = ?
-                      and request_path = ?
                       and client_ip = ?
                       and occurred_at >= now() - interval '5 seconds'
                 )
                 """,
                 actor.name(), actor.role().name(), safeRoute, safePath, safeIp, safeAgent, safeReferer,
-                actor.name(), actor.role().name(), safeRoute, safePath, safeIp);
+                actor.name(), actor.role().name(), safeRoute, safeIp);
     }
 
     public List<Map<String, Object>> recent(int limit, String route) {
@@ -100,7 +98,7 @@ public class AccessLogService {
 
     public int purgeOlderThan(int retentionDays) {
         int days = Math.max(1, Math.min(retentionDays, 365));
-        return jdbc.update("delete from public.web_access_logs where occurred_at < now() - (? * interval '1 day')", days);
+        return jdbc.update("delete from public.web_access_logs where occurred_at < now() - make_interval(days => ?)", days);
     }
 
     private Actor actor() {
