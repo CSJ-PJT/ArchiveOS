@@ -1,10 +1,13 @@
 ﻿param(
     [switch]$NoSend,
     [switch]$NoPersist,
-    [string]$OutputPath = ''
+    [string]$OutputPath = '',
+    [string]$AccessMonitorStatePath = 'C:\ArchiveRecovery\disk-monitor\daily-digest\access-monitor-state.json'
 )
 
 $ErrorActionPreference = 'Stop'
+$accessMonitorModule = Join-Path $PSScriptRoot 'ArchiveAccessMonitor.psm1'
+Import-Module $accessMonitorModule -Force
 $root = 'C:\ArchiveRecovery\disk-monitor\daily-digest'
 $history = Join-Path $root 'history'
 $latest = Join-Path $root 'latest.json'
@@ -40,6 +43,67 @@ function Get-EnvironmentValue([object[]]$Rows, [string]$Name) {
     $row = $Rows | Where-Object { $_ -is [string] -and $_.StartsWith($prefix) } | Select-Object -First 1
     if (-not $row) { return '' }
     return $row.Substring($prefix.Length)
+}
+
+function Get-ArchiveOsUsageAccessEvents([DateTimeOffset]$Start, [DateTimeOffset]$End) {
+    $container = @(& docker ps -a --filter 'name=archiveos-postgres' --format '{{.Names}}' 2>$null) | Select-Object -First 1
+    if (-not $container) { throw 'ArchiveOS PostgreSQL container was not found.' }
+    $environment = Get-ContainerEnvironment $container
+    $user = Get-EnvironmentValue $environment 'POSTGRES_USER'
+    $database = Get-EnvironmentValue $environment 'POSTGRES_DB'
+    if (-not $user -or -not $database) { throw 'ArchiveOS PostgreSQL identity is unavailable.' }
+    $startValue = $Start.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'", [Globalization.CultureInfo]::InvariantCulture)
+    $endValue = $End.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'", [Globalization.CultureInfo]::InvariantCulture)
+    $sql = "select extract(epoch from occurred_at)::bigint, host(client_ip) from public.archiveos_usage_logs where client_ip is not null and occurred_at >= timestamptz '$startValue' and occurred_at < timestamptz '$endValue' order by occurred_at;"
+    $rows = @(& docker exec $container psql -X -U $user -d $database -At -F '|' -c $sql 2>&1)
+    if ($LASTEXITCODE -ne 0) { throw 'ArchiveOS usage access query failed.' }
+    $events = @()
+    foreach ($row in $rows) {
+        if ([string]$row -notmatch '^(\d+)\|(.+)$') { continue }
+        $events += [pscustomobject]@{
+            OccurredAt = [DateTimeOffset]::FromUnixTimeSeconds([int64]$Matches[1])
+            Ip = $Matches[2]
+        }
+    }
+    return $events
+}
+
+function Get-AccessMonitoring([datetime]$Cutoff, [datetime]$Now) {
+    try {
+        $state = Get-ArchiveAccessMonitorStateInfo -Path $AccessMonitorStatePath
+        $periodEnd = [DateTimeOffset]$Now
+        $periodStart = [DateTimeOffset]$Cutoff
+        if ($periodEnd -le $state.monitorStart) {
+            return [ordered]@{
+                available = $true
+                status = 'PENDING'
+                baselineCapturedAt = $state.baselineCapturedAt.ToString('o')
+                monitorStart = $state.monitorStart.ToString('o')
+                baselineIpCount = $state.knownIpCount
+                periodStart = $state.monitorStart.ToString('o')
+                periodEnd = $periodEnd.ToString('o')
+                newExternalIpCount = 0
+                newExternalAccessCount = 0
+                baselineAccessCount = 0
+                ignoredNonPublicCount = 0
+                identities = @()
+            }
+        }
+        if ($periodStart -lt $state.monitorStart) { $periodStart = $state.monitorStart }
+        $events = @(Get-ArchiveOsUsageAccessEvents -Start $periodStart -End $periodEnd)
+        $summary = Get-ArchiveAccessSummary -Events $events -PeriodStart $periodStart -PeriodEnd $periodEnd -StatePath $AccessMonitorStatePath
+        $summary['status'] = 'ACTIVE'
+        return $summary
+    } catch {
+        return [ordered]@{
+            available = $false
+            status = 'UNAVAILABLE'
+            reason = $_.Exception.Message
+            newExternalIpCount = 0
+            newExternalAccessCount = 0
+            identities = @()
+        }
+    }
 }
 
 function Get-SlackConfiguration {
@@ -194,6 +258,7 @@ $endpointHealth = Invoke-SafeApi '/api/health/endpoints'
 $nexus = Get-NexusMetrics
 $docker = Get-DockerSummary
 $batch = Get-BatchSummary $cutoff
+$accessMonitoring = Get-AccessMonitoring -Cutoff $cutoff -Now $now
 $snapshot = [ordered]@{
     capturedAt = $now.ToString('o')
     periodStart = $cutoff.ToString('o')
@@ -204,6 +269,7 @@ $snapshot = [ordered]@{
     docker = $docker
     batch = $batch
     nexus = $nexus
+    accessMonitoring = $accessMonitoring
 }
 
 $previous = $null
@@ -220,6 +286,8 @@ Add-Warning $warnings ($batch.failed -gt 0) ("최근 24시간 Spring Batch 실�
 Add-Warning $warnings ($batch.legacyFailed -gt 0) ("최근 24시간 운영 배치 실패 {0}건" -f $batch.legacyFailed)
 Add-Warning $warnings ($nexus.available -and $nexus.largeObjectCount -gt 0) ("Nexus Large Object 재생성 {0}건" -f $nexus.largeObjectCount)
 Add-Warning $warnings ($snapshot.cFreeBytes -lt 50GB) ("C: 여유 공간 임계치 미만: {0}" -f (Format-Gb $snapshot.cFreeBytes))
+if (-not $accessMonitoring.available) { $warnings.Add('접속 IP 일일 감시 수집 불가: ' + [string]$accessMonitoring.reason) }
+if ($accessMonitoring.available -and $accessMonitoring.newExternalIpCount -gt 0) { $warnings.Add(("기준선 외 신규 외부 접속 {0}개 IP / {1}건" -f $accessMonitoring.newExternalIpCount, $accessMonitoring.newExternalAccessCount)) }
 
 $endpointText = '수집 불가'
 if ($null -ne $snapshot.endpointHealth) {
@@ -232,6 +300,22 @@ $nexusText = if (-not $nexus.available) {
     '수집 불가'
 } else {
     "DB $(Format-Gb $nexus.databaseBytes) | LO $(Format-Gb $nexus.largeObjectBytes) / $($nexus.largeObjectCount)건 | WAL $(Format-Gb $nexus.walBytes)"
+}
+$accessText = if (-not $accessMonitoring.available) {
+    '• 수집 불가 (원문 IP는 Slack에 전송하지 않음)'
+} elseif ($accessMonitoring.status -eq 'PENDING') {
+    "• 감시 시작: $(([DateTimeOffset]$accessMonitoring.monitorStart).ToString('yyyy-MM-dd HH:mm')) KST`n• 기준선 외 외부 접속: 감시 시작 전"
+} else {
+    $identityText = if ($accessMonitoring.identities.Count -eq 0) {
+        '• 비식별 상세: 해당 없음'
+    } else {
+        ($accessMonitoring.identities | ForEach-Object {
+            $first = ([DateTimeOffset]$_.firstSeen).ToLocalTime().ToString('MM-dd HH:mm')
+            $last = ([DateTimeOffset]$_.lastSeen).ToLocalTime().ToString('MM-dd HH:mm')
+            "• $($_.anonymousId): $($_.count)건 ($first ~ $last)"
+        }) -join "`n"
+    }
+    "• 기존 기준선 $($accessMonitoring.baselineIpCount)개 IP 제외`n• 기준선 외 외부 접속: 고유 $($accessMonitoring.newExternalIpCount)개 / $($accessMonitoring.newExternalAccessCount)건`n$identityText"
 }
 $warningText = if ($warnings.Count -eq 0) { '• 감지된 경고 없음' } else { ($warnings | ForEach-Object { "• $_" }) -join "`n" }
 
@@ -250,6 +334,10 @@ $message = @"
 • 작업별 최신 상태: $jobText
 $failedBatchText
 $latestBatchText
+
+[접속 보안]
+$accessText
+• Slack에는 IP 원문을 전송하지 않습니다.
 
 [스토리지 · Nexus]
 • C: 여유 $(Format-Gb $snapshot.cFreeBytes) / 전일 대비 $(Format-DeltaGb $cDelta)

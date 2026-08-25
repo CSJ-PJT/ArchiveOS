@@ -7,6 +7,8 @@ try {
     if ($null -eq $result.snapshot) { throw 'snapshot is missing' }
     if ($result.message -notmatch 'Archive 일일 통합 운영 보고') { throw 'daily digest title is missing' }
     if ($result.message -notmatch '\[배치 · 자동화 24시간\]') { throw 'batch summary section is missing' }
+    if ($result.message -notmatch '\[접속 보안\]') { throw 'access security section is missing' }
+    if ($result.message -notmatch 'Slack에는 IP 원문을 전송하지 않습니다') { throw 'IP anonymization notice is missing' }
     if ($result.message -notmatch '\[스토리지 · Nexus\]') { throw 'storage and Nexus section is missing' }
     if ($result.slackSent -ne $false) { throw 'NoSend mode attempted Slack delivery' }
     Write-Output 'ARCHIVE_DAILY_DIGEST_TEST=PASS'
