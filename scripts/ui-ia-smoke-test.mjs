@@ -29,6 +29,7 @@ const agents = read("src/pages/AgentsPage.tsx");
 const workflows = read("src/pages/WorkflowsPage.tsx");
 const sidebar = read("src/components/shared/Sidebar.tsx");
 const consoleSettings = read("src/pages/ConsoleSettingsPage.tsx");
+const usageAudit = read("src/pages/AdminUsageAuditPage.tsx");
 const mailPage = read("src/pages/MailPage.tsx");
 const mcpRegistry = read("src/pages/McpRegistryPage.tsx");
 const pageUtils = read("src/pages/pageUtils.ts");
@@ -145,6 +146,18 @@ if (!styles.includes(".brand-home-button:hover")) throw new Error("ArchiveOS bra
 if (!services.includes('"archive-logitics": "합성 물류·운송 운영"')) throw new Error("Legacy Logistics system ID must use the localized role label.");
 for (const contract of ["protectedKeys", "권한 보호 항목", "공개 세션에서 보호됨", "roleLabel"]) {
   if (!consoleSettings.includes(contract)) throw new Error(`Settings public-protection display missing: ${contract}`);
+}
+for (const contract of ['data.auth.role === "ADMIN"', '["usage", "사용 기록"]', "AdminUsageAuditPage"]) {
+  if (!consoleSettings.includes(contract)) throw new Error(`Admin-only usage audit tab missing: ${contract}`);
+}
+for (const contract of ["ArchiveOS 사용 기록", "client_ip", "사용 시각", "접속 환경", "PAGE_SIZE", "getUsageAudit"]) {
+  if (!usageAudit.includes(contract)) throw new Error(`Admin usage audit UI contract missing: ${contract}`);
+}
+for (const contract of ["recordConsoleUsage(route)", "lastUsageRecordedAt", "3_000"]) {
+  if (!appShell.includes(contract)) throw new Error(`Console page usage tracking contract missing: ${contract}`);
+}
+for (const contract of ["/api/audit/usage", "x-real-ip", "x-forwarded-for", "user-agent"]) {
+  if (!backendServer.includes(contract)) throw new Error(`Usage audit proxy contract missing: ${contract}`);
 }
 for (const contract of ["MCP 도구 레지스트리", "운영자·PM·관리자 세션", "읽기 전용 도구 거버넌스"]) {
   if (!mcpRegistry.includes(contract)) throw new Error(`MCP registry localization missing: ${contract}`);

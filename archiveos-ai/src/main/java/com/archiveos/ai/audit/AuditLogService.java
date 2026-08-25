@@ -46,14 +46,19 @@ public class AuditLogService {
     }
 
     public void record(String method, String path, int status, String correlationId, JsonNode oldValue, JsonNode newValue) {
+        record(method, path, status, correlationId, oldValue, newValue, Map.of());
+    }
+
+    public void record(String method, String path, int status, String correlationId, JsonNode oldValue, JsonNode newValue,
+                       Map<String, Object> metadata) {
         Actor actor = actor();
         String resourceId = resourceId(path);
         jdbc.update("""
                 insert into public.audit_logs(actor, role, action, resource_type, resource_id, correlation_id,
-                    request_method, request_path, response_status, old_value, new_value)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb)
+                    request_method, request_path, response_status, old_value, new_value, metadata)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb)
                 """, actor.name(), actor.role().name(), action(method, path), resourceType(path), resourceId, correlationId,
-                method, path, status, json(oldValue), json(newValue));
+                method, path, status, json(oldValue), json(newValue), json(metadata));
         recordTimeline(path, status, correlationId, resourceId, actor);
     }
 

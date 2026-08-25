@@ -26,6 +26,33 @@ export type AuthSession = {
   expiresAt?: string;
 };
 
+export type UsageAuditEntry = {
+  id: string;
+  occurred_at: string;
+  actor: string;
+  role: PlatformRole | string;
+  feature: string;
+  route: string;
+  action: string;
+  client_ip: string | null;
+  user_agent: string | null;
+  authenticated: boolean;
+  source: "PAGE_VIEW" | "API_ACTION" | string;
+};
+
+export type UsageAuditPage = {
+  items: UsageAuditEntry[];
+  page: number;
+  size: number;
+  total: number;
+  summary: {
+    total: number;
+    last_24_hours: number;
+    unique_ips_24_hours: number;
+    authenticated_24_hours: number;
+  };
+};
+
 export type McpRegistryEntry = {
   id: string;
   tool: string;
@@ -638,6 +665,20 @@ export async function loginAdmin(password: string, role: Exclude<PlatformRole, "
 
 export async function logoutAdmin() {
   const response = await request<ApiEnvelope<{ loggedOut: boolean }>>("/api/auth/logout", { method: "POST" });
+  return response.data;
+}
+
+export async function recordConsoleUsage(route: string) {
+  const response = await request<ApiEnvelope<{ recorded: boolean; rateLimited: boolean; reason: string }>>("/api/audit/usage", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ route }),
+  });
+  return response.data;
+}
+
+export async function getUsageAudit(page = 0, size = 25) {
+  const response = await request<ApiEnvelope<UsageAuditPage>>(`/api/audit/usage?page=${page}&size=${size}`);
   return response.data;
 }
 

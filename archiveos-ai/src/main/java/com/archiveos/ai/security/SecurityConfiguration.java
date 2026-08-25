@@ -26,6 +26,7 @@ public class SecurityConfiguration {
                         .accessDeniedHandler((request, response, error) -> json(response, 403, "Insufficient role.")))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/health", "/actuator/health/**", "/api/auth/login", "/api/mail/webhooks/resend").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/audit/usage").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/session").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/auth/admin/users").hasRole("ADMIN")
