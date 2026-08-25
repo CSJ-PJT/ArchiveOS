@@ -26,6 +26,7 @@ public class AuditLogFilter extends OncePerRequestFilter {
 
     @Override protected boolean shouldNotFilter(HttpServletRequest request) {
         return "/api/audit/compatibility".equals(request.getRequestURI())
+                || "/api/security/access/visit".equals(request.getRequestURI())
                 || !request.getRequestURI().startsWith("/api/") || !MUTATIONS.contains(request.getMethod());
     }
 
