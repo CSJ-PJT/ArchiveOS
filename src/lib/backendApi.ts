@@ -669,10 +669,16 @@ export async function logoutAdmin() {
 }
 
 export async function recordConsoleUsage(route: string) {
+  const body = JSON.stringify({ route });
+  if (isBrowser && backendUrl === "" && typeof navigator.sendBeacon === "function") {
+    const queued = navigator.sendBeacon("/api/audit/usage", new Blob([body], { type: "application/json" }));
+    if (queued) return { recorded: true, rateLimited: false, reason: "queued" };
+  }
   const response = await request<ApiEnvelope<{ recorded: boolean; rateLimited: boolean; reason: string }>>("/api/audit/usage", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ route }),
+    body,
+    keepalive: true,
   });
   return response.data;
 }

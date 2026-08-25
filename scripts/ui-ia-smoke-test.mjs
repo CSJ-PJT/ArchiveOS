@@ -156,6 +156,9 @@ for (const contract of ["ArchiveOS 사용 기록", "client_ip", "사용 시각",
 for (const contract of ["recordConsoleUsage(route)", "lastUsageRecordedAt", "3_000"]) {
   if (!appShell.includes(contract)) throw new Error(`Console page usage tracking contract missing: ${contract}`);
 }
+for (const contract of ["navigator.sendBeacon", "keepalive: true", 'new Blob([body], { type: "application/json" })']) {
+  if (!api.includes(contract)) throw new Error(`Reliable console usage delivery contract missing: ${contract}`);
+}
 for (const contract of ["/api/audit/usage", "x-real-ip", "x-forwarded-for", "user-agent"]) {
   if (!backendServer.includes(contract)) throw new Error(`Usage audit proxy contract missing: ${contract}`);
 }
