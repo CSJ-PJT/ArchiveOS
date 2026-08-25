@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AppData } from "../app/AppShell";
 import { SettingsPage } from "./SettingsPage";
 import { McpRegistryPage } from "./McpRegistryPage";
@@ -7,14 +7,22 @@ import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { useI18n } from "../i18n/I18nProvider";
 import { consoleText } from "../i18n/console";
+import { AdminUsageAuditPage } from "./AdminUsageAuditPage";
+
+type SettingsTab = "general" | "connections" | "permissions" | "usage" | "labs" | "advanced";
 
 export function ConsoleSettingsPage({ data, onRefresh, backendOrigin }: { data: AppData; onRefresh: () => void; backendOrigin: string }) {
-  const [tab, setTab] = useState<"general" | "connections" | "permissions" | "labs" | "advanced">("general");
+  const [tab, setTab] = useState<SettingsTab>("general");
   const { locale } = useI18n();
-  return <div className="console-page settings-v4"><PageHeader title={consoleText(locale, "page.settings.title")} description={consoleText(locale, "page.settings.description")} /><ConsoleTabs value={tab} onChange={setTab} items={[["general", "일반"], ["connections", "연결"], ["permissions", "권한"], ["labs", "Labs"], ["advanced", "고급 도구"]]} />
+  useEffect(() => { if (tab === "usage" && data.auth.role !== "ADMIN") setTab("general"); }, [data.auth.role, tab]);
+  const tabs: Array<[SettingsTab, string]> = [["general", "일반"], ["connections", "연결"], ["permissions", "권한"]];
+  if (data.auth.role === "ADMIN") tabs.push(["usage", "사용 기록"]);
+  tabs.push(["labs", "Labs"], ["advanced", "고급 도구"]);
+  return <div className="console-page settings-v4"><PageHeader title={consoleText(locale, "page.settings.title")} description={consoleText(locale, "page.settings.description")} /><ConsoleTabs value={tab} onChange={setTab} items={tabs} />
     {tab === "general" ? <SettingsPage data={data} onRefresh={onRefresh} backendOrigin={backendOrigin} /> : null}
     {tab === "connections" ? <ConnectionSettings data={data} backendOrigin={backendOrigin} /> : null}
     {tab === "permissions" ? <PermissionSettings data={data} /> : null}
+    {tab === "usage" ? <AdminUsageAuditPage role={data.auth.role} /> : null}
     {tab === "labs" ? <LabsSettings /> : null}
     {tab === "advanced" ? <McpRegistryPage data={data} /> : null}
   </div>;

@@ -3,6 +3,7 @@ import {
   configuredBackendUrl, getAiRuntime, getAtlasOverview, getAuthSession, getDashboardData, getEcosystemBalanceRecommendations, getEcosystemBalanceSummary, getEcosystemSummary, getEcosystemTopology,
   getEndpointHealth, getExternalApprovals, getGameFinanceSummary, getHistorianStatus, getKnowledgeOverview, getKpiOverview, getLatestBatchStatus, getLatestDailyReport, getLiveFlowRecentEvents, getLiveFlowSummary,
   getLiveFlowTopology, getLocalRuntimeStatus, getManagedSystemsOverview, getMcpRegistry, getMeshOverview, getPlatformReadiness, getPmTasks, getPublicAccessStatus, getQueueSummary, getRecentCommands, getRecentRuntimeEvents, getRuntimeTimeline, getRuntimeVersion, getSecurityStatus, getWorkforceOverview, liveFlowStreamUrl,
+  recordConsoleUsage,
   type AuthSession, type AtlasOverview, type EcosystemBalanceSummary, type EcosystemSummary, type EcosystemTopology, type ExternalApprovalRequest,
   type GameFinanceSummary, type HistorianStatus, type KnowledgeOverview, type LiveFlowEvent, type LiveFlowSummary, type LiveFlowTopology,
   type McpRegistryEntry, type MeshOverview, type QueueSummary, type RuntimeTimelineEntry, type WorkforceOverview,
@@ -43,6 +44,8 @@ export type AppData = {
 const publicAuth: AuthSession = { actor: "anonymous", role: "PUBLIC", authenticated: false };
 const REFRESH_PREFERENCE_VERSION = "2";
 const MAX_LIVE_FLOW_EVENTS = 120;
+let lastUsageIdentity = "";
+let lastUsageRecordedAt = 0;
 const emptyData: AppData = { loading: true, refreshedAt: null, errors: {}, auth: publicAuth, dashboard: null, runtime: null, events: [], commands: [], kpi: null, endpointHealth: null, platformReadiness: null, publicAccess: null, runtimeVersion: null, security: null, architect: null, axReadiness: null, aiRuntime: null, latestBatch: null, dailyReport: null, managedSystems: null, ecosystemTimeline: null, settlementGame: null, ecosystem: null, ecosystemTopology: null, liveFlow: null, liveFlowTopology: null, liveFlowEvents: [], balance: null, balanceRecommendations: null, workforce: null, mesh: null, queue: null, tasks: [], atlas: null, gameFinance: null, externalApprovals: [], knowledge: null, historian: null, mcpRegistry: [], timeline: [], lastEventLatencyMs: null };
 type Result = { key: keyof AppData; value: unknown; error: string | null };
 type RefreshRun = { route: CoreRoute; generation: number; promise: Promise<void> };
@@ -84,6 +87,14 @@ function AppShellInner() {
   }, []);
   useEffect(() => { const onPopState = () => setRouteState(routeFromLocation()); window.addEventListener("popstate", onPopState); window.addEventListener("hashchange", onPopState); return () => { window.removeEventListener("popstate", onPopState); window.removeEventListener("hashchange", onPopState); }; }, []);
   useEffect(() => { document.body.classList.toggle("sidebar-open", sidebarOpen); return () => document.body.classList.remove("sidebar-open"); }, [sidebarOpen]);
+  useEffect(() => {
+    const now = Date.now();
+    const identity = `${data.auth.actor}|${route}`;
+    if (lastUsageIdentity === identity && now - lastUsageRecordedAt < 3_000) return;
+    lastUsageIdentity = identity;
+    lastUsageRecordedAt = now;
+    void recordConsoleUsage(route).catch(() => undefined);
+  }, [data.auth.actor, route]);
 
   const refresh = useCallback((showPageLoading = true) => {
     const active = refreshInFlight.current;

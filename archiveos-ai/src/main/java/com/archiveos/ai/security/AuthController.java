@@ -31,7 +31,7 @@ public class AuthController {
         try {
             PlatformRole requested = body == null || body.role() == null ? PlatformRole.ADMIN
                     : PlatformRole.valueOf(body.role().trim().toUpperCase());
-            PlatformSession session = sessions.login(clientAddress(request), body == null ? null : body.username(), body == null ? null : body.password(), requested);
+            PlatformSession session = sessions.login(ClientAddressResolver.resolve(request), body == null ? null : body.username(), body == null ? null : body.password(), requested);
             response.addCookie(cookie(session.id(), (int) Duration.between(session.createdAt(), session.expiresAt()).toSeconds()));
             return ResponseEntity.ok(Map.of("data", describe(session)));
         } catch (IllegalArgumentException error) {
@@ -100,10 +100,6 @@ public class AuthController {
         if (request.getCookies() == null) return null;
         return Arrays.stream(request.getCookies()).filter(c -> SessionService.COOKIE_NAME.equals(c.getName()))
                 .map(Cookie::getValue).findFirst().orElse(null);
-    }
-
-    private String clientAddress(HttpServletRequest request) {
-        return request.getRemoteAddr();
     }
 
     public record LoginRequest(String username, String password, String role) {}

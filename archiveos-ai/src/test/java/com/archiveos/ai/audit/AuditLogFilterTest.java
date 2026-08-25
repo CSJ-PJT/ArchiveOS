@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -26,6 +27,8 @@ class AuditLogFilterTest {
         AuditLogFilter filter = new AuditLogFilter(audit, mapper);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/tasks/11111111-1111-1111-1111-111111111111");
         request.addHeader("X-Correlation-Id", "CORR-1");
+        request.addHeader("X-Real-IP", "203.0.113.10");
+        request.addHeader("User-Agent", "ArchiveOS-Test-Browser");
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain chain = (servletRequest, servletResponse) -> {
             HttpServletResponse http = (HttpServletResponse) servletResponse;
@@ -36,9 +39,12 @@ class AuditLogFilterTest {
         filter.doFilter(request, response, chain);
 
         ArgumentCaptor<JsonNode> newValue = ArgumentCaptor.forClass(JsonNode.class);
+        @SuppressWarnings("unchecked") ArgumentCaptor<Map<String, Object>> metadata = ArgumentCaptor.forClass(Map.class);
         verify(audit).record(eq("POST"), eq("/api/tasks/11111111-1111-1111-1111-111111111111"),
-                eq(201), eq("CORR-1"), eq(oldValue), newValue.capture());
+                eq(201), eq("CORR-1"), eq(oldValue), newValue.capture(), metadata.capture());
         assertThat(newValue.getValue().path("data").path("status").asText()).isEqualTo("done");
+        assertThat(metadata.getValue()).containsEntry("clientIp", "203.0.113.10")
+                .containsEntry("userAgent", "ArchiveOS-Test-Browser");
         assertThat(response.getHeader("X-Correlation-Id")).isEqualTo("CORR-1");
     }
 }

@@ -1,5 +1,6 @@
 package com.archiveos.ai.audit;
 
+import com.archiveos.ai.security.ClientAddressResolver;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
@@ -9,6 +10,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.ContentCachingRequestWrapper;
@@ -26,6 +29,7 @@ public class AuditLogFilter extends OncePerRequestFilter {
 
     @Override protected boolean shouldNotFilter(HttpServletRequest request) {
         return "/api/audit/compatibility".equals(request.getRequestURI())
+                || "/api/audit/usage".equals(request.getRequestURI())
                 || !request.getRequestURI().startsWith("/api/") || !MUTATIONS.contains(request.getMethod());
     }
 
@@ -44,7 +48,11 @@ public class AuditLogFilter extends OncePerRequestFilter {
             JsonNode after = audit.snapshot(path);
             if (after == null) after = readJson(response.getContentAsByteArray());
             if (after == null) after = readJson(request.getContentAsByteArray());
-            try { audit.record(request.getMethod(), path, response.getStatus(), correlationId, before, after); }
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("clientIp", ClientAddressResolver.resolve(request));
+            String userAgent = request.getHeader("User-Agent");
+            if (userAgent != null && !userAgent.isBlank()) metadata.put("userAgent", userAgent.length() <= 512 ? userAgent : userAgent.substring(0, 512));
+            try { audit.record(request.getMethod(), path, response.getStatus(), correlationId, before, after, metadata); }
             catch (RuntimeException ignored) { }
             response.copyBodyToResponse();
         }

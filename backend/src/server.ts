@@ -296,8 +296,8 @@ app.post("/api/auth/admin/users", async (request, response) => {
 
 app.use("/api", async (request, response, next) => {
   const requestPath = normalizeApiPath(String(request.originalUrl ?? request.path));
-  const adminRead = ["/api/security/status", "/api/runtime/public-access", "/api/audit/logs"].includes(requestPath);
-  const readOnlyPost = new Set(["/api/rag/ask", "/api/ecosystem/demo/dry-run", "/api/game/settlement-agency/simulate", "/api/game/survival/simulate", "/api/integrations/market/events/review"]);
+  const adminRead = ["/api/security/status", "/api/runtime/public-access", "/api/audit/logs", "/api/audit/usage"].includes(requestPath);
+  const readOnlyPost = new Set(["/api/audit/usage", "/api/rag/ask", "/api/ecosystem/demo/dry-run", "/api/game/settlement-agency/simulate", "/api/game/survival/simulate", "/api/integrations/market/events/review"]);
   if (request.method === "POST" && readOnlyPost.has(requestPath)) {
     next();
     return;
@@ -477,7 +477,7 @@ app.post("/api/rag/ask", async (request, response) => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ question, ...(context ? { context } : {}) }),
-    }));
+    }, request));
   } catch (error) {
     sendProxyError(response, error, "RAG ask failed.");
   }
@@ -782,6 +782,16 @@ app.get("/api/contracts/workflow/:correlationId", async (request, response) => {
 app.get("/api/audit/logs", async (request, response) => {
   const limit = Number(request.query.limit ?? 50);
   await relayArchiveOsAi(response, `/api/audit/logs?limit=${encodeURIComponent(String(limit))}`, undefined, undefined, request);
+});
+
+app.post("/api/audit/usage", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/audit/usage", jsonProxyRequest("POST", request.body), undefined, request);
+});
+
+app.get("/api/audit/usage", async (request, response) => {
+  const page = Number(request.query.page ?? 0);
+  const size = Number(request.query.size ?? 25);
+  await relayArchiveOsAi(response, `/api/audit/usage?page=${encodeURIComponent(String(page))}&size=${encodeURIComponent(String(size))}`, undefined, undefined, request);
 });
 
 app.get("/api/atlas/overview", async (request, response) => {
@@ -2138,9 +2148,11 @@ function truncateOutput(value: string) {
   return `${value.slice(0, maxLength)}\n[output truncated]`;
 }
 
-async function proxyArchiveOsAi(path: string, init?: RequestInit) {
+async function proxyArchiveOsAi(path: string, init?: RequestInit, request?: any) {
   const baseUrl = process.env.ARCHIVEOS_AI_BASE_URL?.trim() || "http://localhost:4100";
-  const response = await fetch(`${baseUrl}${path}`, init);
+  const headers = new Headers(init?.headers);
+  appendClientRequestHeaders(headers, request);
+  const response = await fetch(`${baseUrl}${path}`, { ...init, headers });
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
 
   if (!response.ok) {
@@ -2241,6 +2253,7 @@ async function readJavaSession(request: any) {
 async function recordCompatibilityAudit(request: any, path: string, status: number, correlationId: string) {
   const baseUrl = process.env.ARCHIVEOS_AI_BASE_URL?.trim() || "http://localhost:4100";
   const headers = new Headers({ "content-type": "application/json" });
+  appendClientRequestHeaders(headers, request);
   const cookie = request?.header?.("cookie");
   const integrationToken = request?.header?.("x-archiveos-integration-token");
   if (cookie) headers.set("cookie", cookie);
@@ -2277,6 +2290,7 @@ async function relayArchiveOsAi(
     if (cookie) headers.set("cookie", cookie);
     if (correlationId) headers.set("x-correlation-id", correlationId);
     if (integrationToken) headers.set("x-archiveos-integration-token", integrationToken);
+    appendClientRequestHeaders(headers, request);
     const upstream = await fetch(`${baseUrl}${path}`, { ...init, headers });
     const payload = await upstream.json().catch(() => ({}));
     const setCookie = upstream.headers.get("set-cookie");
@@ -2291,6 +2305,22 @@ async function relayArchiveOsAi(
       details: "ArchiveOS AI module is unavailable or not configured.",
     });
   }
+}
+
+function firstForwardedAddress(value: unknown) {
+  if (typeof value !== "string") return null;
+  const first = value.split(",")[0]?.trim();
+  return first || null;
+}
+
+function appendClientRequestHeaders(headers: Headers, request: any) {
+  if (!request) return;
+  const forwardedFor = request?.header?.("x-forwarded-for");
+  const realIp = request?.header?.("x-real-ip") || firstForwardedAddress(forwardedFor) || request?.ip;
+  const userAgent = request?.header?.("user-agent");
+  if (realIp) headers.set("x-real-ip", String(realIp).slice(0, 128));
+  if (forwardedFor) headers.set("x-forwarded-for", String(forwardedFor).slice(0, 1024));
+  if (userAgent) headers.set("user-agent", String(userAgent).slice(0, 512));
 }
 
 async function relayArchiveOsAiSse(request: any, response: any, path: string) {
