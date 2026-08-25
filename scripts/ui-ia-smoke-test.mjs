@@ -138,6 +138,10 @@ for (const contract of ["attentionTypeLabel", "incidentLabel"]) {
 for (const contract of ["platformHealthLabel", "import.meta.env.BASE_URL", "archiveos-mark.svg"]) {
   if (!sidebar.includes(contract)) throw new Error(`Sidebar public-base asset contract missing: ${contract}`);
 }
+for (const contract of ['className="brand-lockup brand-home-button"', 'onClick={() => onNavigate("dashboard")}', 'aria-label="ArchiveOS 홈으로 이동"']) {
+  if (!sidebar.includes(contract)) throw new Error(`ArchiveOS brand home navigation contract missing: ${contract}`);
+}
+if (!styles.includes(".brand-home-button:hover")) throw new Error("ArchiveOS brand home button interaction style missing.");
 if (!services.includes('"archive-logitics": "합성 물류·운송 운영"')) throw new Error("Legacy Logistics system ID must use the localized role label.");
 for (const contract of ["protectedKeys", "권한 보호 항목", "공개 세션에서 보호됨", "roleLabel"]) {
   if (!consoleSettings.includes(contract)) throw new Error(`Settings public-protection display missing: ${contract}`);

@@ -1376,6 +1376,20 @@ code {
   padding: 0 0.55rem 1.2rem;
 }
 
+.brand-home-button {
+  width: 100%;
+  border: 0;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.brand-home-button:hover {
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+
 .brand-lockup > div:last-child { display: flex; min-width: 0; flex-direction: column; }
 .brand-lockup strong { font-size: 1.05rem; letter-spacing: 0; }
 .brand-lockup span { color: var(--color-text-subtle); font-size: 0.72rem; }

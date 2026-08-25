@@ -31,7 +31,13 @@ export function Sidebar({
 
   return (
     <aside className={`sidebar ${open ? "open" : ""}`}>
-      <div className="brand-lockup">
+      <button
+        className="brand-lockup brand-home-button"
+        type="button"
+        onClick={() => onNavigate("dashboard")}
+        aria-label="ArchiveOS 홈으로 이동"
+        title="대시보드 홈"
+      >
         <div className="brand-mark">
           <img
             src={`${import.meta.env.BASE_URL}archiveos-mark.svg`}
@@ -44,7 +50,7 @@ export function Sidebar({
           <strong>ArchiveOS</strong>
           <span>운영 콘솔</span>
         </div>
-      </div>
+      </button>
       <nav className="sidebar-nav" aria-label="ArchiveOS 메뉴">
         {navigationItems.filter((item) => item.id !== "mail" || role === "ADMIN").map((item) => (
           <button
