@@ -7,8 +7,7 @@ try {
     New-ArchiveAccessMonitorState -KnownIps @('1.1.1.1', '10.0.0.1') -MonitorStart $start -Path $statePath | Out-Null
     $events = @(
         [pscustomobject]@{ Ip = '1.1.1.1'; OccurredAt = $start.AddHours(1) },
-        [pscustomobject]@{ Ip = '8.8.8.8'; OccurredAt = $start.AddHours(2) },
-        [pscustomobject]@{ Ip = '8.8.8.8'; OccurredAt = $start.AddHours(3) },
+        [pscustomobject]@{ Ip = '8.8.8.8'; Count = 2; FirstSeen = $start.AddHours(2); LastSeen = $start.AddHours(3) },
         [pscustomobject]@{ Ip = '192.168.1.20'; OccurredAt = $start.AddHours(4) }
     )
     $summary = Get-ArchiveAccessSummary -Events $events -PeriodStart $start -PeriodEnd $start.AddDays(1) -StatePath $statePath

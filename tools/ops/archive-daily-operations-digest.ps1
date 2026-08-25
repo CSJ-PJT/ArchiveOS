@@ -54,15 +54,97 @@ function Get-ArchiveOsUsageAccessEvents([DateTimeOffset]$Start, [DateTimeOffset]
     if (-not $user -or -not $database) { throw 'ArchiveOS PostgreSQL identity is unavailable.' }
     $startValue = $Start.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'", [Globalization.CultureInfo]::InvariantCulture)
     $endValue = $End.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'", [Globalization.CultureInfo]::InvariantCulture)
-    $sql = "select extract(epoch from occurred_at)::bigint, host(client_ip) from public.archiveos_usage_logs where client_ip is not null and occurred_at >= timestamptz '$startValue' and occurred_at < timestamptz '$endValue' order by occurred_at;"
+    $sql = "select host(client_ip), count(*)::bigint, extract(epoch from min(occurred_at))::bigint, extract(epoch from max(occurred_at))::bigint from public.archiveos_usage_logs where client_ip is not null and occurred_at >= timestamptz '$startValue' and occurred_at < timestamptz '$endValue' group by host(client_ip) order by host(client_ip);"
     $rows = @(& docker exec $container psql -X -U $user -d $database -At -F '|' -c $sql 2>&1)
     if ($LASTEXITCODE -ne 0) { throw 'ArchiveOS usage access query failed.' }
     $events = @()
     foreach ($row in $rows) {
-        if ([string]$row -notmatch '^(\d+)\|(.+)$') { continue }
+        if ([string]$row -notmatch '^([^|]+)\|(\d+)\|(\d+)\|(\d+)$') { continue }
         $events += [pscustomobject]@{
-            OccurredAt = [DateTimeOffset]::FromUnixTimeSeconds([int64]$Matches[1])
-            Ip = $Matches[2]
+            Ip = $Matches[1]
+            Count = [int]$Matches[2]
+            FirstSeen = [DateTimeOffset]::FromUnixTimeSeconds([int64]$Matches[3])
+            LastSeen = [DateTimeOffset]::FromUnixTimeSeconds([int64]$Matches[4])
+        }
+    }
+    return $events
+}
+
+function Get-OciArchiveAccessEvents([DateTimeOffset]$Start, [DateTimeOffset]$End) {
+    $hostName = [Environment]::GetEnvironmentVariable('ARCHIVEOS_OCI_HOST')
+    $userName = [Environment]::GetEnvironmentVariable('ARCHIVEOS_OCI_USER')
+    if (-not $hostName) { $hostName = '161.33.45.1' }
+    if (-not $userName) { $userName = 'opc' }
+    $configuredKey = [Environment]::GetEnvironmentVariable('ARCHIVEOS_OCI_SSH_KEY')
+    $keyCandidates = @(
+        $configuredKey,
+        (Join-Path $env:USERPROFILE 'OCI_SSH_tmp.key'),
+        (Join-Path $env:USERPROFILE 'OneDrive\바탕 화면\Task\Settings\OCI_SSH.key')
+    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+    $sourceKey = $keyCandidates | Select-Object -First 1
+    if (-not $sourceKey) { throw 'OCI SSH key is unavailable.' }
+    $temporaryKey = Join-Path $env:TEMP ('archiveos-oci-access-' + [guid]::NewGuid().ToString('N') + '.key')
+    $startEpoch = $Start.ToUnixTimeSeconds()
+    $endEpoch = $End.ToUnixTimeSeconds()
+    $python = @"
+import glob,gzip,re
+from datetime import datetime
+start=$startEpoch
+end=$endEpoch
+groups={}
+files=glob.glob('/var/log/nginx/access.log*')
+files_read=0
+for path in files:
+    opener=gzip.open if path.endswith('.gz') else open
+    try:
+        with opener(path,'rt',encoding='utf-8',errors='replace') as handle:
+            files_read+=1
+            for line in handle:
+                if '/archiveos' not in line:
+                    continue
+                match=re.match(r'(\S+).*\[([^\]]+)\]\s+"',line)
+                if not match:
+                    continue
+                try:
+                    epoch=int(datetime.strptime(match.group(2),'%d/%b/%Y:%H:%M:%S %z').timestamp())
+                except Exception:
+                    continue
+                if epoch < start or epoch >= end:
+                    continue
+                ip=match.group(1)
+                record=groups.setdefault(ip,[0,epoch,epoch])
+                record[0]+=1
+                record[1]=min(record[1],epoch)
+                record[2]=max(record[2],epoch)
+    except Exception:
+        pass
+print(f'__META__|{len(files)}|{files_read}')
+for ip,record in sorted(groups.items()):
+    print(f'{ip}|{record[0]}|{record[1]}|{record[2]}')
+"@
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($python))
+    try {
+        [IO.File]::Copy($sourceKey, $temporaryKey, $true)
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+        & icacls.exe $temporaryKey /inheritance:r /grant:r "${identity}:(R)" 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Temporary OCI SSH key ACL failed.' }
+        $rows = @(& ssh -i $temporaryKey -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=8 "$userName@$hostName" "echo $encoded | base64 -d | sudo -n python3 -" 2>&1)
+        if ($LASTEXITCODE -ne 0) { throw 'OCI access-log query failed.' }
+    } finally {
+        if ([IO.File]::Exists($temporaryKey)) { [IO.File]::Delete($temporaryKey) }
+    }
+    $events = @()
+    $metadata = $rows | Where-Object { [string]$_ -match '^__META__\|(\d+)\|(\d+)$' } | Select-Object -First 1
+    if (-not $metadata -or [string]$metadata -notmatch '^__META__\|(\d+)\|(\d+)$' -or [int]$Matches[2] -lt 1) {
+        throw 'OCI access-log files were not readable.'
+    }
+    foreach ($row in $rows) {
+        if ([string]$row -notmatch '^([^|]+)\|(\d+)\|(\d+)\|(\d+)$') { continue }
+        $events += [pscustomobject]@{
+            Ip = $Matches[1]
+            Count = [int]$Matches[2]
+            FirstSeen = [DateTimeOffset]::FromUnixTimeSeconds([int64]$Matches[3])
+            LastSeen = [DateTimeOffset]::FromUnixTimeSeconds([int64]$Matches[4])
         }
     }
     return $events
@@ -87,12 +169,20 @@ function Get-AccessMonitoring([datetime]$Cutoff, [datetime]$Now) {
                 baselineAccessCount = 0
                 ignoredNonPublicCount = 0
                 identities = @()
+                collector = 'PENDING'
             }
         }
         if ($periodStart -lt $state.monitorStart) { $periodStart = $state.monitorStart }
-        $events = @(Get-ArchiveOsUsageAccessEvents -Start $periodStart -End $periodEnd)
+        $collector = 'OCI_NGINX'
+        try {
+            $events = @(Get-OciArchiveAccessEvents -Start $periodStart -End $periodEnd)
+        } catch {
+            $collector = 'ARCHIVEOS_USAGE_FALLBACK'
+            $events = @(Get-ArchiveOsUsageAccessEvents -Start $periodStart -End $periodEnd)
+        }
         $summary = Get-ArchiveAccessSummary -Events $events -PeriodStart $periodStart -PeriodEnd $periodEnd -StatePath $AccessMonitorStatePath
         $summary['status'] = 'ACTIVE'
+        $summary['collector'] = $collector
         return $summary
     } catch {
         return [ordered]@{
@@ -288,6 +378,7 @@ Add-Warning $warnings ($nexus.available -and $nexus.largeObjectCount -gt 0) ("Ne
 Add-Warning $warnings ($snapshot.cFreeBytes -lt 50GB) ("C: 여유 공간 임계치 미만: {0}" -f (Format-Gb $snapshot.cFreeBytes))
 if (-not $accessMonitoring.available) { $warnings.Add('접속 IP 일일 감시 수집 불가: ' + [string]$accessMonitoring.reason) }
 if ($accessMonitoring.available -and $accessMonitoring.newExternalIpCount -gt 0) { $warnings.Add(("기준선 외 신규 외부 접속 {0}개 IP / {1}건" -f $accessMonitoring.newExternalIpCount, $accessMonitoring.newExternalAccessCount)) }
+if ($accessMonitoring.available -and $accessMonitoring.status -eq 'ACTIVE' -and $accessMonitoring.collector -eq 'ARCHIVEOS_USAGE_FALLBACK') { $warnings.Add('OCI 접근로그 수집 실패로 ArchiveOS 페이지 사용기록을 대체 사용함') }
 
 $endpointText = '수집 불가'
 if ($null -ne $snapshot.endpointHealth) {
@@ -306,16 +397,21 @@ $accessText = if (-not $accessMonitoring.available) {
 } elseif ($accessMonitoring.status -eq 'PENDING') {
     "• 감시 시작: $(([DateTimeOffset]$accessMonitoring.monitorStart).ToString('yyyy-MM-dd HH:mm')) KST`n• 기준선 외 외부 접속: 감시 시작 전"
 } else {
+    $collectorText = if ($accessMonitoring.collector -eq 'OCI_NGINX') { 'OCI Nginx 접근로그' } else { 'ArchiveOS 페이지 사용기록 (OCI 수집 실패 시 대체)' }
+    $countLabel = if ($accessMonitoring.collector -eq 'OCI_NGINX') { 'HTTP 요청' } else { '페이지 사용' }
+    $allIdentities = @($accessMonitoring.identities)
     $identityText = if ($accessMonitoring.identities.Count -eq 0) {
         '• 비식별 상세: 해당 없음'
     } else {
-        ($accessMonitoring.identities | ForEach-Object {
+        $detail = @($allIdentities | Select-Object -First 10 | ForEach-Object {
             $first = ([DateTimeOffset]$_.firstSeen).ToLocalTime().ToString('MM-dd HH:mm')
             $last = ([DateTimeOffset]$_.lastSeen).ToLocalTime().ToString('MM-dd HH:mm')
             "• $($_.anonymousId): $($_.count)건 ($first ~ $last)"
-        }) -join "`n"
+        })
+        if ($allIdentities.Count -gt 10) { $detail += "• 그 외 $($allIdentities.Count - 10)개 비식별 IP" }
+        $detail -join "`n"
     }
-    "• 기존 기준선 $($accessMonitoring.baselineIpCount)개 IP 제외`n• 기준선 외 외부 접속: 고유 $($accessMonitoring.newExternalIpCount)개 / $($accessMonitoring.newExternalAccessCount)건`n$identityText"
+    "• 수집원: $collectorText`n• 기존 기준선 $($accessMonitoring.baselineIpCount)개 IP 제외`n• 기준선 외 외부 접속: 고유 $($accessMonitoring.newExternalIpCount)개 / $countLabel $($accessMonitoring.newExternalAccessCount)건`n$identityText"
 }
 $warningText = if ($warnings.Count -eq 0) { '• 감지된 경고 없음' } else { ($warnings | ForEach-Object { "• $_" }) -join "`n" }
 

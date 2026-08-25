@@ -156,22 +156,25 @@ function Get-ArchiveAccessSummary {
     $knownAccesses = 0
     $ignoredNonPublic = 0
     foreach ($event in @($Events)) {
+        $eventCount = 1
+        if ($null -ne $event.PSObject.Properties['Count']) { $eventCount = [Math]::Max(1, [int]$event.Count) }
         $ip = ConvertTo-ArchiveNormalizedIp ([string]$event.Ip)
-        if (-not $ip -or -not (Test-ArchivePublicIp $ip)) { $ignoredNonPublic++; continue }
+        if (-not $ip -or -not (Test-ArchivePublicIp $ip)) { $ignoredNonPublic += $eventCount; continue }
         $fingerprint = Get-ArchiveAccessFingerprint -Ip $ip -Key $key
-        if ($known.Contains($fingerprint)) { $knownAccesses++; continue }
-        $occurredAt = [DateTimeOffset]$event.OccurredAt
+        if ($known.Contains($fingerprint)) { $knownAccesses += $eventCount; continue }
+        $firstSeen = if ($null -ne $event.PSObject.Properties['FirstSeen']) { [DateTimeOffset]$event.FirstSeen } else { [DateTimeOffset]$event.OccurredAt }
+        $lastSeen = if ($null -ne $event.PSObject.Properties['LastSeen']) { [DateTimeOffset]$event.LastSeen } else { [DateTimeOffset]$event.OccurredAt }
         if (-not $groups.ContainsKey($fingerprint)) {
             $groups[$fingerprint] = [pscustomobject][ordered]@{
                 anonymousId = '외부-' + $fingerprint.Substring(0, 8).ToUpperInvariant()
                 count = 0
-                firstSeen = $occurredAt
-                lastSeen = $occurredAt
+                firstSeen = $firstSeen
+                lastSeen = $lastSeen
             }
         }
-        $groups[$fingerprint].count++
-        if ($occurredAt -lt $groups[$fingerprint].firstSeen) { $groups[$fingerprint].firstSeen = $occurredAt }
-        if ($occurredAt -gt $groups[$fingerprint].lastSeen) { $groups[$fingerprint].lastSeen = $occurredAt }
+        $groups[$fingerprint].count += $eventCount
+        if ($firstSeen -lt $groups[$fingerprint].firstSeen) { $groups[$fingerprint].firstSeen = $firstSeen }
+        if ($lastSeen -gt $groups[$fingerprint].lastSeen) { $groups[$fingerprint].lastSeen = $lastSeen }
     }
     $identities = @($groups.Values | Sort-Object @{Expression='count';Descending=$true}, anonymousId | ForEach-Object {
         [pscustomobject][ordered]@{
