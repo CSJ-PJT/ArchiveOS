@@ -29,6 +29,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/auth/session").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/auth/admin/users").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/security/access/visit").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/security/**", "/api/audit/**").hasRole("ADMIN")
                         .requestMatchers("/api/mail/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/obsidian/documents", "/api/rag/search").hasAnyRole("AUTHENTICATED_READ", "OPERATOR", "PM", "ADMIN")
