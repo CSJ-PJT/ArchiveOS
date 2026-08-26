@@ -35,5 +35,8 @@ public class LedgerClient {
     public IntegrationResult capacitySummary() { return get(config().getCapacitySummaryPath()); }
     public EcosystemProperties.ServiceConfig config() { return properties.getEcosystem().getServices().get("ledger"); }
     private IntegrationResult get(String path) { return client.get(config().getBaseUrl(), path, timeout()); }
-    private int timeout() { return properties.getEcosystem().getRefreshTimeoutMs(); }
+    private int timeout() {
+        int serviceTimeout = config().getRequestTimeoutMs();
+        return serviceTimeout > 0 ? serviceTimeout : properties.getEcosystem().getRefreshTimeoutMs();
+    }
 }

@@ -30,6 +30,7 @@ public class EcosystemProperties {
         private boolean enabled = true;
         private String name;
         private String baseUrl;
+        private int requestTimeoutMs;
         private String healthPath = "/actuator/health";
         private String summaryPath;
         private String operationsSummaryPath;
@@ -52,6 +53,8 @@ public class EcosystemProperties {
         public void setName(String name) { this.name = name; }
         public String getBaseUrl() { return baseUrl; }
         public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+        public int getRequestTimeoutMs() { return requestTimeoutMs; }
+        public void setRequestTimeoutMs(int requestTimeoutMs) { this.requestTimeoutMs = requestTimeoutMs; }
         public String getHealthPath() { return healthPath; }
         public void setHealthPath(String healthPath) { this.healthPath = healthPath; }
         public String getSummaryPath() { return summaryPath; }
