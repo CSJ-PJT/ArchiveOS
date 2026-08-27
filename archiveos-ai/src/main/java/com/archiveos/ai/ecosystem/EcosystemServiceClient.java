@@ -8,6 +8,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -79,7 +80,10 @@ public class EcosystemServiceClient {
             String message = error.getClass().getSimpleName();
             Throwable cause = error.getCause();
             if (error instanceof ConnectException || cause instanceof ConnectException) message = "Connection refused";
-            if (error instanceof TimeoutException) message = "Timeout";
+            if (error instanceof TimeoutException || error instanceof HttpTimeoutException
+                    || cause instanceof TimeoutException || cause instanceof HttpTimeoutException) {
+                message = "Request timed out";
+            }
             return new IntegrationResult(EcosystemServiceStatus.UNAVAILABLE, null, Map.of(), message, latency(started));
         }
     }

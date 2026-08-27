@@ -90,24 +90,35 @@ public class LiveFlowRepository {
     public List<Map<String, Object>> recentBalanced(int limit) {
         int safeLimit = clamp(limit);
         int perRoute = Math.max(1, Math.min(6, safeLimit / 8 + 1));
+        int perService = Math.max(12, Math.min(100, safeLimit * 2));
         return jdbc.query("""
-                with classified as (
-                    select event.*,
-                           case
-                             when source_key like '%market%' then 'market'
-                             when source_key like '%nexus%' then 'nexus'
-                             when source_key like '%logistics%' or source_key like '%logitics%' then 'logistics'
-                             when source_key like '%ledger%' then 'ledger'
-                             when source_key like '%archiveos%' or source_key like '%archive-os%' then 'archiveos'
-                             else 'other'
-                           end as service_bucket
-                      from (
-                        select source_event.*,
-                               lower(trim(coalesce(source_system_id, '') || ' ' || coalesce(from_node, ''))) as source_key
-                          from public.ecosystem_flow_event source_event
-                      ) event
+                with service_sample as (
+                    (select event.*, 'market' as service_bucket
+                       from public.ecosystem_flow_event event
+                      where source_system_id = 'archive-market' and %1$s
+                      order by occurred_at desc, received_at desc, id desc limit ?)
+                    union all
+                    (select event.*, 'nexus' as service_bucket
+                       from public.ecosystem_flow_event event
+                      where source_system_id = 'archive-nexus' and %1$s
+                      order by occurred_at desc, received_at desc, id desc limit ?)
+                    union all
+                    (select event.*, 'logistics' as service_bucket
+                       from public.ecosystem_flow_event event
+                      where source_system_id in ('archive-logistics', 'archive-logitics') and %1$s
+                      order by occurred_at desc, received_at desc, id desc limit ?)
+                    union all
+                    (select event.*, 'ledger' as service_bucket
+                       from public.ecosystem_flow_event event
+                      where source_system_id = 'archive-ledger' and %1$s
+                      order by occurred_at desc, received_at desc, id desc limit ?)
+                    union all
+                    (select event.*, 'archiveos' as service_bucket
+                       from public.ecosystem_flow_event event
+                      where source_system_id in ('archiveos', 'archive-os') and %1$s
+                      order by occurred_at desc, received_at desc, id desc limit ?)
                 ), ranked as (
-                    select classified.*,
+                    select service_sample.*,
                            row_number() over (
                              partition by service_bucket
                              order by occurred_at desc, received_at desc, id desc
@@ -116,7 +127,7 @@ public class LiveFlowRepository {
                              partition by lower(trim(coalesce(from_node, ''))), lower(trim(coalesce(to_node, '')))
                              order by occurred_at desc, received_at desc, id desc
                            ) as route_rank
-                      from classified
+                      from service_sample
                 )
                 select ranked.*
                   from ranked
@@ -126,8 +137,9 @@ public class LiveFlowRepository {
                           ranked.occurred_at desc,
                           ranked.received_at desc,
                           ranked.id desc
-                 limit ?
-                """, this::row, perRoute, safeLimit);
+                  limit ?
+                """.formatted(BUSINESS_EVENT_FILTER), this::row,
+                perService, perService, perService, perService, perService, perRoute, safeLimit);
     }
 
     public boolean existsEventId(String eventId) {
@@ -177,31 +189,33 @@ public class LiveFlowRepository {
         try {
             String sql = """
                     select
-                      count(distinct event_id) filter (where occurred_at > now() - interval '30 minutes' and (
-                        %1$s
-                      ))::int as active_flows,
-                      count(*) filter (where occurred_at > now() - interval '24 hours'
-                         and (
-                           %1$s
-                         )
-                      )::int as recent_events,
-                      count(*) filter (where occurred_at > now() - interval '24 hours' and status = 'approval_required')::int as pending_approvals,
-                      count(*) filter (where occurred_at > now() - interval '24 hours' and status = 'delayed')::int as delayed_shipments,
-                      count(*) filter (where occurred_at > now() - interval '24 hours' and (event_type in ('CALLBACK_FAILED', 'ledger_callback_failed') or status = 'failed'))::int as failed_callbacks,
-                      count(*) filter (where status = 'approval_required')::int as historical_pending_approvals,
-                      count(*) filter (where status = 'delayed')::int as historical_delayed_shipments,
-                      count(*) filter (where event_type in ('CALLBACK_FAILED', 'ledger_callback_failed') or status = 'failed')::int as historical_failed_callbacks,
+                      (select count(distinct event_id)::int from public.ecosystem_flow_event
+                        where occurred_at > now() - interval '30 minutes' and %1$s) as active_flows,
+                      (select count(*)::int from public.ecosystem_flow_event
+                        where occurred_at > now() - interval '24 hours' and %1$s) as recent_events,
+                      (select count(*)::int from public.ecosystem_flow_event
+                        where occurred_at > now() - interval '24 hours' and lower(status) = 'approval_required') as pending_approvals,
+                      (select count(*)::int from public.ecosystem_flow_event
+                        where occurred_at > now() - interval '24 hours' and lower(status) = 'delayed') as delayed_shipments,
+                      (select count(*)::int from public.ecosystem_flow_event
+                        where occurred_at > now() - interval '24 hours'
+                          and (event_type in ('CALLBACK_FAILED', 'ledger_callback_failed') or lower(status) = 'failed')) as failed_callbacks,
+                      (select count(*)::int from public.ecosystem_flow_event
+                        where lower(status) = 'approval_required') as historical_pending_approvals,
+                      (select count(*)::int from public.ecosystem_flow_event
+                        where lower(status) = 'delayed') as historical_delayed_shipments,
+                      (select count(*)::int from public.ecosystem_flow_event
+                        where event_type in ('CALLBACK_FAILED', 'ledger_callback_failed') or lower(status) = 'failed') as historical_failed_callbacks,
                       (select count(*)::int from (
                          select distinct on (lower(source_system_id)) lower(status) as latest_status
                            from public.ecosystem_flow_event
                           where source_system_id is not null
                           order by lower(source_system_id), occurred_at desc, id desc
                        ) latest_source where latest_status = 'unavailable') as degraded_systems,
-                      count(distinct source_system_id) filter (where status = 'unavailable')::int as historical_degraded_systems,
-                      max(occurred_at) filter (where (
-                        %1$s
-                      )) as latest_event_at
-                    from public.ecosystem_flow_event
+                      (select count(distinct source_system_id)::int from public.ecosystem_flow_event
+                        where lower(status) = 'unavailable') as historical_degraded_systems,
+                      (select occurred_at from public.ecosystem_flow_event
+                        where %1$s order by occurred_at desc, received_at desc, id desc limit 1) as latest_event_at
                     """.formatted(BUSINESS_EVENT_FILTER);
             return jdbc.queryForMap(sql);
         } catch (DataAccessException error) {
@@ -284,15 +298,17 @@ public class LiveFlowRepository {
             List<Map<String, Object>> rows = jdbc.query("""
                     select node, max(occurred_at) as latest_event_at
                       from (
-                        select from_node as node, occurred_at
-                          from public.ecosystem_flow_event
-                         where """ + BUSINESS_EVENT_FILTER + """
-                           and nullif(trim(coalesce(from_node, '')), '') is not null
+                        (select distinct on (from_node) from_node as node, occurred_at
+                           from public.ecosystem_flow_event
+                          where """ + BUSINESS_EVENT_FILTER + """
+                            and nullif(trim(coalesce(from_node, '')), '') is not null
+                          order by from_node, occurred_at desc, id desc)
                         union all
-                        select to_node as node, occurred_at
-                          from public.ecosystem_flow_event
-                         where """ + BUSINESS_EVENT_FILTER + """
-                           and nullif(trim(coalesce(to_node, '')), '') is not null
+                        (select distinct on (to_node) to_node as node, occurred_at
+                           from public.ecosystem_flow_event
+                          where """ + BUSINESS_EVENT_FILTER + """
+                            and nullif(trim(coalesce(to_node, '')), '') is not null
+                          order by to_node, occurred_at desc, id desc)
                       ) node_events
                      group by node
                     """, (rs, index) -> {

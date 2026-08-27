@@ -32,6 +32,7 @@ const app = express();
 const port = Number(process.env.PORT ?? 4000);
 const startedAt = new Date().toISOString();
 const execFileAsync = promisify(execFile);
+const OPTIONAL_READ_TIMEOUT_MS = 1_000;
 const allowedOrigins = new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -1294,7 +1295,11 @@ app.get("/api/runtime/snapshots/recent", async (request, response) => {
 app.get("/api/historian/status", async (_request, response) => {
   try {
     const configured = isHistorianConfigured();
-    const lastExport = await getLatestHistorianExport().catch(() => null);
+    const lastExport = await withTimeout(
+      getLatestHistorianExport(),
+      OPTIONAL_READ_TIMEOUT_MS,
+      "Historian lookup timed out.",
+    ).catch(() => null);
     response.json({
       data: {
         configured,
@@ -1602,15 +1607,15 @@ async function getServiceHealth() {
     ? getLocalDashboardData().then(() => null)
     : getLatestDailyReport();
   const checks = await Promise.allSettled([
-    withTimeout(getLocalRuntimeStatus(), 2500, "Runtime status check timed out."),
-    withTimeout(getJavaKnowledgeHealth(), 2500, "Knowledge health check timed out."),
-    withTimeout(getAgentMeshOverview(), 2500, "Agent Mesh check timed out."),
-    withTimeout(getKpiOverview("7d"), 2500, "KPI check timed out."),
-    withTimeout(getLatestArchitectureReview(), 2500, "Architect check timed out."),
-    withTimeout(dashboardCheck, 2500, "ArchiveOS dashboard database check timed out."),
-    withTimeout(proxyArchiveOsAi("/api/queue/summary"), 2500, "Queue summary check timed out."),
-    withTimeout(getSecurityStatus(), 2500, "Security status check timed out."),
-    withTimeout(Promise.resolve(getAxReadiness()), 2500, "AX readiness check timed out."),
+    withTimeout(getLocalRuntimeStatus(), OPTIONAL_READ_TIMEOUT_MS, "Runtime status check timed out."),
+    withTimeout(getJavaKnowledgeHealth(), OPTIONAL_READ_TIMEOUT_MS, "Knowledge health check timed out."),
+    withTimeout(getAgentMeshOverview(), OPTIONAL_READ_TIMEOUT_MS, "Agent Mesh check timed out."),
+    withTimeout(getKpiOverview("7d"), OPTIONAL_READ_TIMEOUT_MS, "KPI check timed out."),
+    withTimeout(getLatestArchitectureReview(), OPTIONAL_READ_TIMEOUT_MS, "Architect check timed out."),
+    withTimeout(dashboardCheck, OPTIONAL_READ_TIMEOUT_MS, "ArchiveOS dashboard database check timed out."),
+    withTimeout(proxyArchiveOsAi("/api/queue/summary"), OPTIONAL_READ_TIMEOUT_MS, "Queue summary check timed out."),
+    withTimeout(getSecurityStatus(), OPTIONAL_READ_TIMEOUT_MS, "Security status check timed out."),
+    withTimeout(Promise.resolve(getAxReadiness()), OPTIONAL_READ_TIMEOUT_MS, "AX readiness check timed out."),
   ]);
 
   return {
@@ -1693,11 +1698,11 @@ async function readGitValue(args: string[]) {
 async function getPlatformReadiness() {
   const [endpointHealth, knowledge, mesh, latestArchitect, latestDailyReport, kpi] = await Promise.all([
     getEndpointHealthSnapshot(),
-    getJavaKnowledgeOverview().catch(() => null),
-    getAgentMeshOverview().catch(() => null),
-    getLatestArchitectureReview().catch(() => null),
-    getLatestDailyReport().catch(() => null),
-    getKpiOverview("7d").catch(() => null),
+    withTimeout(getJavaKnowledgeOverview(), OPTIONAL_READ_TIMEOUT_MS, "Knowledge overview timed out.").catch(() => null),
+    withTimeout(getAgentMeshOverview(), OPTIONAL_READ_TIMEOUT_MS, "Agent Mesh overview timed out.").catch(() => null),
+    withTimeout(getLatestArchitectureReview(), OPTIONAL_READ_TIMEOUT_MS, "Architect lookup timed out.").catch(() => null),
+    withTimeout(getLatestDailyReport(), OPTIONAL_READ_TIMEOUT_MS, "Daily report lookup timed out.").catch(() => null),
+    withTimeout(getKpiOverview("7d"), OPTIONAL_READ_TIMEOUT_MS, "KPI overview timed out.").catch(() => null),
   ]);
 
   const notes: string[] = [];
@@ -1798,7 +1803,7 @@ function scoreToGrade(score: number) {
 async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
   const checkedAt = new Date().toISOString();
   const [runtimeResult, commandsResult, decisionsResult, batchRuns, taskEvents, agentTaskRuns] = await Promise.all([
-    withTimeout(getLocalRuntimeStatus(), 2500, "Runtime status timed out.").catch(() => null),
+    withTimeout(getLocalRuntimeStatus(), OPTIONAL_READ_TIMEOUT_MS, "Runtime status timed out.").catch(() => null),
     withTimeout(
       supabaseAdmin
         .from("command_runs")
@@ -1806,7 +1811,7 @@ async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
         .not("id", "in", `(${seedCommandRunIds.join(",")})`)
         .order("created_at", { ascending: false })
         .limit(5),
-      2500,
+      OPTIONAL_READ_TIMEOUT_MS,
       "command_runs query timed out.",
     ).catch(() => ({ data: [], error: null })),
     withTimeout(
@@ -1817,12 +1822,12 @@ async function getRecentRuntimeEvents(): Promise<RuntimeEvent[]> {
         .not("id", "in", `(${seedWorkLogIds.join(",")})`)
         .order("created_at", { ascending: false })
         .limit(5),
-      2500,
+      OPTIONAL_READ_TIMEOUT_MS,
       "decision work_logs query timed out.",
     ).catch(() => ({ data: [], error: null })),
-    withTimeout(getRecentBatchRuns(5), 2500, "Batch runs timed out.").catch(() => []),
-    withTimeout(getTaskEvents(10), 2500, "Task events timed out.").catch(() => []),
-    withTimeout(getArchiveOsAiTaskRuns(10), 2500, "ArchiveOS AI task runs timed out.").catch(() => []),
+    withTimeout(getRecentBatchRuns(5), OPTIONAL_READ_TIMEOUT_MS, "Batch runs timed out.").catch(() => []),
+    withTimeout(getTaskEvents(10), OPTIONAL_READ_TIMEOUT_MS, "Task events timed out.").catch(() => []),
+    withTimeout(getArchiveOsAiTaskRuns(10), OPTIONAL_READ_TIMEOUT_MS, "ArchiveOS AI task runs timed out.").catch(() => []),
   ]);
   const runtime =
     runtimeResult ??

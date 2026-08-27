@@ -11,12 +11,18 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class EcosystemService {
+    private static final Logger log = LoggerFactory.getLogger(EcosystemService.class);
     private static final Duration SNAPSHOT_TTL = Duration.ofSeconds(60);
+    private static final List<String> SERVICE_TYPES = List.of("MARKET", "NEXUS", "LOGITICS", "LEDGER");
 
     private final EcosystemProperties properties;
     private final EcosystemRepository repository;
@@ -24,6 +30,7 @@ public class EcosystemService {
     private final MarketClient market;
     private final LogiticsClient logitics;
     private final LedgerClient ledger;
+    private final AtomicBoolean refreshInProgress = new AtomicBoolean(false);
 
     public EcosystemService(EcosystemProperties properties, EcosystemRepository repository,
                             NexusClient nexus, MarketClient market, LogiticsClient logitics, LedgerClient ledger) {
@@ -122,15 +129,42 @@ public class EcosystemService {
     }
 
     private Map<String, Object> currentOrCheck(String traceId) {
-        if (List.of("MARKET", "NEXUS", "LOGITICS", "LEDGER").stream().allMatch(this::hasFreshSnapshot)) {
-            Map<String, Object> services = new LinkedHashMap<>();
-            services.put("market", fromSnapshot("MARKET"));
-            services.put("nexus", fromSnapshot("NEXUS"));
-            services.put("logitics", fromSnapshot("LOGITICS"));
-            services.put("ledger", fromSnapshot("LEDGER"));
-            return services;
+        Map<String, Map<String, Object>> snapshots = currentSnapshots();
+        if (snapshots.size() == SERVICE_TYPES.size()) {
+            boolean stale = snapshots.values().stream().anyMatch(snapshot -> isStale(snapshot.get("checked_at")));
+            if (stale) refreshInBackground(traceId);
+            return fromSnapshots(snapshots);
         }
         return checkAll(traceId);
+    }
+
+    private Map<String, Map<String, Object>> currentSnapshots() {
+        Map<String, Map<String, Object>> snapshots = new LinkedHashMap<>();
+        for (String type : SERVICE_TYPES) {
+            Map<String, Object> snapshot = repository.latestHealth(type);
+            if (snapshot != null && snapshot.get("status") != null) snapshots.put(type, snapshot);
+        }
+        return snapshots;
+    }
+
+    private Map<String, Object> fromSnapshots(Map<String, Map<String, Object>> snapshots) {
+        Map<String, Object> services = new LinkedHashMap<>();
+        services.put("market", fromSnapshot("MARKET", snapshots.get("MARKET")));
+        services.put("nexus", fromSnapshot("NEXUS", snapshots.get("NEXUS")));
+        services.put("logitics", fromSnapshot("LOGITICS", snapshots.get("LOGITICS")));
+        services.put("ledger", fromSnapshot("LEDGER", snapshots.get("LEDGER")));
+        return services;
+    }
+
+    private void refreshInBackground(String traceId) {
+        if (!refreshInProgress.compareAndSet(false, true)) return;
+        CompletableFuture.runAsync(() -> checkAll(traceId))
+                .whenComplete((ignored, error) -> {
+                    refreshInProgress.set(false);
+                    if (error != null) {
+                        log.warn("Background ecosystem refresh failed: {}", error.getClass().getSimpleName());
+                    }
+                });
     }
 
     private Map<String, Object> checkMarket() {
@@ -199,7 +233,10 @@ public class EcosystemService {
     }
 
     private Map<String, Object> fromSnapshot(String type) {
-        Map<String, Object> snapshot = repository.latestHealth(type);
+        return fromSnapshot(type, repository.latestHealth(type));
+    }
+
+    private Map<String, Object> fromSnapshot(String type, Map<String, Object> snapshot) {
         EcosystemProperties.ServiceConfig config = properties.getEcosystem().getServices().get(type.toLowerCase(Locale.ROOT));
         if (snapshot == null) return serviceMap(config, latestStatus(type), null, Map.of(), "No health snapshot yet.");
         return serviceMap(config, String.valueOf(snapshot.get("status")), snapshot.get("checked_at"), map(snapshot.get("summary")), string(snapshot.get("error_message")));
@@ -216,10 +253,6 @@ public class EcosystemService {
     }
 
     private Map<String, Object> latest(String type) { return repository.latestHealth(type); }
-    private boolean hasFreshSnapshot(String type) {
-        Map<String, Object> snapshot = repository.latestHealth(type);
-        return snapshot != null && snapshot.get("status") != null && !isStale(snapshot.get("checked_at"));
-    }
     private boolean isStale(Object checkedAt) {
         if (checkedAt == null) return true;
         try {
