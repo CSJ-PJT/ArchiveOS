@@ -6,28 +6,42 @@ import com.archiveos.ai.integration.ledger.LedgerClient;
 import com.archiveos.ai.integration.logitics.LogiticsClient;
 import com.archiveos.ai.integration.market.MarketClient;
 import com.archiveos.ai.integration.nexus.NexusClient;
+import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
 
 @Service
 public class WorkforceService {
+    private static final Duration CACHE_TTL = Duration.ofSeconds(60);
     private final MarketClient market;
     private final NexusClient nexus;
     private final LogiticsClient logitics;
     private final LedgerClient ledger;
+    private final AtomicBoolean refreshInProgress = new AtomicBoolean(false);
+    private volatile CachedServices cache;
 
     public WorkforceService(MarketClient market, NexusClient nexus, LogiticsClient logitics, LedgerClient ledger) {
         this.market = market;
         this.nexus = nexus;
         this.logitics = logitics;
         this.ledger = ledger;
+    }
+
+    @PostConstruct
+    void warmCache() {
+        refreshInBackground();
     }
 
     public Map<String, Object> overview() {
@@ -80,12 +94,68 @@ public class WorkforceService {
     }
 
     private List<Map<String, Object>> services() {
-        return List.of(
-                collect("archive-market", "Archive-Market", "MARKET", market.workforceSummary(), market.productivitySummary(), market.capacitySummary(), market.cashflowSummary(), market.operationsSummary()),
-                collect("archive-nexus", "Archive-Nexus", "NEXUS", nexus.workforceSummary(), nexus.productivitySummary(), nexus.capacitySummary(), null, nexus.operationsSummary()),
-                collect("archive-logistics", "Archive-Logistics", "LOGISTICS", logitics.workforceSummary(), logitics.productivitySummary(), logitics.capacitySummary(), null, logitics.operationsSummary()),
-                collect("archive-ledger", "Archive-Ledger", "LEDGER", ledger.workforceSummary(), ledger.productivitySummary(), ledger.capacitySummary(), null, ledger.operationsSummary()));
+        CachedServices current = cache;
+        if (current != null) {
+            if (current.loadedAt().isBefore(Instant.now().minus(CACHE_TTL))) refreshInBackground();
+            return current.services();
+        }
+        return loadAndStore();
     }
+
+    private synchronized List<Map<String, Object>> loadAndStore() {
+        CachedServices current = cache;
+        if (current != null && !current.loadedAt().isBefore(Instant.now().minus(CACHE_TTL))) {
+            return current.services();
+        }
+        List<CompletableFuture<IntegrationResult>> calls = new ArrayList<>();
+        CompletableFuture<IntegrationResult> marketWorkforce = call(calls, market::workforceSummary);
+        CompletableFuture<IntegrationResult> marketProductivity = call(calls, market::productivitySummary);
+        CompletableFuture<IntegrationResult> marketCapacity = call(calls, market::capacitySummary);
+        CompletableFuture<IntegrationResult> marketCashflow = call(calls, market::cashflowSummary);
+        CompletableFuture<IntegrationResult> marketOperations = call(calls, market::operationsSummary);
+        CompletableFuture<IntegrationResult> nexusWorkforce = call(calls, nexus::workforceSummary);
+        CompletableFuture<IntegrationResult> nexusProductivity = call(calls, nexus::productivitySummary);
+        CompletableFuture<IntegrationResult> nexusCapacity = call(calls, nexus::capacitySummary);
+        CompletableFuture<IntegrationResult> nexusOperations = call(calls, nexus::operationsSummary);
+        CompletableFuture<IntegrationResult> logisticsWorkforce = call(calls, logitics::workforceSummary);
+        CompletableFuture<IntegrationResult> logisticsProductivity = call(calls, logitics::productivitySummary);
+        CompletableFuture<IntegrationResult> logisticsCapacity = call(calls, logitics::capacitySummary);
+        CompletableFuture<IntegrationResult> logisticsOperations = call(calls, logitics::operationsSummary);
+        CompletableFuture<IntegrationResult> ledgerWorkforce = call(calls, ledger::workforceSummary);
+        CompletableFuture<IntegrationResult> ledgerProductivity = call(calls, ledger::productivitySummary);
+        CompletableFuture<IntegrationResult> ledgerCapacity = call(calls, ledger::capacitySummary);
+        CompletableFuture<IntegrationResult> ledgerOperations = call(calls, ledger::operationsSummary);
+        CompletableFuture.allOf(calls.toArray(CompletableFuture[]::new)).join();
+
+        List<Map<String, Object>> services = List.of(
+                collect("archive-market", "Archive-Market", "MARKET", marketWorkforce.join(), marketProductivity.join(), marketCapacity.join(), marketCashflow.join(), marketOperations.join()),
+                collect("archive-nexus", "Archive-Nexus", "NEXUS", nexusWorkforce.join(), nexusProductivity.join(), nexusCapacity.join(), null, nexusOperations.join()),
+                collect("archive-logistics", "Archive-Logistics", "LOGISTICS", logisticsWorkforce.join(), logisticsProductivity.join(), logisticsCapacity.join(), null, logisticsOperations.join()),
+                collect("archive-ledger", "Archive-Ledger", "LEDGER", ledgerWorkforce.join(), ledgerProductivity.join(), ledgerCapacity.join(), null, ledgerOperations.join()));
+        cache = new CachedServices(services, Instant.now());
+        return services;
+    }
+
+    private CompletableFuture<IntegrationResult> call(List<CompletableFuture<IntegrationResult>> calls,
+                                                       Supplier<IntegrationResult> supplier) {
+        CompletableFuture<IntegrationResult> future = CompletableFuture.supplyAsync(() -> {
+            try {
+                return supplier.get();
+            } catch (RuntimeException error) {
+                return new IntegrationResult(EcosystemServiceStatus.UNAVAILABLE, null, Map.of(), "Collection failed", 0);
+            }
+        });
+        calls.add(future);
+        return future;
+    }
+
+    private void refreshInBackground() {
+        if (!refreshInProgress.compareAndSet(false, true)) return;
+        CompletableFuture.runAsync(this::loadAndStore)
+                .whenComplete((ignored, error) -> refreshInProgress.set(false));
+    }
+
+    private record CachedServices(List<Map<String, Object>> services, Instant loadedAt) {}
 
     private Map<String, Object> collect(String id, String name, String type, IntegrationResult workforce,
                                         IntegrationResult productivity, IntegrationResult capacity, IntegrationResult cashflow,

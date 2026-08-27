@@ -2,14 +2,18 @@ package com.archiveos.ai.ecosystem;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 import com.archiveos.ai.integration.ledger.LedgerClient;
 import com.archiveos.ai.integration.logitics.LogiticsClient;
 import com.archiveos.ai.integration.market.MarketClient;
 import com.archiveos.ai.integration.nexus.NexusClient;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -102,6 +106,52 @@ class EcosystemServiceTest {
                 Mockito.mock(NexusClient.class), Mockito.mock(MarketClient.class), Mockito.mock(LogiticsClient.class), Mockito.mock(LedgerClient.class));
 
         assertThat(service.runDemo()).containsEntry("status", "SAFE_MODE_BLOCKED");
+    }
+
+    @Test void staleSnapshotsReturnImmediatelyAndRefreshOnlyOnceInBackground() throws Exception {
+        EcosystemProperties properties = properties();
+        EcosystemRepository repository = Mockito.mock(EcosystemRepository.class);
+        NexusClient nexus = Mockito.mock(NexusClient.class);
+        MarketClient market = Mockito.mock(MarketClient.class);
+        LogiticsClient logitics = Mockito.mock(LogiticsClient.class);
+        LedgerClient ledger = Mockito.mock(LedgerClient.class);
+        String staleAt = Instant.now().minusSeconds(120).toString();
+        for (String type : List.of("MARKET", "NEXUS", "LOGITICS", "LEDGER")) {
+            when(repository.latestHealth(type)).thenReturn(Map.of(
+                    "status", "HEALTHY", "checked_at", staleAt, "summary", Map.of()));
+        }
+        when(repository.approvalSummary()).thenReturn(Map.of());
+        when(repository.callbackSummary()).thenReturn(Map.of());
+        when(market.config()).thenReturn(properties.getEcosystem().getServices().get("market"));
+        when(nexus.config()).thenReturn(properties.getEcosystem().getServices().get("nexus"));
+        when(logitics.config()).thenReturn(properties.getEcosystem().getServices().get("logitics"));
+        when(ledger.config()).thenReturn(properties.getEcosystem().getServices().get("ledger"));
+        IntegrationResult healthy = new IntegrationResult(EcosystemServiceStatus.HEALTHY, 200, Map.of(), null, 5);
+        CountDownLatch refreshStarted = new CountDownLatch(1);
+        CountDownLatch releaseRefresh = new CountDownLatch(1);
+        when(market.health()).thenAnswer(ignored -> {
+            refreshStarted.countDown();
+            releaseRefresh.await(2, TimeUnit.SECONDS);
+            return healthy;
+        });
+        when(market.operationsSummary()).thenReturn(healthy);
+        when(market.marketEconomySummary()).thenReturn(healthy); when(market.outboxSummary()).thenReturn(healthy);
+        when(nexus.health()).thenReturn(healthy); when(nexus.operationsSummary()).thenReturn(healthy); when(nexus.outboxSummary()).thenReturn(healthy);
+        when(logitics.health()).thenReturn(healthy); when(logitics.operationsSummary()).thenReturn(healthy);
+        when(ledger.health()).thenReturn(healthy); when(ledger.operationsSummary()).thenReturn(healthy);
+        when(repository.recordHealth(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
+                .thenReturn(Map.of("status", "HEALTHY", "checked_at", Instant.now().toString()));
+
+        EcosystemService service = new EcosystemService(properties, repository, nexus, market, logitics, ledger);
+        Map<String, Object> first = service.summary();
+        assertThat(refreshStarted.await(2, TimeUnit.SECONDS)).isTrue();
+        Map<String, Object> second = service.summary();
+        releaseRefresh.countDown();
+
+        assertThat(first).containsEntry("status", "HEALTHY");
+        assertThat(second).containsEntry("status", "HEALTHY");
+        verify(market, Mockito.timeout(2000).times(1)).health();
+        verify(ledger, Mockito.timeout(2000).times(1)).operationsSummary();
     }
 
     private EcosystemProperties properties() {
