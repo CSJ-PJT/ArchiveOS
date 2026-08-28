@@ -34,6 +34,8 @@ const mailPage = read("src/pages/MailPage.tsx");
 const mcpRegistry = read("src/pages/McpRegistryPage.tsx");
 const pageUtils = read("src/pages/pageUtils.ts");
 const i18n = read("src/i18n/I18nProvider.tsx");
+const i18nRuntime = read("src/i18n/index.ts");
+const runtimePhrases = read("src/i18n/runtimePhrases.ts");
 
 for (const label of ["대시보드", "서비스", "운영", "재무", "기록", "메일", "설정"]) {
   if (!navigation.includes(`label: "${label}"`)) throw new Error(`Missing Console V3 navigation label: ${label}`);
@@ -233,6 +235,15 @@ if (liveMesh.includes(': "이벤트 없음"')) throw new Error("Mesh nodes must 
 if (appShell.includes("MutationObserver")) throw new Error("DOM MutationObserver translation must not remain in AppShell.");
 for (const contract of ["I18nProvider", "archive.locale", "setLocale"]) {
   if (!i18n.includes(contract)) throw new Error(`I18n provider contract missing: ${contract}`);
+}
+for (const contract of ["MutationObserver", "applyLocale(locale)", "attributeFilter"]) {
+  if (!i18n.includes(contract)) throw new Error(`Async i18n observer contract missing: ${contract}`);
+}
+for (const contract of ["runtimePhrases", "replaceDynamicText", "translateTextNodes", "translateAttributes"]) {
+  if (!i18nRuntime.includes(contract)) throw new Error(`Full-screen i18n runtime contract missing: ${contract}`);
+}
+for (const contract of ["Archive ecosystem operations", "運用コンソール", "生态系统", "RAG question answered", "Administrator session only"]) {
+  if (!runtimePhrases.includes(contract)) throw new Error(`Runtime translation glossary missing: ${contract}`);
 }
 for (const token of [".console-kpi-grid", ".live-mesh", ".mesh-canvas", ".language-popover", "@media (max-width:640px)"]) {
   if (!styles.includes(token)) throw new Error(`Console V3 responsive style missing: ${token}`);

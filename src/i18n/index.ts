@@ -3,6 +3,7 @@ import { ja } from "./ja";
 import { ko } from "./ko";
 import type { Locale, TranslationKey, TranslationTable } from "./types";
 import { zhCN } from "./zh-CN";
+import { runtimePhrases } from "./runtimePhrases";
 
 export type { Locale, TranslationKey, TranslationTable };
 
@@ -185,38 +186,84 @@ function buildReverseMap(locale: Locale) {
       reverse.set(source, target);
     }
   }
+  for (const phrase of runtimePhrases) {
+    const target = phrase[locale];
+    reverse.set(phrase.ko, target);
+    reverse.set(phrase.en, target);
+    reverse.set(phrase.ja, target);
+    reverse.set(phrase["zh-CN"], target);
+  }
   return reverse;
 }
 
-function replacePreservingPadding(value: string, reverse: Map<string, string>) {
-  const trimmed = value.trim();
-  const replacement = reverse.get(trimmed);
-  if (!replacement || replacement === trimmed) return value;
-  return value.replace(trimmed, replacement);
+function buildRuntimePairs(locale: Locale) {
+  const pairs = runtimePhrases.flatMap((entry) => {
+    const target = entry[locale];
+    return [entry.ko, entry.en, entry.ja, entry["zh-CN"]]
+      .filter((source) => source !== target && source.length >= 4 && !/^[A-Za-z]+$/.test(source))
+      .map((source) => [source, target] as const);
+  });
+  return pairs.sort((left, right) => right[0].length - left[0].length);
 }
 
-function translateTextNodes(root: ParentNode, reverse: Map<string, string>) {
+function replaceDynamicText(value: string, locale: Locale) {
+  const units: Record<Locale, Record<string, string>> = {
+    ko: { 초: "초", 분: "분", 시간: "시간", 일: "일", 건: "건", 개: "개", 페이지: "페이지", 전: "전" },
+    en: { 초: "sec", 분: "min", 시간: "hr", 일: "day", 건: "items", 개: "items", 페이지: "page", 전: "ago" },
+    ja: { 초: "秒", 분: "分", 시간: "時間", 일: "日", 건: "件", 개: "件", 페이지: "ページ", 전: "前" },
+    "zh-CN": { 초: "秒", 분: "分钟", 시간: "小时", 일: "天", 건: "条", 개: "个", 페이지: "页", 전: "前" },
+  };
+  const unit = units[locale];
+  let next = value;
+  next = next.replace(/(\d[\d,]*(?:\.\d+)?)\s*(초|분|시간|일|건|개)(?=\s|·|\/|$)/g, (_, count, name) => `${count} ${unit[name]}`);
+  next = next.replace(/\b(\d+)\/(\d+)\s*페이지\b/g, (_, page, total) => `${page}/${total} ${unit.페이지}`);
+  next = next.replace(/\s전(?=\s|$)/g, ` ${unit.전}`);
+  if (locale !== "ko") {
+    next = next.replace(/오전\s*/g, locale === "en" ? "AM " : locale === "ja" ? "午前 " : "上午 ");
+    next = next.replace(/오후\s*/g, locale === "en" ? "PM " : locale === "ja" ? "午後 " : "下午 ");
+  }
+  return next;
+}
+
+function replacePreservingPadding(value: string, reverse: Map<string, string>, locale: Locale, runtimePairs: ReadonlyArray<readonly [string, string]>) {
+  const trimmed = value.trim();
+  const replacement = reverse.get(trimmed);
+  if (replacement && replacement !== trimmed) return value.replace(trimmed, replacement);
+  const dynamic = replaceDynamicText(trimmed, locale);
+  let translated = dynamic;
+  for (const [source, target] of runtimePairs) {
+    if (translated.includes(source)) translated = translated.split(source).join(target);
+  }
+  return translated !== trimmed ? value.replace(trimmed, translated) : value;
+}
+
+function translateTextNodes(root: ParentNode, reverse: Map<string, string>, locale: Locale, runtimePairs: ReadonlyArray<readonly [string, string]>) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const parent = node.parentElement;
-      if (!parent || ["SCRIPT", "STYLE", "CODE", "PRE", "OPTION"].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
+      if (!parent || ["SCRIPT", "STYLE", "CODE", "PRE"].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
       return node.nodeValue?.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
     },
   });
   const nodes: Text[] = [];
   while (walker.nextNode()) nodes.push(walker.currentNode as Text);
   for (const node of nodes) {
-    node.nodeValue = replacePreservingPadding(node.nodeValue ?? "", reverse);
+    const current = node.nodeValue ?? "";
+    const next = replacePreservingPadding(current, reverse, locale, runtimePairs);
+    if (next !== current) node.nodeValue = next;
   }
 }
 
-function translateAttributes(root: ParentNode, reverse: Map<string, string>) {
+function translateAttributes(root: ParentNode, reverse: Map<string, string>, locale: Locale, runtimePairs: ReadonlyArray<readonly [string, string]>) {
   const attributes = ["aria-label", "title", "placeholder"];
   const elements = root.querySelectorAll<HTMLElement>("[aria-label], [title], [placeholder]");
   for (const element of elements) {
     for (const attribute of attributes) {
       const value = element.getAttribute(attribute);
-      if (value) element.setAttribute(attribute, replacePreservingPadding(value, reverse));
+      if (value) {
+        const next = replacePreservingPadding(value, reverse, locale, runtimePairs);
+        if (next !== value) element.setAttribute(attribute, next);
+      }
     }
   }
 }
@@ -226,4 +273,8 @@ export function applyLocale(locale: Locale, _root: ParentNode = document.body) {
   window.localStorage.setItem("archive.locale", normalized);
   document.documentElement.lang = normalized;
   document.documentElement.dataset.language = normalized;
+  const reverse = buildReverseMap(normalized);
+  const runtimePairs = buildRuntimePairs(normalized);
+  translateTextNodes(_root, reverse, normalized, runtimePairs);
+  translateAttributes(_root, reverse, normalized, runtimePairs);
 }
