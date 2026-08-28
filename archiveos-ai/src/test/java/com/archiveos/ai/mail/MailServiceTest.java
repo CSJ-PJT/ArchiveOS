@@ -94,4 +94,20 @@ class MailServiceTest {
 
         verify(repository).updateOutboundStatus("provider-message-123", "delivered", 3);
     }
+
+    @Test
+    void mailboxRefreshImportsProviderMessagesMissedByWebhook() {
+        when(gateway.listReceived()).thenReturn(List.of(new ResendMailGateway.ReceivedSummary(
+                "provider-inbound-123", List.of("csj@archiveos.kr"), "2026-08-28T07:30:00Z")));
+        when(repository.providerMessageExists("provider-inbound-123")).thenReturn(false);
+        ResendMailGateway.ReceivedMail received = new ResendMailGateway.ReceivedMail(
+                "provider-inbound-123", "sender@example.com", List.of("csj@archiveos.kr"), List.of(), List.of(),
+                "동기화 확인", "본문", null, Map.of(), List.of(), "2026-08-28T07:30:00Z");
+        when(gateway.receive("provider-inbound-123")).thenReturn(received);
+        when(repository.list("csj@archiveos.kr", "inbox", 0, 20)).thenReturn(Map.of("items", List.of(), "total", 1));
+
+        service.list("inbox", 0, 20);
+
+        verify(repository).saveInbound(anyString(), any(ResendMailGateway.ReceivedMail.class), any(Instant.class));
+    }
 }

@@ -66,6 +66,13 @@ public class ResendMailGateway {
                 string(response.get("created_at")));
     }
 
+    public List<ReceivedSummary> listReceived() {
+        Map<String, Object> response = exchange(URI.create("https://api.resend.com/emails/receiving"), "GET", null);
+        return list(response.get("data")).stream().map(item -> new ReceivedSummary(
+                string(item.get("id")), strings(item.get("to")), string(item.get("created_at"))))
+                .filter(item -> !item.id().isBlank()).limit(100).toList();
+    }
+
     public String deliveryStatus(String providerMessageId) {
         if (!properties.outboundReady()) throw new MailConfigurationException("ArchiveOS mail sending is not configured.");
         return string(exchange(SENT_EMAIL_URI.resolve(encodePath(providerMessageId)), "GET", null).get("last_event"));
@@ -108,6 +115,7 @@ public class ResendMailGateway {
     @SuppressWarnings("unchecked") private List<Map<String, Object>> list(Object value) { return value instanceof List<?> list ? list.stream().filter(Map.class::isInstance).map(item -> (Map<String, Object>) item).toList() : List.of(); }
 
     public record SentMail(String id) {}
+    public record ReceivedSummary(String id, List<String> to, String createdAt) {}
     public record ReceivedMail(String id, String from, List<String> to, List<String> cc, List<String> replyTo,
                                String subject, String text, String html, Map<String, Object> headers,
                                List<Map<String, Object>> attachments, String createdAt) {}
