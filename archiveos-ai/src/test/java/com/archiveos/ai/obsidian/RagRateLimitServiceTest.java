@@ -1,10 +1,12 @@
 package com.archiveos.ai.obsidian;
 
 import com.archiveos.ai.audit.AuditLogService;
+import com.archiveos.ai.notification.NotificationService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.atLeastOnce;
 
 import java.security.Principal;
 import java.time.Clock;
@@ -38,9 +40,10 @@ class RagRateLimitServiceTest {
         RagRateLimitService limiter = new RagRateLimitService(clock, 1, 1);
         ObsidianRagService rag = mock(ObsidianRagService.class);
         AuditLogService audit = mock(AuditLogService.class);
+        NotificationService notifications = mock(NotificationService.class);
         when(rag.search("status", 10)).thenReturn(List.of());
         when(rag.answer("question", null)).thenReturn(new RagAnswer("answer", List.of()));
-        ObsidianRagController controller = new ObsidianRagController(rag, limiter, audit);
+        ObsidianRagController controller = new ObsidianRagController(rag, limiter, audit, notifications);
         Principal alpha = () -> "alpha";
 
         var search = controller.search("status", 10, alpha, request());
@@ -63,6 +66,11 @@ class RagRateLimitServiceTest {
                 org.mockito.ArgumentMatchers.eq("success"),
                 org.mockito.ArgumentMatchers.eq("RAG 질문 응답 완료"),
                 org.mockito.ArgumentMatchers.contains("참조 0건"));
+        verify(notifications, atLeastOnce()).send(org.mockito.ArgumentMatchers.argThat(message ->
+                message.contains("역할: PUBLIC")
+                        && !message.contains("status")
+                        && !message.contains("question")
+                        && !message.contains("127.0.0.1")));
     }
 
     private MockHttpServletRequest request() {
