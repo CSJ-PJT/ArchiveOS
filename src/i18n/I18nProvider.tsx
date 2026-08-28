@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from "react";
-import { defaultLocale, normalizeLocale, readStoredLocale, t, type Locale, type TranslationKey } from ".";
+import { applyLocale, defaultLocale, normalizeLocale, readStoredLocale, t, type Locale, type TranslationKey } from ".";
 
 type I18nContextValue = {
   locale: Locale;
@@ -17,6 +17,19 @@ export function I18nProvider({ children }: PropsWithChildren) {
     window.localStorage.setItem("archive.locale", locale);
     document.documentElement.lang = locale;
     document.documentElement.dataset.language = locale;
+    applyLocale(locale);
+    let scheduled = false;
+    const observer = new MutationObserver(() => {
+      if (scheduled) return;
+      scheduled = true;
+      queueMicrotask(() => {
+        scheduled = false;
+        applyLocale(locale);
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true,
+      attributeFilter: ["aria-label", "title", "placeholder"] });
+    return () => observer.disconnect();
   }, [locale]);
 
   const value = useMemo<I18nContextValue>(() => ({
