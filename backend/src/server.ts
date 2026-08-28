@@ -198,8 +198,13 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Approve All External Approvals", method: "POST", path: "/api/approvals/external/approve-all", service: "runtime", description: "Admin-only audited approval backlog drain." },
   { name: "Create Named Admin", method: "POST", path: "/api/auth/admin/users", service: "runtime", description: "Admin-only named credential creation." },
   { name: "Mail Status", method: "GET", path: "/api/mail/status", service: "runtime", description: "Admin-only ArchiveOS mailbox readiness." },
-  { name: "Mail Messages", method: "GET", path: "/api/mail/messages", service: "runtime", description: "Admin-only inbox and sent mail listing." },
+  { name: "Mail Messages", method: "GET", path: "/api/mail/messages", service: "runtime", description: "Admin-only searchable mailbox listing." },
+  { name: "Read Mail Messages", method: "PATCH", path: "/api/mail/messages/read", service: "runtime", description: "Admin-only bulk read state update." },
+  { name: "Star Mail Messages", method: "PATCH", path: "/api/mail/messages/starred", service: "runtime", description: "Admin-only bulk important state update." },
   { name: "Delete Mail Messages", method: "DELETE", path: "/api/mail/messages", service: "runtime", description: "Admin-only recoverable mailbox deletion." },
+  { name: "Restore Mail Messages", method: "POST", path: "/api/mail/messages/restore", service: "runtime", description: "Admin-only mailbox restoration." },
+  { name: "Permanently Delete Mail", method: "DELETE", path: "/api/mail/messages/permanent", service: "runtime", description: "Admin-only permanent trash deletion." },
+  { name: "Empty Mail Trash", method: "DELETE", path: "/api/mail/messages/trash", service: "runtime", description: "Admin-only trash cleanup." },
   { name: "Send Mail", method: "POST", path: "/api/mail/send", service: "runtime", description: "Admin-only external mail delivery." },
   { name: "Queue Summary", method: "GET", path: "/api/queue/summary", service: "queue", description: "Semi-auto queue summary." },
   { name: "Queue Run Once", method: "POST", path: "/api/queue/run-once", service: "queue", description: "State transition and instruction generation only." },
@@ -355,11 +360,33 @@ app.get("/api/mail/messages", async (request, response) => {
   params.set("folder", String(request.query.folder ?? "inbox"));
   params.set("page", String(request.query.page ?? "0"));
   params.set("size", String(request.query.size ?? "20"));
+  params.set("q", String(request.query.q ?? ""));
+  params.set("field", String(request.query.field ?? "all"));
   await relayArchiveOsAi(response, `/api/mail/messages?${params}`, undefined, undefined, request);
+});
+
+app.patch("/api/mail/messages/read", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/mail/messages/read", jsonProxyRequest("PATCH", request.body), undefined, request);
+});
+
+app.patch("/api/mail/messages/starred", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/mail/messages/starred", jsonProxyRequest("PATCH", request.body), undefined, request);
 });
 
 app.delete("/api/mail/messages", async (request, response) => {
   await relayArchiveOsAi(response, "/api/mail/messages", jsonProxyRequest("DELETE", request.body), undefined, request);
+});
+
+app.post("/api/mail/messages/restore", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/mail/messages/restore", jsonProxyRequest("POST", request.body), undefined, request);
+});
+
+app.delete("/api/mail/messages/permanent", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/mail/messages/permanent", jsonProxyRequest("DELETE", request.body), undefined, request);
+});
+
+app.delete("/api/mail/messages/trash", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/mail/messages/trash", { method: "DELETE" }, undefined, request);
 });
 
 app.delete("/api/mail/messages/folder", async (request, response) => {
