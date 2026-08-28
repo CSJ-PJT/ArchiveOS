@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
+import { PaginatedItems } from "../components/shared/PaginatedItems";
 import { getSpringBatchExecution, getSpringBatchExecutions, getSpringBatchJobs, runSpringBatchJob, type SpringBatchExecution, type SpringBatchJob } from "../lib/backendApi";
 import { formatTimeAgo } from "./pageUtils";
 import type { PlatformRole } from "../lib/backendApi";
@@ -47,7 +48,7 @@ export function BatchPage({ role }: { role: PlatformRole }) {
       </section>
       <section className="workflows-layout">
         <SectionCard title="실행 이력" eyebrow="최신순">
-          <div className="execution-list">{executions.map((item) => <button className={`execution-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id} type="button" onClick={() => inspect(item)}><div><strong>{item.jobName || `실행 ${item.id}`}</strong><span>{formatTimeAgo(item.startTime || item.createTime)}</span></div><StatusBadge status={item.status}>{batchStatusLabel(item.status)}</StatusBadge></button>)}</div>
+          <PaginatedItems items={executions} pageSize={10} label="배치 실행 이력 페이지" className="execution-list" empty={<div className="empty-state">배치 실행 이력이 없습니다.</div>} renderItem={(item) => <button className={`execution-row ${selected?.id === item.id ? "selected" : ""}`} key={item.id} type="button" onClick={() => inspect(item)}><div><strong>{item.jobName || `실행 ${item.id}`}</strong><span>{formatTimeAgo(item.startTime || item.createTime)}</span></div><StatusBadge status={item.status}>{batchStatusLabel(item.status)}</StatusBadge></button>} />
         </SectionCard>
         <SectionCard title="실행 상세" eyebrow="단계별 처리 결과">
           {selected ? <ExecutionDetail execution={selected} /> : <div className="empty-state">실행 항목을 선택하면 기록을 확인할 수 있습니다.</div>}

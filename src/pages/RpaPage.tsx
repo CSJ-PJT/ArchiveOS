@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
+import { PaginatedItems } from "../components/shared/PaginatedItems";
 import {
   classifyRpaTask,
   decideRpaTask,
@@ -161,8 +162,7 @@ export function RpaPage({ role }: { role: PlatformRole }) {
         </SectionCard>
 
         <SectionCard title="분류된 작업" eyebrow="위험도와 승인 큐">
-          <div className="workflow-list">
-            {tasks.map((task) => (
+          <PaginatedItems items={tasks} pageSize={10} label="RPA 작업 기록 페이지" className="workflow-list" empty={!error ? <div className="empty-state">분류된 RPA 작업이 없습니다. 관리자가 왼쪽 양식에서 기록을 만들 수 있습니다.</div> : null} renderItem={(task) => (
               <button
                 className={`workflow-row ${selected?.task.id === task.id ? "selected" : ""}`}
                 key={task.id}
@@ -177,9 +177,7 @@ export function RpaPage({ role }: { role: PlatformRole }) {
                 <span>{riskLabel(task.riskLevel)}</span>
                 <span>{formatTimeAgo(task.updatedAt)}</span>
               </button>
-            ))}
-            {!tasks.length && !error ? <div className="empty-state">분류된 RPA 작업이 없습니다. 관리자가 왼쪽 양식에서 기록을 만들 수 있습니다.</div> : null}
-          </div>
+            )} />
         </SectionCard>
       </section>
 
@@ -252,8 +250,7 @@ function RpaDetail({
           </button>
         ))}
       </div>
-      <div className="decision-history-list">
-        {detail.decisions.map((decision) => (
+      <PaginatedItems items={detail.decisions} pageSize={10} label="RPA 결정 이력 페이지" className="decision-history-list" empty={<div className="empty-state">이 작업에 기록된 PM 결정이 없습니다.</div>} renderItem={(decision) => (
           <article className="decision-history-row" key={decision.id}>
             <div>
               <strong>{decisionLabel(decision.action)}</strong>
@@ -262,9 +259,7 @@ function RpaDetail({
             <StatusBadge status={decision.nextStatus}>{statusLabel(decision.nextStatus)}</StatusBadge>
             <p>{decision.reason || "기록된 사유가 없습니다."}</p>
           </article>
-        ))}
-        {!detail.decisions.length ? <div className="empty-state">이 작업에 기록된 PM 결정이 없습니다.</div> : null}
-      </div>
+        )} />
       <details className="details-box">
         <summary>분류 메타데이터</summary>
         <pre>{stringifyMeta(detail.task.metadata)}</pre>
