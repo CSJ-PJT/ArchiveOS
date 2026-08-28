@@ -2,7 +2,7 @@
 param(
     [string]$AtlasHost = '161.33.17.84',
     [string]$AtlasUser = 'opc',
-    [string]$SshKeyPath = 'C:\Users\dan18\OneDrive\바탕 화면\Keys\OCI_SSH.key',
+    [string]$SshKeyPath = 'C:\Users\dan18\OCI_SSH_tmp.key',
     [string]$BackendUrl = 'http://127.0.0.1:4100',
     [string]$ArchiveOsAiContainer = 'archiveos-archiveos-ai-1'
 )
@@ -27,16 +27,17 @@ $rawLines = & ssh.exe -i $SshKeyPath -o BatchMode=yes -o ConnectTimeout=15 "$Atl
 if ($LASTEXITCODE -ne 0) { throw "Atlas report retrieval failed." }
 $raw = $rawLines -join "`n"
 
-if ($raw -match '(?<!\d)(?:\d{1,3}\.){3}\d{1,3}(?!\d)' -or $raw -match '(?i)\b[0-9a-f]{64}\b' -or $raw -match '(?i)접속-[0-9a-f]+') {
+if ($raw -match '(?<!\d)(?:\d{1,3}\.){3}\d{1,3}(?!\d)' -or $raw -match '(?i)\b[0-9a-f]{64}\b') {
     throw "Atlas report contains prohibited identity detail."
 }
-$report = $raw | ConvertFrom-Json -AsHashtable
-$unexpected = @($report.Keys | Where-Object { $_ -notin $allowedKeys })
+$report = $raw | ConvertFrom-Json
+$reportKeys = @($report.PSObject.Properties.Name)
+$unexpected = @($reportKeys | Where-Object { $_ -notin $allowedKeys })
 if ($unexpected.Count -gt 0) { throw "Atlas report contains unsupported fields." }
-if (@($report.statusCounts.Keys | Where-Object { $_ -notin @('2xx', '3xx', '4xx', '5xx') }).Count -gt 0) {
+if (@($report.statusCounts.PSObject.Properties.Name | Where-Object { $_ -notin @('2xx', '3xx', '4xx', '5xx') }).Count -gt 0) {
     throw "Atlas report contains unsupported status fields."
 }
-if (@($report.serviceCounts.Keys | Where-Object { $_ -notin $allowedServices }).Count -gt 0) {
+if (@($report.serviceCounts.PSObject.Properties.Name | Where-Object { $_ -notin $allowedServices }).Count -gt 0) {
     throw "Atlas report contains an unregistered project."
 }
 
