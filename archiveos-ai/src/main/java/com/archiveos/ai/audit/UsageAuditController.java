@@ -45,5 +45,14 @@ public class UsageAuditController {
         }
     }
 
+    @PostMapping("/atlas-events")
+    public ResponseEntity<Map<String, Object>> importAtlasEvents(@RequestBody(required = false) Map<String, Object> body) {
+        try {
+            return ResponseEntity.accepted().body(Map.of("data", usage.importAtlasEvents(body)));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(Map.of("error", error.getMessage()));
+        }
+    }
+
     public record UsageRequest(String route) { }
 }

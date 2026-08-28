@@ -41,7 +41,7 @@ class UsageAuditControllerTest {
     void acceptsAggregateAtlasReport() throws Exception {
         UsageAuditService service = mock(UsageAuditService.class);
         when(service.importAtlasReport(any())).thenReturn(java.util.Map.of(
-                "imported", true, "targetDate", "2026-08-27", "projectCount", 8));
+                "imported", true, "targetDate", "2026-08-27", "projectCount", 13));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service)).build();
 
         mvc.perform(post("/api/audit/usage/atlas-report")
@@ -49,6 +49,19 @@ class UsageAuditControllerTest {
                         .content("{\"schemaVersion\":1}"))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.data.imported").value(true))
-                .andExpect(jsonPath("$.data.projectCount").value(8));
+                .andExpect(jsonPath("$.data.projectCount").value(13));
+    }
+
+    @Test
+    void acceptsAtlasPageEventBatch() throws Exception {
+        UsageAuditService service = mock(UsageAuditService.class);
+        when(service.importAtlasEvents(any())).thenReturn(java.util.Map.of("accepted", 1, "imported", 1, "duplicates", 0));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service)).build();
+
+        mvc.perform(post("/api/audit/usage/atlas-events")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"schemaVersion\":1}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.imported").value(1));
     }
 }

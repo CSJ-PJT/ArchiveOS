@@ -4,6 +4,8 @@ import com.archiveos.ai.security.ClientAddressResolver;
 import com.archiveos.ai.security.PlatformRole;
 import jakarta.servlet.http.HttpServletRequest;
 import java.sql.Timestamp;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -14,6 +16,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
+import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,10 +30,17 @@ public class UsageAuditService {
             "monitoredUniqueIdentities", "statusCounts", "serviceCounts", "delivered",
             "generatedAt", "deliveredAt"
     );
-    private static final Set<String> ATLAS_SERVICES = new LinkedHashSet<>(List.of(
+    private static final Set<String> ATLAS_EVENT_BATCH_KEYS = Set.of("schemaVersion", "generatedAt", "events");
+    private static final Set<String> ATLAS_EVENT_KEYS = Set.of(
+            "sourceId", "occurredAt", "project", "route", "method", "status", "clientIp", "userAgent"
+    );
+    private static final Set<String> ACCESS_SERVICES = new LinkedHashSet<>(List.of(
             "Atlas Home/Other", "Learn Atlas", "Sketchfy Atlas", "Incruit Atlas",
-            "Health Atlas", "Travel Atlas", "World Atlas", "Archive"
+            "Health Atlas", "Travel Atlas", "World Atlas", "ArchiveOS", "Archive-Market",
+            "Archive-Nexus", "Archive-Logistics", "Archive-Ledger", "Archive-World"
     ));
+    private static final Pattern SOURCE_ID = Pattern.compile("^[a-f0-9]{64}$");
+    private static final Pattern IP_LITERAL = Pattern.compile("^[0-9a-fA-F:.]+$");
     private static final Map<String, String> FEATURES = Map.of(
             "dashboard", "대시보드",
             "services", "서비스",
@@ -127,7 +138,7 @@ public class UsageAuditService {
                 || !statuses.keySet().containsAll(Set.of("2xx", "3xx", "4xx", "5xx"))) {
             throw new IllegalArgumentException("Atlas 응답 상태 집계 형식이 올바르지 않습니다.");
         }
-        if (!ATLAS_SERVICES.containsAll(services.keySet())) {
+        if (!ACCESS_SERVICES.containsAll(services.keySet())) {
             throw new IllegalArgumentException("등록되지 않은 Atlas 프로젝트가 보고서에 포함되어 있습니다.");
         }
 
@@ -151,13 +162,50 @@ public class UsageAuditService {
                 nonNegative(statuses.get("4xx"), "statusCounts.4xx"),
                 nonNegative(statuses.get("5xx"), "statusCounts.5xx"));
         jdbc.update("delete from public.atlas_access_daily_services where target_date = ?", targetDate);
-        for (String service : ATLAS_SERVICES) {
+        for (String service : ACCESS_SERVICES) {
             jdbc.update("""
                     insert into public.atlas_access_daily_services(target_date, service_name, request_count)
                     values (?, ?, ?)
                     """, targetDate, service, nonNegative(services.getOrDefault(service, 0), "serviceCounts." + service));
         }
-        return Map.of("imported", true, "targetDate", targetDate.toString(), "projectCount", ATLAS_SERVICES.size());
+        return Map.of("imported", true, "targetDate", targetDate.toString(), "projectCount", ACCESS_SERVICES.size());
+    }
+
+    @Transactional
+    public Map<String, Object> importAtlasEvents(Map<String, Object> batch) {
+        if (batch == null) throw new IllegalArgumentException("Atlas 접속 이벤트 묶음이 필요합니다.");
+        rejectUnexpected(batch, ATLAS_EVENT_BATCH_KEYS, "Atlas 이벤트 묶음");
+        if (number(batch.get("schemaVersion")) != 1) throw new IllegalArgumentException("지원하지 않는 Atlas 이벤트 버전입니다.");
+        instant(batch.get("generatedAt"), "generatedAt");
+        if (!(batch.get("events") instanceof List<?> events)) throw new IllegalArgumentException("Atlas 접속 이벤트 목록이 필요합니다.");
+        if (events.size() > 200) throw new IllegalArgumentException("Atlas 접속 이벤트는 한 번에 200건까지 허용됩니다.");
+
+        int imported = 0;
+        for (Object value : events) {
+            Map<String, Object> event = objectMap(value, "events[]");
+            rejectUnexpected(event, ATLAS_EVENT_KEYS, "Atlas 접속 이벤트");
+            String sourceId = requiredText(event.get("sourceId"), "sourceId", 64);
+            if (!SOURCE_ID.matcher(sourceId).matches()) throw new IllegalArgumentException("sourceId 형식이 올바르지 않습니다.");
+            Instant occurredAt = instant(event.get("occurredAt"), "occurredAt");
+            String project = requiredText(event.get("project"), "project", 80);
+            if (!ACCESS_SERVICES.contains(project)) throw new IllegalArgumentException("등록되지 않은 Atlas/Archive 프로젝트입니다.");
+            String route = requiredText(event.get("route"), "route", 512);
+            if (!route.startsWith("/") || route.contains("\n") || route.contains("\r")) throw new IllegalArgumentException("route 형식이 올바르지 않습니다.");
+            String method = requiredText(event.get("method"), "method", 8).toUpperCase(Locale.ROOT);
+            if (!Set.of("GET", "HEAD").contains(method)) throw new IllegalArgumentException("페이지 조회 메서드만 허용됩니다.");
+            long status = nonNegative(event.get("status"), "status");
+            if (status < 100 || status > 599) throw new IllegalArgumentException("status 값이 올바르지 않습니다.");
+            String clientIp = requiredText(event.get("clientIp"), "clientIp", 64);
+            validateIp(clientIp);
+            String userAgent = truncate(event.get("userAgent") == null ? null : String.valueOf(event.get("userAgent")), 512);
+            imported += jdbc.update("""
+                    insert into public.atlas_access_events(id, source_event_id, occurred_at, project_name,
+                        route, action, client_ip, user_agent, http_status)
+                    values (?, ?, ?, ?, ?, 'PAGE_VIEW', ?::inet, ?, ?)
+                    on conflict (source_event_id) do nothing
+                    """, UUID.randomUUID(), sourceId, Timestamp.from(occurredAt), project, route, clientIp, userAgent, (int) status);
+        }
+        return Map.of("accepted", events.size(), "imported", imported, "duplicates", events.size() - imported);
     }
 
     private Map<String, Object> atlasAccessSummary() {
@@ -194,6 +242,10 @@ public class UsageAuditService {
                  where metadata->>'clientIp' is not null
                    and lower(coalesce(resource_type, '')) not in ('live_flow', 'live-flow')
                    and lower(coalesce(request_path, '')) not like '/api/live-flow/%'
+                union all
+                select id::text as id, occurred_at, actor, role, project_name as feature, route, action,
+                       client_ip::text as client_ip, user_agent, authenticated, 'ATLAS_PAGE_VIEW' as source
+                  from public.atlas_access_events
                 """;
     }
 
@@ -238,6 +290,25 @@ public class UsageAuditService {
 
     private int number(Object value) {
         return value instanceof Number number ? number.intValue() : -1;
+    }
+
+    private void rejectUnexpected(Map<String, Object> source, Set<String> allowed, String label) {
+        Set<String> unexpected = new LinkedHashSet<>(source.keySet());
+        unexpected.removeAll(allowed);
+        if (!unexpected.isEmpty()) throw new IllegalArgumentException(label + "에 허용되지 않은 필드가 있습니다.");
+    }
+
+    private String requiredText(Object value, String label, int maxLength) {
+        if (value == null || String.valueOf(value).isBlank()) throw new IllegalArgumentException(label + " 값이 필요합니다.");
+        String text = String.valueOf(value).trim();
+        if (text.length() > maxLength) throw new IllegalArgumentException(label + " 값이 너무 깁니다.");
+        return text;
+    }
+
+    private void validateIp(String value) {
+        if (!IP_LITERAL.matcher(value).matches()) throw new IllegalArgumentException("clientIp 형식이 올바르지 않습니다.");
+        try { InetAddress.getByName(value); }
+        catch (UnknownHostException error) { throw new IllegalArgumentException("clientIp 형식이 올바르지 않습니다."); }
     }
 
     private long nonNegative(Object value, String label) {

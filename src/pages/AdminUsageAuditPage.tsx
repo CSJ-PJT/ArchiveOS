@@ -46,8 +46,8 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
       </div>
     </SectionCard>
 
-    <SectionCard title="Atlas 프로젝트 외부 접속" eyebrow="OCI 일일 집계 · 비식별">
-      <p className="body-copy">Atlas 운영 서버가 하루 단위로 집계한 외부 접속 현황입니다. 원 IP, HMAC 식별값, 별칭과 토큰은 ArchiveOS에 저장하거나 표시하지 않습니다.</p>
+    <SectionCard title="Atlas·Archive 프로젝트 외부 접속" eyebrow="OCI 일일 집계 · 별도 DB 저장">
+      <p className="body-copy">Atlas와 Archive 공개 프로젝트의 하루 단위 접속 집계입니다. 원 IP와 브라우저 정보는 아래 관리자 전용 최근 사용 내역에만 보관하고, 일일 집계와 Slack에는 식별 정보를 포함하지 않습니다.</p>
       {latestAtlas ? <>
         <div className="usage-audit-summary" aria-label="Atlas 외부 접속 요약">
           <Summary label="집계 기준일" value={latestAtlas.target_date} />
@@ -72,7 +72,7 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
     <SectionCard title="최근 사용 내역" eyebrow={`최신순 · 페이지당 ${PAGE_SIZE}건`}>
       {error ? <div className="empty-state error-state" role="alert">{error}</div> : null}
       {loading && !data ? <div className="usage-audit-loading" role="status"><span className="page-loading-spinner" aria-hidden="true" />사용 기록을 불러오는 중입니다.</div> : null}
-      {!loading && !error && !data?.items.length ? <p className="empty-copy">아직 기록된 ArchiveOS 사용 내역이 없습니다.</p> : null}
+      {!loading && !error && !data?.items.length ? <p className="empty-copy">아직 기록된 ArchiveOS·Atlas 사용 내역이 없습니다.</p> : null}
       {data?.items.length ? <div className="usage-audit-table-wrap">
         <table className="usage-audit-table">
           <thead><tr><th>사용 시각</th><th>계정</th><th>기능</th><th>작업</th><th>IP</th><th>접속 환경</th></tr></thead>
@@ -96,7 +96,7 @@ function UsageRow({ entry }: { entry: UsageAuditEntry }) {
     <td><time dateTime={entry.occurred_at}>{formatDate(entry.occurred_at)}</time></td>
     <td><strong>{entry.actor || "anonymous"}</strong><StatusBadge status={entry.authenticated ? "healthy" : "empty"}>{roleLabel(entry.role)}</StatusBadge></td>
     <td><strong>{featureLabel(entry.feature)}</strong><small>{routeLabel(entry.route)}</small></td>
-    <td><span>{actionLabel(entry)}</span><small>{entry.source === "PAGE_VIEW" ? "화면 사용" : "기능 실행"}</small></td>
+    <td><span>{actionLabel(entry)}</span><small>{entry.source === "ATLAS_PAGE_VIEW" ? "외부 화면 사용" : entry.source === "PAGE_VIEW" ? "화면 사용" : "기능 실행"}</small></td>
     <td><code>{entry.client_ip || "확인 불가"}</code></td>
     <td title={entry.user_agent || ""}>{deviceLabel(entry.user_agent)}</td>
   </tr>;
@@ -108,7 +108,7 @@ function formatDate(value: string) {
 }
 function roleLabel(role: string) { return ({ ADMIN:"관리자", PM:"PM", OPERATOR:"운영자", PUBLIC:"공개" } as Record<string,string>)[role] ?? role; }
 function featureLabel(feature: string) { return ({ auth:"로그인", tasks:"작업", approvals:"승인", batch:"배치", batches:"배치", mail:"메일", rag:"RAG", memory:"운영 메모리" } as Record<string,string>)[feature] ?? feature; }
-function routeLabel(route: string) { return route.startsWith("/api/") ? route.replace(/^\/api\//, "API · ") : `#/${route}`; }
+function routeLabel(route: string) { return route.startsWith("/api/") ? route.replace(/^\/api\//, "API · ") : route.startsWith("/") ? route : `#/${route}`; }
 function actionLabel(entry: UsageAuditEntry) {
   if (entry.action === "PAGE_VIEW") return "페이지 조회";
   if (entry.action === "approval_decision") return "승인 결정";
@@ -135,7 +135,12 @@ function atlasProjectLabel(value: string) {
     "Health Atlas": "Health Atlas",
     "Travel Atlas": "Route Atlas",
     "World Atlas": "Archive World",
-    Archive: "Archive",
+    ArchiveOS: "ArchiveOS",
+    "Archive-Market": "Archive-Market",
+    "Archive-Nexus": "Archive-Nexus",
+    "Archive-Logistics": "Archive-Logistics",
+    "Archive-Ledger": "Archive-Ledger",
+    "Archive-World": "Archive World",
   } as Record<string, string>)[value] ?? value;
 }
 
@@ -148,6 +153,11 @@ function atlasProjectPath(value: string) {
     "Health Atlas": "/health",
     "Travel Atlas": "/travel",
     "World Atlas": "/world",
-    Archive: "/archive",
+    ArchiveOS: "/archiveos",
+    "Archive-Market": "/market",
+    "Archive-Nexus": "/nexus",
+    "Archive-Logistics": "/logistics",
+    "Archive-Ledger": "/ledger",
+    "Archive-World": "/archive-world · /archive-world-mini",
   } as Record<string, string>)[value] ?? "Atlas OCI";
 }
