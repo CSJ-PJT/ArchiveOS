@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +51,7 @@ public class MailRepository {
                   reply_to_addresses::text as reply_to_json, headers::text as headers_json,
                   attachments::text as attachments_json
                 """, this::row, UUID.randomUUID(), mail.id(), mailbox, mail.from(), json(mail.to()), json(mail.cc()),
-                json(mail.replyTo()), mail.subject(), mail.text(), mail.html(), json(mail.headers()), json(mail.attachments()), occurredAt);
+                json(mail.replyTo()), mail.subject(), mail.text(), mail.html(), json(mail.headers()), json(mail.attachments()), Timestamp.from(occurredAt));
     }
 
     public Map<String, Object> saveOutbound(String mailbox, String providerMessageId, String from, List<String> to,
@@ -63,7 +64,7 @@ public class MailRepository {
                 returning *, to_addresses::text as to_json, cc_addresses::text as cc_json,
                   reply_to_addresses::text as reply_to_json, headers::text as headers_json,
                   attachments::text as attachments_json
-                """, this::row, UUID.randomUUID(), providerMessageId, mailbox, from, json(to), json(cc), subject, text, html, occurredAt);
+                """, this::row, UUID.randomUUID(), providerMessageId, mailbox, from, json(to), json(cc), subject, text, html, Timestamp.from(occurredAt));
     }
 
     public Map<String, Object> list(String mailbox, String folder, int page, int size) {
