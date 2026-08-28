@@ -24,6 +24,7 @@ services:
       # Provider credentials remain runtime-only and are never committed.
       ARCHIVEOS_MAIL_ENABLED: ${ARCHIVEOS_MAIL_ENABLED:-true}
       ARCHIVEOS_MAIL_ADDRESS: ${ARCHIVEOS_MAIL_ADDRESS:-csj@archiveos.kr}
+      ARCHIVEOS_MAIL_FORWARD_TO: ${ARCHIVEOS_MAIL_FORWARD_TO:-csj1116@kakao.com}
   backend:
     environment:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS is required for rc}
