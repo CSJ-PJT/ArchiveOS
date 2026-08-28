@@ -1162,6 +1162,38 @@ export type RagRuntimeContext = {
   processingBacklog?: number | null;
   balanceStatus?: string | null;
   balanceReason?: string | null;
+  financeAsOf?: string | null;
+  financeTotals?: {
+    revenue?: string | number;
+    cost?: string | number;
+    profit?: string | number;
+    scope?: string;
+    includedServices?: number;
+  } | null;
+  serviceFinance?: Array<{
+    serviceId: string;
+    serviceName: string;
+    status: string;
+    revenue: string | number | null;
+    cost: string | number | null;
+    profit: string | number | null;
+    operatingMargin: string | number | null;
+    targetMinMargin: string | number;
+    targetMaxMargin: string | number;
+    balance: string;
+    balanceReason: string;
+    calculationScope?: string;
+    periodStart?: string | null;
+    periodEnd?: string | null;
+    sourceLatestEventAt?: string | null;
+    negativeProfitStreak?: string | number | null;
+    backlogExposure?: string | number | null;
+    approvalBacklog?: string | number | null;
+    settlementBacklog?: string | number | null;
+    topRevenueDrivers?: Array<Record<string, unknown>>;
+    topExpenseDrivers?: Array<Record<string, unknown>>;
+    revenueComponents?: Record<string, unknown>;
+  }>;
   recentEvents?: Array<{ eventType?: string; source?: string; target?: string; entityId?: string | null; correlationId?: string | null; status?: string }>;
   selectedService?: string | null;
   selectedCorrelationId?: string | null;

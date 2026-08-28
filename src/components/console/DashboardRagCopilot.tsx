@@ -158,6 +158,40 @@ function labelForState(state: CopilotState, translate: (key: TranslationKey) => 
 }
 function toneForState(state: CopilotState): SemanticStatus { return state === "READY" ? "healthy" : state === "SYNC_REQUIRED" ? "warning" : state === "DEGRADED" ? "degraded" : "disconnected"; }
 function buildRuntimeContext(data: AppData): RagRuntimeContext {
+  const serviceFinance = (data.balance?.services ?? []).map((service) => {
+    const summary = ecosystemSummaryFor(data, service.serviceId);
+    const operations = asRecord(summary.operations);
+    const marketEconomy = asRecord(summary.marketEconomy);
+    const economy = firstRecord(summary.economy, operations.economy, marketEconomy.economy);
+    const ledgerBalance = asRecord(summary.balance);
+    return {
+      serviceId: service.serviceId,
+      serviceName: service.serviceName,
+      status: service.status,
+      revenue: service.revenue,
+      cost: service.cost,
+      profit: service.profit,
+      operatingMargin: service.operatingMargin,
+      targetMinMargin: service.targetMinMargin,
+      targetMaxMargin: service.targetMaxMargin,
+      balance: service.balance,
+      balanceReason: service.balanceReason,
+      calculationScope: service.calculationScope,
+      periodStart: service.periodStart,
+      periodEnd: service.periodEnd,
+      sourceLatestEventAt: service.sourceLatestEventAt,
+      negativeProfitStreak: service.negativeProfitStreak,
+      backlogExposure: service.backlogExposure,
+      approvalBacklog: service.approvalBacklog,
+      settlementBacklog: service.settlementBacklog,
+      topRevenueDrivers: asRecordArray(economy.topRevenueDrivers),
+      topExpenseDrivers: asRecordArray(economy.topExpenseDrivers),
+      revenueComponents: pickNumericFields(ledgerBalance, [
+        "transactionProcessingRevenue", "settlementAgencyRevenue", "reconciliationRevenue",
+        "approvalReviewRevenue", "workforceCost", "callbackFailureCost", "backlogExposure",
+      ]),
+    };
+  });
   return {
     ecosystemStatus: data.ecosystem?.status,
     services: Object.values(data.ecosystem?.services ?? {}).map((service) => ({ name: service.name, status: service.status })),
@@ -166,8 +200,32 @@ function buildRuntimeContext(data: AppData): RagRuntimeContext {
     processingBacklog: data.liveFlow?.processingBacklog ?? null,
     balanceStatus: data.balance?.balanceStatus ?? null,
     balanceReason: data.balance?.reviewReason ?? null,
+    financeAsOf: data.refreshedAt,
+    financeTotals: data.balance?.totals ?? null,
+    serviceFinance,
     recentEvents: data.liveFlowEvents.slice(0, 20).map((event) => ({ eventType: event.event_type, source: event.from_node, target: event.to_node, entityId: event.entity_id, correlationId: event.correlation_id, status: event.status })),
   };
+}
+function ecosystemSummaryFor(data: AppData, serviceId: string): Record<string, unknown> {
+  const normalized = serviceId.toLowerCase();
+  const key = normalized.includes("market") ? "market"
+    : normalized.includes("nexus") ? "nexus"
+      : normalized.includes("logistic") ? "logitics"
+        : "ledger";
+  return data.ecosystem?.services?.[key]?.summary ?? {};
+}
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+function firstRecord(...values: unknown[]): Record<string, unknown> {
+  return values.map(asRecord).find((value) => Object.keys(value).length > 0) ?? {};
+}
+function asRecordArray(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? value.filter((item) => item && typeof item === "object").slice(0, 5) as Array<Record<string, unknown>> : [];
+}
+function pickNumericFields(source: Record<string, unknown>, keys: string[]): Record<string, unknown> {
+  return Object.fromEntries(keys.filter((key) => typeof source[key] === "number" || typeof source[key] === "string")
+    .map((key) => [key, source[key]]));
 }
 function buildSuggestions(data: AppData, translate: (key: TranslationKey) => string) {
   const suggestions: string[] = [];
