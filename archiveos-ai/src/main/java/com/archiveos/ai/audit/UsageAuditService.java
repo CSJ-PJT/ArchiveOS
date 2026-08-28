@@ -244,7 +244,15 @@ public class UsageAuditService {
                     insert into public.atlas_access_events(id, source_event_id, occurred_at, project_name,
                         route, action, client_ip, user_agent, http_status)
                     values (?, ?, ?, ?, ?, ?, ?::inet, ?, ?)
-                    on conflict (source_event_id) do nothing
+                    on conflict (source_event_id) do update set
+                        project_name = excluded.project_name,
+                        route = excluded.route,
+                        action = excluded.action,
+                        http_status = excluded.http_status
+                    where atlas_access_events.project_name is distinct from excluded.project_name
+                       or atlas_access_events.route is distinct from excluded.route
+                       or atlas_access_events.action is distinct from excluded.action
+                       or atlas_access_events.http_status is distinct from excluded.http_status
                     """, UUID.randomUUID(), sourceId, Timestamp.from(occurredAt), project, route, action, clientIp, userAgent, (int) status);
         }
         return Map.of("accepted", events.size(), "imported", imported,
