@@ -108,9 +108,9 @@ class MailServiceTest {
         when(gateway.receive("provider-inbound-123")).thenReturn(received);
         when(gateway.send(anyList(), anyList(), anyString(), anyString(), anyString()))
                 .thenReturn(new ResendMailGateway.SentMail("provider-forward-123"));
-        when(repository.list("csj@archiveos.kr", "inbox", 0, 20)).thenReturn(Map.of("items", List.of(), "total", 1));
+        when(repository.list("csj@archiveos.kr", "inbox", 0, 20, "", "all")).thenReturn(Map.of("items", List.of(), "total", 1));
 
-        service.list("inbox", 0, 20);
+        service.list("inbox", 0, 20, "", "all");
 
         verify(repository).saveInbound(anyString(), any(ResendMailGateway.ReceivedMail.class), any(Instant.class));
         verify(repository).completeForward("provider-inbound-123", "provider-forward-123");
@@ -146,5 +146,25 @@ class MailServiceTest {
 
         assertThat(result).containsEntry("deleted", 4).containsEntry("unread", 0L);
         verify(repository).deleteFolder("csj@archiveos.kr", "inbox");
+    }
+
+    @Test
+    void supportsSearchableWorkspaceFoldersWithoutChangingMailData() {
+        when(repository.list("csj@archiveos.kr", "starred", 0, 20, "운영", "subject"))
+                .thenReturn(Map.of("items", List.of(), "total", 0));
+
+        service.list("STARRED", 0, 20, "운영", "SUBJECT");
+
+        verify(repository).list("csj@archiveos.kr", "starred", 0, 20, "운영", "subject");
+    }
+
+    @Test
+    void restoresAndPermanentlyDeletesOnlyBoundedSelections() {
+        UUID id = UUID.randomUUID();
+        when(repository.restoreSelected("csj@archiveos.kr", List.of(id))).thenReturn(1);
+        when(repository.permanentlyDeleteSelected("csj@archiveos.kr", List.of(id))).thenReturn(1);
+
+        assertThat(service.restoreSelected(List.of(id))).containsEntry("restored", 1);
+        assertThat(service.permanentlyDeleteSelected(List.of(id))).containsEntry("deleted", 1);
     }
 }

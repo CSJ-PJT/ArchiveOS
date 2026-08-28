@@ -52,18 +52,26 @@ public class MailService {
         result.put("forwarding_ready", properties.forwardingReady());
         result.put("forward_to", properties.normalizedForwardTo());
         result.put("unread", properties.normalizedAddress().isBlank() ? 0 : repository.unreadCount(properties.normalizedAddress()));
+        result.put("counts", properties.normalizedAddress().isBlank() ? Map.of() : repository.folderCounts(properties.normalizedAddress()));
         result.put("inbound_last_sync", lastInboundSync == null ? "" : lastInboundSync.toString());
         result.put("inbound_last_imported", lastInboundImported);
         result.put("inbound_last_errors", lastInboundErrors);
         return result;
     }
 
-    public Map<String, Object> list(String folder, int page, int size) {
+    public Map<String, Object> list(String folder, int page, int size, String query, String field) {
         requireMailbox();
         synchronizeInbound();
         String normalizedFolder = folder == null ? "inbox" : folder.trim().toLowerCase(Locale.ROOT);
-        if (!List.of("inbox", "sent", "all").contains(normalizedFolder)) throw new IllegalArgumentException("folder must be inbox, sent, or all.");
-        return repository.list(properties.normalizedAddress(), normalizedFolder, page, size);
+        if (!List.of("inbox", "sent", "unread", "starred", "attachments", "trash", "all").contains(normalizedFolder)) {
+            throw new IllegalArgumentException("Unsupported mail folder.");
+        }
+        String normalizedField = field == null ? "all" : field.trim().toLowerCase(Locale.ROOT);
+        if (!List.of("all", "subject", "sender", "recipient").contains(normalizedField)) {
+            throw new IllegalArgumentException("Unsupported mail search field.");
+        }
+        String normalizedQuery = optional(query, 200);
+        return repository.list(properties.normalizedAddress(), normalizedFolder, page, size, normalizedQuery, normalizedField);
     }
 
     public Map<String, Object> get(UUID id) {
@@ -79,13 +87,42 @@ public class MailService {
         return Map.of("id", id, "read", read, "unread", repository.unreadCount(properties.normalizedAddress()));
     }
 
+    public Map<String, Object> markReadSelected(List<UUID> ids, boolean read) {
+        requireMailbox();
+        List<UUID> uniqueIds = boundedIds(ids);
+        int updated = repository.markReadSelected(properties.normalizedAddress(), uniqueIds, read);
+        return Map.of("updated", updated, "read", read, "unread", repository.unreadCount(properties.normalizedAddress()));
+    }
+
+    public Map<String, Object> markStarred(List<UUID> ids, boolean starred) {
+        requireMailbox();
+        List<UUID> uniqueIds = boundedIds(ids);
+        int updated = repository.markStarred(properties.normalizedAddress(), uniqueIds, starred);
+        return Map.of("updated", updated, "starred", starred);
+    }
+
     public Map<String, Object> deleteSelected(List<UUID> ids) {
         requireMailbox();
-        List<UUID> uniqueIds = ids == null ? List.of() : ids.stream().distinct().toList();
-        if (uniqueIds.isEmpty() || uniqueIds.size() > 50) {
-            throw new IllegalArgumentException("Between 1 and 50 message ids are required.");
-        }
+        List<UUID> uniqueIds = boundedIds(ids);
         int deleted = repository.deleteSelected(properties.normalizedAddress(), uniqueIds);
+        return Map.of("deleted", deleted, "unread", repository.unreadCount(properties.normalizedAddress()));
+    }
+
+    public Map<String, Object> restoreSelected(List<UUID> ids) {
+        requireMailbox();
+        int restored = repository.restoreSelected(properties.normalizedAddress(), boundedIds(ids));
+        return Map.of("restored", restored, "unread", repository.unreadCount(properties.normalizedAddress()));
+    }
+
+    public Map<String, Object> permanentlyDeleteSelected(List<UUID> ids) {
+        requireMailbox();
+        int deleted = repository.permanentlyDeleteSelected(properties.normalizedAddress(), boundedIds(ids));
+        return Map.of("deleted", deleted, "unread", repository.unreadCount(properties.normalizedAddress()));
+    }
+
+    public Map<String, Object> emptyTrash() {
+        requireMailbox();
+        int deleted = repository.emptyTrash(properties.normalizedAddress());
         return Map.of("deleted", deleted, "unread", repository.unreadCount(properties.normalizedAddress()));
     }
 
@@ -246,6 +283,14 @@ public class MailService {
         if (result.size() > 10) throw new IllegalArgumentException("A maximum of 10 recipients is allowed.");
         if (result.stream().anyMatch(value -> !EMAIL.matcher(value).matches())) throw new IllegalArgumentException("Invalid email address.");
         return result;
+    }
+
+    private List<UUID> boundedIds(List<UUID> ids) {
+        List<UUID> uniqueIds = ids == null ? List.of() : ids.stream().distinct().toList();
+        if (uniqueIds.isEmpty() || uniqueIds.size() > 50) {
+            throw new IllegalArgumentException("Between 1 and 50 message ids are required.");
+        }
+        return uniqueIds;
     }
 
     private String normalizeAddress(String value) {
