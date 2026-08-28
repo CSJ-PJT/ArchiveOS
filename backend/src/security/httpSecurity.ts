@@ -25,7 +25,8 @@ export function requiresAdminRead(method: string, requestPath: string) {
   return ADMIN_READ_EXACT.has(requestPath);
 }
 
-export function isArchiveOsAdminServiceRequest(request: Request) {
+export function isArchiveOsAdminServiceRequest(request?: Pick<Request, "header"> | null) {
+  if (!request || typeof request.header !== "function") return false;
   const authorization = request.header("authorization");
   const source = request.header("x-archive-source-system") ?? request.header("x-archiveos-source-system");
   const scope = request.header("x-archive-service-scope") ?? request.header("x-archiveos-service-scope");

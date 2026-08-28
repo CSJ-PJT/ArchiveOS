@@ -18,6 +18,8 @@ assert.equal(isArchiveOsAdminServiceRequest({ header: (name: string) => ({
   "x-archive-source-system": "untrusted-service",
   "x-archive-service-scope": "admin:operate",
 }[name]) } as never), false);
+assert.equal(isArchiveOsAdminServiceRequest(undefined), false);
+assert.equal(isArchiveOsAdminServiceRequest(null), false);
 
 const headers = new Map<string, string>();
 securityHeaders(
