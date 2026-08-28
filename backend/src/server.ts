@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import cors from "cors";
@@ -2084,6 +2085,10 @@ async function recordLocalActionResult(request: any, command: string, status: st
 }
 
 function runLocalAction(projectPath: string, action: LocalAction): Promise<LocalActionResult> {
+  if (process.platform !== "win32" && action.startsWith("runtime_")) {
+    return queueWindowsRuntimeAction(action);
+  }
+
   const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
   const rootPath = resolveProjectRoot(projectPath);
   const backendPath = path.join(rootPath, "backend");
@@ -2172,6 +2177,61 @@ function runLocalAction(projectPath: string, action: LocalAction): Promise<Local
       });
     });
   });
+}
+
+async function queueWindowsRuntimeAction(action: LocalAction): Promise<LocalActionResult> {
+  const queueRoot = process.env.MCP_QUEUE_PATH?.trim() || "/runtime/queue";
+  const inbox = path.join(queueRoot, "control", "inbox");
+  const outbox = path.join(queueRoot, "control", "outbox");
+  const requestId = randomUUID();
+  const requestPath = path.join(inbox, `${requestId}.json`);
+  const resultPath = path.join(outbox, `${requestId}.json`);
+
+  try {
+    await mkdir(inbox, { recursive: true });
+    await mkdir(outbox, { recursive: true });
+    await writeFile(requestPath, JSON.stringify({ id: requestId, action, requestedAt: new Date().toISOString() }), {
+      encoding: "utf8",
+      flag: "wx",
+    });
+
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      try {
+        const result = JSON.parse(await readFile(resultPath, "utf8")) as Partial<LocalActionResult>;
+        await unlink(resultPath).catch(() => undefined);
+        return {
+          action,
+          status: result.status === "succeeded" ? "succeeded" : "failed",
+          stdout: truncateOutput(String(result.stdout || "")),
+          stderr: truncateOutput(String(result.stderr || "")),
+          exitCode: Number.isInteger(result.exitCode) ? Number(result.exitCode) : -1,
+        };
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "ENOENT") throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+
+    return {
+      action,
+      status: "failed",
+      stdout: "",
+      stderr: "Windows runtime controller did not answer within 15 seconds.",
+      exitCode: -1,
+    };
+  } catch (error) {
+    return {
+      action,
+      status: "failed",
+      stdout: "",
+      stderr: error instanceof Error ? error.message : "Failed to queue the Windows runtime action.",
+      exitCode: -1,
+    };
+  } finally {
+    await unlink(requestPath).catch(() => undefined);
+  }
 }
 
 function summarizeCommandOutput(stdout: string, stderr: string) {

@@ -95,7 +95,9 @@ export async function getLocalRuntimeStatus(): Promise<LocalRuntimeStatus> {
 async function readLocalRuntimeStatusFresh(): Promise<LocalRuntimeStatus> {
   const checkedAt = new Date().toISOString();
   const processes = await readCodexProcesses().catch(() => []);
-  const loop = findLoopProcess(processes);
+  const configuredQueuePath = process.env.MCP_QUEUE_PATH?.trim() || null;
+  const hostLoop = await readHostLoopSnapshot(configuredQueuePath);
+  const loop = findLoopProcess(processes) ?? hostLoop;
   const implementer =
     findImplementerProcess(processes, loop?.pid ?? null) ??
     (await readConfiguredProcess(process.env.CODEX_IMPLEMENTER_PID, "codex.exe", "configured implementer pid"));
@@ -103,7 +105,6 @@ async function readLocalRuntimeStatusFresh(): Promise<LocalRuntimeStatus> {
     findReviewerProcess(processes) ??
     (await readConfiguredProcess(process.env.CODEX_REVIEWER_PID, "codex.exe", "configured reviewer pid"));
   const reviewerBridge = findReviewerBridgeProcess(processes);
-  const configuredQueuePath = process.env.MCP_QUEUE_PATH?.trim() || null;
   const configuredRepoPath = process.env.MCP_REPO_PATH?.trim() || null;
   const repoPath = configuredRepoPath ?? (loop ? extractRepoPath(loop.commandLine) : null);
   const processRoot = path.basename(process.cwd()).toLowerCase() === "backend" ? path.resolve(process.cwd(), "..") : process.cwd();
@@ -143,6 +144,31 @@ async function readLocalRuntimeStatusFresh(): Promise<LocalRuntimeStatus> {
       queue.latest.outbox,
     ),
   };
+}
+
+async function readHostLoopSnapshot(queuePath: string | null): Promise<ProcessSnapshot | null> {
+  if (!queuePath) return null;
+  try {
+    const value = JSON.parse(await readFile(path.join(queuePath, "control", "host-status.json"), "utf8")) as {
+      running?: boolean;
+      pid?: number;
+      updatedAt?: string;
+    };
+    const updatedAt = Date.parse(String(value.updatedAt || ""));
+    if (!value.running || !Number.isInteger(value.pid) || !Number.isFinite(updatedAt) || Date.now() - updatedAt > 10000) {
+      return null;
+    }
+    return {
+      pid: Number(value.pid),
+      name: "powershell.exe",
+      parentProcessId: null,
+      commandLine: "allowlisted host MCP queue loop",
+      cpu: null,
+      startTime: null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function readCodexProcesses(): Promise<ProcessSnapshot[]> {
