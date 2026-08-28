@@ -67,6 +67,26 @@ public class MailRepository {
                 """, this::row, UUID.randomUUID(), providerMessageId, mailbox, from, json(to), json(cc), subject, text, html, Timestamp.from(occurredAt));
     }
 
+    public boolean updateOutboundStatus(String providerMessageId, String status, int priority) {
+        return jdbc.update("""
+                update public.archive_mail_message
+                   set delivery_status = ?
+                 where provider_message_id = ?
+                   and direction = 'outbound'
+                   and (case delivery_status
+                          when 'sent' then 1
+                          when 'delayed' then 2
+                          when 'delivered' then 3
+                          when 'bounced' then 4
+                          when 'failed' then 4
+                          when 'suppressed' then 4
+                          when 'complained' then 5
+                          else 0
+                        end) <= ?
+                   and delivery_status <> ?
+                """, status, providerMessageId, priority, status) == 1;
+    }
+
     public Map<String, Object> list(String mailbox, String folder, int page, int size) {
         String condition = switch (folder) {
             case "inbox" -> "direction = 'inbound'";

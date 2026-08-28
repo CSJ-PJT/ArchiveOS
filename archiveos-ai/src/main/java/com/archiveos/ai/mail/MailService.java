@@ -95,6 +95,11 @@ public class MailService {
         String type = event.path("type").asText("");
         String providerMessageId = event.path("data").path("email_id").asText("");
         if (!repository.reserveWebhook(svixId, type, providerMessageId, sha256(rawBody))) return new WebhookOutcome(true, false, "duplicate");
+        DeliveryUpdate delivery = outboundDelivery(type);
+        if (delivery != null) {
+            boolean updated = repository.updateOutboundStatus(providerMessageId, delivery.status(), delivery.priority());
+            return new WebhookOutcome(false, false, updated ? "delivery_status_updated" : "delivery_status_unchanged");
+        }
         if (!"email.received".equals(type)) return new WebhookOutcome(false, false, "ignored_event");
         try {
             ResendMailGateway.ReceivedMail mail = gateway.receive(providerMessageId);
@@ -118,6 +123,19 @@ public class MailService {
                 + "제목: " + compact(mail.subject(), 240) + "\n"
                 + "첨부: " + mail.attachments().size() + "개\n"
                 + "ArchiveOS 관리자 메일함에서 본문을 확인하세요.";
+    }
+
+    static DeliveryUpdate outboundDelivery(String eventType) {
+        return switch (eventType == null ? "" : eventType) {
+            case "email.sent" -> new DeliveryUpdate("sent", 1);
+            case "email.delivery_delayed" -> new DeliveryUpdate("delayed", 2);
+            case "email.delivered" -> new DeliveryUpdate("delivered", 3);
+            case "email.bounced" -> new DeliveryUpdate("bounced", 4);
+            case "email.failed" -> new DeliveryUpdate("failed", 4);
+            case "email.suppressed" -> new DeliveryUpdate("suppressed", 4);
+            case "email.complained" -> new DeliveryUpdate("complained", 5);
+            default -> null;
+        };
     }
 
     private List<String> normalizeEmails(List<String> values, boolean required) {
@@ -154,6 +172,7 @@ public class MailService {
     private boolean blank(String value) { return value == null || value.isBlank(); }
 
     public record WebhookOutcome(boolean duplicate, boolean slackNotified, String status) {}
+    record DeliveryUpdate(String status, int priority) {}
     public static class MailNotFoundException extends RuntimeException {}
     public static class InvalidWebhookException extends RuntimeException { public InvalidWebhookException(String message) { super(message); } }
 }
