@@ -150,6 +150,7 @@ public class LiveFlowService {
                 Map<String, Object> ecosystemSummary = ecosystem.refresh();
                 Map<String, Object> services = map(ecosystemSummary.get("services"));
                 collectServiceSnapshots(saved, services);
+                collectArchiveOsActivityEvidence(saved);
             } catch (RuntimeException collectorError) {
                 saved.add(repository.upsert(event("flow-collector-degraded-" + traceId, traceId, "archiveos", "archiveos",
                         "FLOW_COLLECTOR_DEGRADED", "audit", traceId, "archiveos", "archiveos", "unavailable", "warning",
@@ -479,8 +480,73 @@ public class LiveFlowService {
                         null, Map.of("serviceStatus", status, "syntheticData", true))));
             } else {
                 collectHealthyService(saved, key, service);
+                collectRuntimeActivityEvidence(saved, key, service);
             }
         }
+    }
+
+    /**
+     * Persist one read-only runtime observation per minute for quiet services. These records
+     * keep the service-balanced dashboard honest about current connectivity without inventing
+     * orders, production, shipments, or financial throughput.
+     */
+    private void collectRuntimeActivityEvidence(List<Map<String, Object>> saved, String key, Map<String, Object> service) {
+        if (!List.of("nexus", "logitics").contains(key)) return;
+        Map<String, Object> summary = map(service.get("summary"));
+        Map<String, Object> body = responseData(summary);
+        Map<String, Object> operations = responseData(map(summary.get("operations")));
+        Map<String, Object> runtime = firstMap(body, "runtime", "pipeline", "scheduler");
+        if (runtime.isEmpty()) runtime = firstMap(operations, "runtime", "pipeline", "scheduler");
+        Instant upstreamActivityAt = firstInstant(
+                runtime.get("lastEventAt"), runtime.get("lastWorkAt"),
+                body.get("latestEventAt"), body.get("lastEventAt"), body.get("lastWorkAt"),
+                operations.get("latestEventAt"), operations.get("lastEventAt"), operations.get("lastWorkAt"));
+        if (upstreamActivityAt == null || ageSeconds(upstreamActivityAt) > STALE_THRESHOLD_SECONDS) return;
+
+        String schedulerStatus = string(firstNonNull(runtime.get("schedulerStatus"), body.get("schedulerStatus")), "UNKNOWN");
+        String pipelineStatus = string(firstNonNull(runtime.get("pipelineStatus"), body.get("pipelineStatus")), "UNKNOWN");
+        boolean runtimeActive = bool(firstNonNull(runtime.get("runtimeActive"), body.get("runtimeActive")));
+        boolean autoRunEnabled = bool(firstNonNull(runtime.get("autoRunEnabled"), body.get("autoRunEnabled")));
+        boolean nexusSafeStopped = "nexus".equals(key) && !runtimeActive && !autoRunEnabled;
+        long minuteBucket = Instant.now().getEpochSecond() / 60;
+        String node = nodeOf(key);
+        String eventType = "nexus".equals(key)
+                ? "NEXUS_RUNTIME_ACTIVITY_OBSERVED"
+                : "LOGISTICS_RUNTIME_ACTIVITY_OBSERVED";
+        String label = nexusSafeStopped
+                ? "Nexus 런타임 연결 확인 · 시뮬레이터 안전 정지"
+                : "Logistics 런타임 처리 상태 확인";
+        String status = nexusSafeStopped ? "observed" : "processing";
+        saved.add(repository.upsert(event(
+                key + "-runtime-activity-" + minuteBucket,
+                key + "-runtime-activity-" + minuteBucket,
+                systemId(key), domain(key), eventType, "runtime_activity", key + "-runtime",
+                node, "archiveos", status, "info", label, null,
+                Map.of(
+                        "eventCategory", "runtime_activity",
+                        "schedulerStatus", schedulerStatus,
+                        "pipelineStatus", pipelineStatus,
+                        "runtimeActive", runtimeActive,
+                        "autoRunEnabled", autoRunEnabled,
+                        "simulatorRunning", !nexusSafeStopped && runtimeActive,
+                        "syntheticData", true))));
+    }
+
+    private void collectArchiveOsActivityEvidence(List<Map<String, Object>> saved) {
+        long minuteBucket = Instant.now().getEpochSecond() / 60;
+        saved.add(repository.upsert(event(
+                "archiveos-runtime-activity-" + minuteBucket,
+                "archiveos-runtime-activity-" + minuteBucket,
+                "archiveos", "archiveos", "ARCHIVEOS_RUNTIME_ACTIVITY_OBSERVED",
+                "runtime_activity", "archiveos-live-flow", "archiveos", "archiveos",
+                "processing", "info", "ArchiveOS 실시간 관제 수집 중", null,
+                Map.of(
+                        "eventCategory", "runtime_activity",
+                        "schedulerStatus", "RUNNING",
+                        "pipelineStatus", "LIVE_FLOW_COLLECTING",
+                        "runtimeActive", true,
+                        "autoRunEnabled", true,
+                        "syntheticData", true))));
     }
 
     private void collectHealthyService(List<Map<String, Object>> saved, String key, Map<String, Object> service) {
@@ -679,7 +745,8 @@ public class LiveFlowService {
         if (input == null) return value;
         for (String key : List.of("syntheticBuyerId", "syntheticSellerId", "orderId", "shipmentId", "routeId",
                 "truckId", "factoryId", "equipmentId", "vendorId", "transactionId", "approvalRequestId",
-                "amountRange", "riskLevel", "syntheticData", "orderCount")) {
+                "amountRange", "riskLevel", "syntheticData", "orderCount", "eventCategory",
+                "schedulerStatus", "pipelineStatus", "runtimeActive", "autoRunEnabled", "simulatorRunning")) {
             if (input.containsKey(key)) value.put(key, input.get(key));
         }
         return value;

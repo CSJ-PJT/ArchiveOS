@@ -19,9 +19,48 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 class LiveFlowServiceTest {
+    @Test void refreshPersistsCurrentRuntimeEvidenceWithoutInventingBusinessThroughput() {
+        LiveFlowRepository repository = repositoryBase(Map.of());
+        Map<String, Object> snapshot = healthyServices(Map.of(
+                "nexus", Map.of("runtime", Map.of(
+                        "lastEventAt", Instant.now().minusSeconds(3).toString(),
+                        "runtimeActive", false,
+                        "autoRunEnabled", false,
+                        "schedulerStatus", "DISABLED",
+                        "pipelineStatus", "DISABLED")),
+                "logitics", Map.of("runtime", Map.of(
+                        "lastWorkAt", Instant.now().minusSeconds(2).toString(),
+                        "runtimeActive", true,
+                        "autoRunEnabled", true,
+                        "schedulerStatus", "RUNNING",
+                        "pipelineStatus", "LIVE"))));
+        LiveFlowService service = service(repository, snapshot);
+
+        service.refresh();
+
+        ArgumentCaptor<LiveFlowEvent> events = ArgumentCaptor.forClass(LiveFlowEvent.class);
+        verify(repository, atLeast(3)).upsert(events.capture());
+        assertThat(events.getAllValues()).anySatisfy(event -> {
+            assertThat(event.eventType()).isEqualTo("NEXUS_RUNTIME_ACTIVITY_OBSERVED");
+            assertThat(event.status()).isEqualTo("observed");
+            assertThat(event.metadata()).containsEntry("eventCategory", "runtime_activity")
+                    .containsEntry("runtimeActive", false)
+                    .containsEntry("simulatorRunning", false);
+        }).anySatisfy(event -> {
+            assertThat(event.eventType()).isEqualTo("LOGISTICS_RUNTIME_ACTIVITY_OBSERVED");
+            assertThat(event.status()).isEqualTo("processing");
+            assertThat(event.metadata()).containsEntry("eventCategory", "runtime_activity");
+        }).anySatisfy(event -> {
+            assertThat(event.eventType()).isEqualTo("ARCHIVEOS_RUNTIME_ACTIVITY_OBSERVED");
+            assertThat(event.status()).isEqualTo("processing");
+            assertThat(event.metadata()).containsEntry("eventCategory", "runtime_activity");
+        });
+    }
+
     @Test void refreshCollectsRuntimeEventsWithoutFailingOnUnavailableService() {
         LiveFlowRepository repository = Mockito.mock(LiveFlowRepository.class);
         EcosystemService ecosystem = Mockito.mock(EcosystemService.class);

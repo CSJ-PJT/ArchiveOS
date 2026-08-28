@@ -23,7 +23,7 @@ public class LiveFlowRepository {
     private final WorldEventBroadcaster worldBroadcaster;
     // Keep explicit boundary spaces: several text-block queries concatenate
     // this predicate after SQL keywords such as AND and WHERE.
-    private static final String BUSINESS_EVENT_FILTER = " " + """
+    private static final String DASHBOARD_EVENT_FILTER = " " + """
             not (
               lower(coalesce(event_type, '')) like '%heartbeat%' or
               lower(coalesce(event_type, '')) like '%health%' or
@@ -32,6 +32,20 @@ public class LiveFlowRepository {
               lower(coalesce(event_type, '')) in ('service_unavailable', 'service_degraded') or
               lower(coalesce(event_type, '')) like '%system%' or
               lower(coalesce(metadata->>'eventCategory', '')) in ('heartbeat', 'health', 'availability', 'collector', 'system')
+            )
+            """ + " ";
+    // Runtime activity evidence keeps the service-balanced dashboard current, but it is
+    // deliberately not business throughput and must not affect operational counters.
+    private static final String BUSINESS_EVENT_FILTER = " " + """
+            not (
+              lower(coalesce(event_type, '')) like '%heartbeat%' or
+              lower(coalesce(event_type, '')) like '%health%' or
+              lower(coalesce(event_type, '')) like '%availability%' or
+              lower(coalesce(event_type, '')) like '%collector%' or
+              lower(coalesce(event_type, '')) in ('service_unavailable', 'service_degraded') or
+              lower(coalesce(event_type, '')) like '%system%' or
+              lower(coalesce(metadata->>'eventCategory', '')) in
+                ('heartbeat', 'health', 'availability', 'collector', 'system', 'runtime_activity')
             )
             """ + " ";
 
@@ -138,7 +152,7 @@ public class LiveFlowRepository {
                           ranked.received_at desc,
                           ranked.id desc
                   limit ?
-                """.formatted(BUSINESS_EVENT_FILTER), this::row,
+                """.formatted(DASHBOARD_EVENT_FILTER), this::row,
                 perService, perService, perService, perService, perService, perRoute, safeLimit);
     }
 
