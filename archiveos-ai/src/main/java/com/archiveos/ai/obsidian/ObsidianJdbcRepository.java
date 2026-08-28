@@ -30,6 +30,7 @@ public class ObsidianJdbcRepository {
                   updated_at timestamptz not null default now()
                 )
                 """);
+        jdbcTemplate.execute("alter table public.obsidian_documents add column if not exists knowledge_scope varchar(16) not null default 'INTERNAL'");
         jdbcTemplate.execute("""
                 create table if not exists public.obsidian_chunks (
                   id bigserial primary key,
@@ -44,6 +45,7 @@ public class ObsidianJdbcRepository {
                 )
                 """);
         jdbcTemplate.execute("create index if not exists obsidian_documents_file_path_idx on public.obsidian_documents(file_path)");
+        jdbcTemplate.execute("create index if not exists obsidian_documents_knowledge_scope_idx on public.obsidian_documents(knowledge_scope, updated_at desc)");
         jdbcTemplate.execute("create index if not exists obsidian_chunks_document_id_idx on public.obsidian_chunks(document_id)");
         jdbcTemplate.execute("create index if not exists obsidian_chunks_embedding_hnsw_idx on public.obsidian_chunks using hnsw (embedding vector_cosine_ops)");
         jdbcTemplate.execute("""
@@ -78,25 +80,51 @@ public class ObsidianJdbcRepository {
                   limit least(greatest(match_count, 1), 20)
                 $$;
                 """);
+        createScopedMatchFunction("match_public_obsidian_chunks", "PUBLIC");
+        createScopedMatchFunction("match_internal_obsidian_chunks", "INTERNAL");
+    }
+
+    private void createScopedMatchFunction(String functionName, String scope) {
+        jdbcTemplate.execute("""
+                create or replace function public.%s(
+                  query_embedding vector(1536), match_count integer default 5
+                )
+                returns table (
+                  chunk_id bigint, document_id bigint, title text, file_path text,
+                  heading text, chunk_text text, score double precision,
+                  updated_at timestamptz, knowledge_scope varchar(16)
+                )
+                language sql stable security invoker as $$
+                  select c.id, d.id, d.title, d.file_path, c.heading, c.chunk_text,
+                         1 - (c.embedding <=> query_embedding), d.updated_at, d.knowledge_scope
+                  from public.obsidian_chunks c
+                  join public.obsidian_documents d on d.id = c.document_id
+                  where c.embedding is not null and d.knowledge_scope = '%s'
+                  order by c.embedding <=> query_embedding
+                  limit least(greatest(match_count, 1), 20)
+                $$
+                """.formatted(functionName, scope));
     }
 
     public ExistingDocument findByPath(String filePath) {
         List<ExistingDocument> rows = jdbcTemplate.query(
-                "select id, content_hash from public.obsidian_documents where file_path = ?",
-                (rs, rowNum) -> new ExistingDocument(rs.getLong("id"), rs.getString("content_hash")),
+                "select id, content_hash, knowledge_scope from public.obsidian_documents where file_path = ?",
+                (rs, rowNum) -> new ExistingDocument(rs.getLong("id"), rs.getString("content_hash"),
+                        KnowledgeScope.valueOf(rs.getString("knowledge_scope"))),
                 filePath);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    public long upsertDocument(MarkdownDocument document) {
+    public long upsertDocument(MarkdownDocument document, KnowledgeScope scope) {
         Long key = jdbcTemplate.queryForObject("""
-                insert into public.obsidian_documents(file_path, title, content_hash, last_modified_at, updated_at)
-                values (?, ?, ?, ?, now())
+                insert into public.obsidian_documents(file_path, title, content_hash, last_modified_at, knowledge_scope, updated_at)
+                values (?, ?, ?, ?, ?, now())
                 on conflict (file_path)
                 do update set
                   title = excluded.title,
                   content_hash = excluded.content_hash,
                   last_modified_at = excluded.last_modified_at,
+                  knowledge_scope = excluded.knowledge_scope,
                   updated_at = now()
                 returning id
                 """,
@@ -104,14 +132,16 @@ public class ObsidianJdbcRepository {
                 document.relativePath(),
                 document.title(),
                 document.contentHash(),
-                Timestamp.from(document.lastModifiedAt()));
+                Timestamp.from(document.lastModifiedAt()),
+                scope.name());
         if (key == null) throw new IllegalStateException("Document upsert did not return an id.");
         return key;
     }
 
     /** Marks an unchanged document as observed by the current sync without rewriting its chunks. */
-    public void touchDocument(long documentId) {
-        jdbcTemplate.update("update public.obsidian_documents set updated_at = now() where id = ?", documentId);
+    public void touchDocument(long documentId, KnowledgeScope scope) {
+        jdbcTemplate.update("update public.obsidian_documents set knowledge_scope = ?, updated_at = now() where id = ?",
+                scope.name(), documentId);
     }
 
     public int deleteChunks(long documentId) {
@@ -158,7 +188,7 @@ public class ObsidianJdbcRepository {
 
     public List<Map<String, Object>> listDocuments(int limit) {
         return jdbcTemplate.queryForList("""
-                select id, file_path, title, content_hash, last_modified_at, created_at, updated_at
+                select id, file_path, title, content_hash, knowledge_scope, last_modified_at, created_at, updated_at
                 from public.obsidian_documents
                 order by updated_at desc
                 limit ?
@@ -197,19 +227,22 @@ public class ObsidianJdbcRepository {
                 Math.min(Math.max(documentLimit, 1), 200), Math.min(Math.max(chunkLimit, 1), 500));
     }
 
-    public List<RagReference> search(float[] queryEmbedding, int limit) {
+    public List<RagReference> search(float[] queryEmbedding, int limit, KnowledgeScope scope) {
+        String function = scope == KnowledgeScope.PUBLIC
+                ? "public.match_public_obsidian_chunks"
+                : "public.match_internal_obsidian_chunks";
         return jdbcTemplate.query(
-                "select * from public.match_obsidian_chunks(?::vector, ?)",
+                "select * from " + function + "(?::vector, ?)",
                 (rs, rowNum) -> mapReference(rs),
                 toVectorLiteral(queryEmbedding),
                 Math.min(Math.max(limit, 1), 20));
     }
 
-    public List<RagReference> fallbackSearch(String query, int limit) {
+    public List<RagReference> fallbackSearch(String query, int limit, KnowledgeScope scope) {
         int safeLimit = Math.min(Math.max(limit, 1), 20);
         String normalized = query == null ? "" : query.trim();
         if (normalized.isBlank()) {
-            return latestChunks(safeLimit);
+            return latestChunks(safeLimit, scope);
         }
 
         String like = "%" + normalized
@@ -223,6 +256,8 @@ public class ObsidianJdbcRepository {
                   d.file_path,
                   c.heading,
                   c.chunk_text,
+                  d.updated_at,
+                  d.knowledge_scope,
                   case
                     when lower(c.chunk_text) like ? escape '\\' then 0.55
                     when lower(d.title) like ? escape '\\' then 0.45
@@ -230,27 +265,30 @@ public class ObsidianJdbcRepository {
                   end as score
                 from public.obsidian_chunks c
                 join public.obsidian_documents d on d.id = c.document_id
-                where lower(c.chunk_text) like ? escape '\\'
+                where d.knowledge_scope = ?
+                  and (lower(c.chunk_text) like ? escape '\\'
                    or lower(d.title) like ? escape '\\'
-                   or lower(d.file_path) like ? escape '\\'
+                   or lower(d.file_path) like ? escape '\\')
                 order by score desc, c.created_at desc
                 limit ?
                 """,
                 (rs, rowNum) -> mapReference(rs),
-                like, like, like, like, like, safeLimit);
+                like, like, scope.name(), like, like, like, safeLimit);
         return rows;
     }
 
-    private List<RagReference> latestChunks(int limit) {
+    private List<RagReference> latestChunks(int limit, KnowledgeScope scope) {
         return jdbcTemplate.query("""
-                select d.title, d.file_path, c.heading, c.chunk_text, 0.10::double precision as score
+                select d.title, d.file_path, c.heading, c.chunk_text, 0.10::double precision as score,
+                       d.updated_at, d.knowledge_scope
                 from public.obsidian_chunks c
                 join public.obsidian_documents d on d.id = c.document_id
+                where d.knowledge_scope = ?
                 order by c.created_at desc
                 limit ?
                 """,
                 (rs, rowNum) -> mapReference(rs),
-                limit);
+                scope.name(), limit);
     }
 
     public KnowledgeStatistics safeKnowledgeStatistics() {
@@ -343,7 +381,9 @@ public class ObsidianJdbcRepository {
                 rs.getString("file_path"),
                 rs.getString("heading"),
                 rs.getString("chunk_text"),
-                rs.getDouble("score"));
+                rs.getDouble("score"),
+                instant(rs, "updated_at"),
+                KnowledgeScope.valueOf(rs.getString("knowledge_scope")));
     }
 
     private String instant(ResultSet rs, String column) throws SQLException {
@@ -360,7 +400,7 @@ public class ObsidianJdbcRepository {
         return builder.append(']').toString();
     }
 
-    public record ExistingDocument(long id, String contentHash) {}
+    public record ExistingDocument(long id, String contentHash, KnowledgeScope knowledgeScope) {}
 
     public record PendingChunk(long id, String text) {}
 

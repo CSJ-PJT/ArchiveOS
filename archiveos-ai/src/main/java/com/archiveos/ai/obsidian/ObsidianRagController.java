@@ -1,7 +1,6 @@
 package com.archiveos.ai.obsidian;
 
 import com.archiveos.ai.audit.AuditLogService;
-import com.archiveos.ai.notification.NotificationService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.io.IOException;
@@ -18,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -25,14 +25,16 @@ public class ObsidianRagController {
     private final ObsidianRagService ragService;
     private final RagRateLimitService rateLimit;
     private final AuditLogService audit;
-    private final NotificationService notifications;
+    private final RagUsageMonitor usageMonitor;
+    private final RagVerificationService verification;
 
     public ObsidianRagController(ObsidianRagService ragService, RagRateLimitService rateLimit, AuditLogService audit,
-                                NotificationService notifications) {
+                                RagUsageMonitor usageMonitor, RagVerificationService verification) {
         this.ragService = ragService;
         this.rateLimit = rateLimit;
         this.audit = audit;
-        this.notifications = notifications;
+        this.usageMonitor = usageMonitor;
+        this.verification = verification;
     }
 
     @PostMapping("/api/obsidian/sync")
@@ -54,15 +56,16 @@ public class ObsidianRagController {
         if (query == null || query.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "query is required."));
         }
-        ResponseEntity<Map<String, Object>> blocked = limited("search", principal, request);
-        if (blocked != null) return blocked;
         String correlationId = "rag-search-" + UUID.randomUUID();
+        ResponseEntity<Map<String, Object>> blocked = limited("search", principal, request, correlationId);
+        if (blocked != null) return blocked;
+        boolean suspicious = usageMonitor.suspicious(query);
         try {
             var results = ragService.search(query, limit);
-            notifyNonAdmin(request, "검색", "성공", results.size(), correlationId);
+            usageMonitor.record("search", role(request), true, suspicious, correlationId);
             return ResponseEntity.ok(Map.of("data", results, "status", "SEARCH_ONLY"));
         } catch (RuntimeException error) {
-            notifyNonAdmin(request, "검색", "실패", 0, correlationId);
+            usageMonitor.record("search", role(request), false, suspicious, correlationId);
             throw error;
         }
     }
@@ -71,50 +74,60 @@ public class ObsidianRagController {
     public ResponseEntity<Map<String, Object>> ask(@Valid @RequestBody RagAskRequest request,
                                                     Principal principal,
                                                     HttpServletRequest httpRequest) {
-        ResponseEntity<Map<String, Object>> blocked = limited("ask", principal, httpRequest);
-        if (blocked != null) return blocked;
         String correlationId = "rag-" + UUID.randomUUID();
+        ResponseEntity<Map<String, Object>> blocked = limited("ask", principal, httpRequest, correlationId);
+        if (blocked != null) return blocked;
+        boolean trusted = trusted(httpRequest);
+        boolean suspicious = usageMonitor.suspicious(request.question());
         try {
-            RagAnswer answer = ragService.answer(request.question(), request.context());
+            // Browser-provided runtime context is accepted only for an authenticated
+            // operator. Public callers cannot inject "trusted" runtime facts.
+            RagAnswer answer = trusted
+                    ? ragService.answerTrusted(request.question(), request.context())
+                    : ragService.answerPublic(request.question());
             audit.recordEventWithTimeline("rag_question_answered", "knowledge", "rag-ask", correlationId,
                     Map.of("referenceCount", answer.references().size(), "answerRecorded", true),
                     "success", "RAG 질문 응답 완료",
                     "운영 지식 질문에 답변하고 참조 " + answer.references().size() + "건을 기록했습니다.");
-            notifyNonAdmin(httpRequest, "질문", "성공", answer.references().size(), correlationId);
+            usageMonitor.record("ask", role(httpRequest), true, suspicious, correlationId);
             return ResponseEntity.ok(Map.of("data", answer, "correlationId", correlationId));
         } catch (RuntimeException error) {
             audit.recordEventWithTimeline("rag_question_failed", "knowledge", "rag-ask", correlationId,
                     Map.of("errorType", error.getClass().getSimpleName()),
                     "failed", "RAG 질문 응답 실패", "운영 지식 질문 처리에 실패했습니다.");
-            notifyNonAdmin(httpRequest, "질문", "실패", 0, correlationId);
+            usageMonitor.record("ask", role(httpRequest), false, suspicious, correlationId);
             throw error;
         }
     }
 
-    private void notifyNonAdmin(HttpServletRequest request, String operation, String result, int referenceCount,
-                                String correlationId) {
-        if (request.isUserInRole("ADMIN")) return;
-        String role = request.isUserInRole("PM") ? "PM"
-                : request.isUserInRole("OPERATOR") ? "OPERATOR" : "PUBLIC";
-        String message = "[ArchiveOS RAG 사용]\n"
-                + "역할: " + role + "\n"
-                + "작업: " + operation + "\n"
-                + "결과: " + result + "\n"
-                + "참조: " + referenceCount + "건\n"
-                + "상관관계: " + correlationId;
-        try {
-            notifications.send(message);
-        } catch (RuntimeException ignored) {
-            // Slack 전달 실패가 RAG 조회 자체를 중단시키지 않도록 best-effort로 처리한다.
-        }
+    @PostMapping("/api/rag/verification/plans")
+    public ResponseEntity<Map<String, Object>> verificationPlan(
+            @Valid @RequestBody VerificationPlanRequest request,
+            Principal principal, HttpServletRequest httpRequest) {
+        String correlationId = "rag-plan-" + UUID.randomUUID();
+        ResponseEntity<Map<String, Object>> blocked = limited("plan", principal, httpRequest, correlationId);
+        if (blocked != null) return blocked;
+        return ResponseEntity.ok(Map.of("data", verification.createPlan(request.question()),
+                "correlationId", correlationId));
     }
 
-    private ResponseEntity<Map<String, Object>> limited(String operation, Principal principal, HttpServletRequest request) {
+    @PostMapping("/api/rag/verification/plans/{planId}/execute")
+    public ResponseEntity<Map<String, Object>> executeVerification(
+            @PathVariable String planId,
+            @Valid @RequestBody VerificationExecutionRequest request,
+            HttpServletRequest httpRequest) {
+        return ResponseEntity.ok(Map.of("data",
+                verification.execute(planId, request.approved(), httpRequest.isUserInRole("ADMIN"))));
+    }
+
+    private ResponseEntity<Map<String, Object>> limited(String operation, Principal principal,
+                                                        HttpServletRequest request, String correlationId) {
         String key = principal != null && principal.getName() != null && !principal.getName().isBlank()
                 ? "principal:" + principal.getName()
                 : "remote:" + request.getRemoteAddr();
         RagRateLimitService.Decision decision = rateLimit.check(operation, key);
         if (decision.allowed()) return null;
+        usageMonitor.recordRateLimited(operation, role(request), correlationId);
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .header("Retry-After", Long.toString(decision.retryAfterSeconds()))
                 .body(Map.of("error", "RAG request rate limit exceeded.", "retryAfterSeconds", decision.retryAfterSeconds()));
@@ -123,16 +136,45 @@ public class ObsidianRagController {
     @ExceptionHandler(AiUnavailableException.class)
     public ResponseEntity<Map<String, Object>> aiUnavailable(AiUnavailableException error) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of(
-                "error", error.getMessage(),
+                "error", "AI knowledge service is temporarily unavailable.",
                 "status", "disabled"));
     }
 
     @ExceptionHandler({CannotGetJdbcConnectionException.class, DataAccessResourceFailureException.class})
     public ResponseEntity<Map<String, Object>> databaseUnavailable(Exception error) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of(
-                "error", "Vector database is unavailable. Configure DB_HOST, DB_PORT, DB_NAME, DB_USER, and DB_PASSWORD for Supabase PostgreSQL or local pgvector.",
+                "error", "Knowledge database is temporarily unavailable.",
                 "status", "database_unavailable"));
     }
 
+    @ExceptionHandler(SecurityException.class)
+    public ResponseEntity<Map<String, Object>> verificationForbidden(SecurityException error) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                "error", "Administrator approval is required for this verification plan.",
+                "status", "approval_required"));
+    }
+
+    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
+    public ResponseEntity<Map<String, Object>> invalidVerificationPlan(RuntimeException error) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "error", "The verification plan is invalid, expired, or already used.",
+                "status", "verification_plan_unavailable"));
+    }
+
+    private boolean trusted(HttpServletRequest request) {
+        return request.isUserInRole("AUTHENTICATED_READ") || request.isUserInRole("OPERATOR")
+                || request.isUserInRole("PM") || request.isUserInRole("ADMIN");
+    }
+
+    private String role(HttpServletRequest request) {
+        if (request.isUserInRole("ADMIN")) return "ADMIN";
+        if (request.isUserInRole("PM")) return "PM";
+        if (request.isUserInRole("OPERATOR")) return "OPERATOR";
+        if (request.isUserInRole("AUTHENTICATED_READ")) return "AUTHENTICATED_READ";
+        return "PUBLIC";
+    }
+
     public record RagAskRequest(@NotBlank String question, Map<String, Object> context) {}
+    public record VerificationPlanRequest(@NotBlank String question) {}
+    public record VerificationExecutionRequest(boolean approved) {}
 }
