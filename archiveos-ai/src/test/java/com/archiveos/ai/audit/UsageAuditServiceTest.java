@@ -12,7 +12,6 @@ import static org.mockito.Mockito.when;
 
 import com.archiveos.ai.security.PlatformRole;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletRequest;
 
@@ -20,18 +19,20 @@ class UsageAuditServiceTest {
     @Test
     void usageViewExcludesLiveFlowAutomationFromHumanActivity() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(jdbc.queryForObject(anyString(), eq(Integer.class), any(), any())).thenReturn(0);
-        when(jdbc.queryForList(anyString(), any(), any(), eq(25), eq(0))).thenReturn(java.util.List.of());
-        when(jdbc.queryForMap(anyString(), any(), any())).thenReturn(java.util.Map.of());
+        when(jdbc.queryForObject(anyString(), eq(Integer.class), org.mockito.ArgumentMatchers.<Object[]>any())).thenReturn(0);
+        when(jdbc.queryForList(anyString(), org.mockito.ArgumentMatchers.<Object[]>any())).thenReturn(java.util.List.of());
+        when(jdbc.queryForMap(anyString(), org.mockito.ArgumentMatchers.<Object[]>any())).thenReturn(java.util.Map.of());
         when(jdbc.queryForList(anyString())).thenReturn(java.util.List.of());
         when(jdbc.queryForList(anyString(), any(java.time.LocalDate.class))).thenReturn(java.util.List.of());
         UsageAuditService service = new UsageAuditService(jdbc, mock(AuditLogService.class));
 
         service.recent(0, 25, "2026-08-28");
 
-        ArgumentCaptor<String> totalSql = ArgumentCaptor.forClass(String.class);
-        verify(jdbc).queryForObject(totalSql.capture(), eq(Integer.class), any(), any());
-        assertThat(totalSql.getValue())
+        String totalSql = org.mockito.Mockito.mockingDetails(jdbc).getInvocations().stream()
+                .filter(invocation -> invocation.getMethod().getName().equals("queryForObject"))
+                .map(invocation -> String.valueOf((Object) invocation.getArgument(0)))
+                .findFirst().orElseThrow();
+        assertThat(totalSql)
                 .contains("not in ('live_flow', 'live-flow')")
                 .contains("not like '/api/live-flow/%'")
                 .contains("occurred_at >= ? and occurred_at < ?");
@@ -60,6 +61,20 @@ class UsageAuditServiceTest {
 
         verify(jdbc).update(contains("archiveos_usage_logs"), eq("archiveos-admin"), eq("ADMIN"),
                 eq("설정"), eq("settings"), eq("203.0.113.21"), eq("ArchiveOS-Test-Browser"), eq(true));
+    }
+
+    @Test
+    void excludesRequestedMobileAndInternalAddressesFromPageHistory() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        UsageAuditService service = new UsageAuditService(jdbc, mock(AuditLogService.class));
+        MockHttpServletRequest mobileRequest = new MockHttpServletRequest();
+        mobileRequest.addHeader("X-Real-IP", "106.101.22.33");
+        MockHttpServletRequest dockerRequest = new MockHttpServletRequest();
+        dockerRequest.addHeader("X-Real-IP", "172.20.0.4");
+
+        assertThat(service.recordPageView("dashboard", mobileRequest).reason()).isEqualTo("excluded_address");
+        assertThat(service.recordPageView("settings", dockerRequest).reason()).isEqualTo("excluded_address");
+        org.mockito.Mockito.verifyNoInteractions(jdbc);
     }
 
     @Test
@@ -107,7 +122,7 @@ class UsageAuditServiceTest {
     @Test
     void importsAtlasHumanPageViewWithAdminOnlyNetworkEvidence() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(jdbc.update(contains("atlas_access_events"), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
+        when(jdbc.update(contains("atlas_access_events"), any(), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
         UsageAuditService service = new UsageAuditService(jdbc, mock(AuditLogService.class));
         java.util.Map<String, Object> event = new java.util.LinkedHashMap<>();
         event.put("sourceId", "a".repeat(64));
@@ -126,7 +141,27 @@ class UsageAuditServiceTest {
 
         assertThat(result).containsEntry("accepted", 1).containsEntry("imported", 1).containsEntry("duplicates", 0);
         verify(jdbc).update(contains("atlas_access_events"), any(), eq("a".repeat(64)), any(), eq("Learn Atlas"),
-                eq("/learn/backend-study/"), eq("203.0.113.21"), eq("Atlas-Test-Chrome"), eq(200));
+                eq("/learn/backend-study/"), eq("PAGE_VIEW"), eq("203.0.113.21"), eq("Atlas-Test-Chrome"), eq(200));
+    }
+
+    @Test
+    void excludesRequestedAddressesFromAtlasImports() {
+        UsageAuditService service = new UsageAuditService(mock(JdbcTemplate.class), mock(AuditLogService.class));
+        java.util.Map<String, Object> event = new java.util.LinkedHashMap<>();
+        event.put("sourceId", "c".repeat(64));
+        event.put("occurredAt", "2026-08-28T06:04:27Z");
+        event.put("project", "Travel Atlas");
+        event.put("route", "/travel/");
+        event.put("method", "GET");
+        event.put("status", 200);
+        event.put("clientIp", "106.101.6.52");
+        event.put("userAgent", "Atlas-Test-Chrome");
+
+        java.util.Map<String, Object> result = service.importAtlasEvents(java.util.Map.of(
+                "schemaVersion", 1, "generatedAt", "2026-08-28T06:10:00Z", "events", java.util.List.of(event)));
+
+        assertThat(result).containsEntry("accepted", 1).containsEntry("imported", 0)
+                .containsEntry("duplicates", 0).containsEntry("excluded", 1);
     }
 
     @Test

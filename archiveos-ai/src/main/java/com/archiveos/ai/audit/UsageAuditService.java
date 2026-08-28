@@ -2,6 +2,7 @@ package com.archiveos.ai.audit;
 
 import com.archiveos.ai.security.ClientAddressResolver;
 import com.archiveos.ai.security.PlatformRole;
+import com.archiveos.ai.security.UsageAddressPolicy;
 import jakarta.servlet.http.HttpServletRequest;
 import java.sql.Timestamp;
 import java.net.InetAddress;
@@ -12,6 +13,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -70,6 +72,9 @@ public class UsageAuditService {
         if (feature == null) throw new IllegalArgumentException("지원하지 않는 ArchiveOS 화면입니다.");
 
         String clientIp = ClientAddressResolver.resolve(request);
+        if (UsageAddressPolicy.isExcluded(clientIp)) {
+            return new RecordResult(false, false, "excluded_address");
+        }
         AuditLogService.Actor actor = audit.actor();
         Instant now = Instant.now();
         String rateKey = clientIp;
@@ -93,41 +98,58 @@ public class UsageAuditService {
     }
 
     public Map<String, Object> recent(int page, int size) {
-        return recent(page, size, LocalDate.now(KST).toString());
+        return recent(page, size, LocalDate.now(KST).toString(), null, null);
     }
 
     public Map<String, Object> recent(int page, int size, String requestedDate) {
+        return recent(page, size, requestedDate, null, null);
+    }
+
+    public Map<String, Object> recent(int page, int size, String requestedDate, String requestedQuery, String requestedRole) {
         int safePage = Math.max(0, page);
         int safeSize = Math.max(10, Math.min(size, 100));
         int offset = safePage * safeSize;
         LocalDate selectedDate = parseUsageDate(requestedDate);
+        String query = normalizeSearch(requestedQuery);
+        String role = normalizeRole(requestedRole);
+        String likeQuery = "%" + query.toLowerCase(Locale.ROOT) + "%";
         Timestamp dayStart = Timestamp.from(selectedDate.atStartOfDay(KST).toInstant());
         Timestamp dayEnd = Timestamp.from(selectedDate.plusDays(1).atStartOfDay(KST).toInstant());
         String union = auditUnion();
-        Integer total = jdbc.queryForObject("select count(*)::int from (" + union + ") usage where occurred_at >= ? and occurred_at < ?",
-                Integer.class, dayStart, dayEnd);
+        String filters = usageFilters();
+        Object[] filterArgs = filterArgs(dayStart, dayEnd, query, likeQuery, role);
+        Integer total = jdbc.queryForObject("select count(*)::int from (" + union + ") usage where " + filters,
+                Integer.class, filterArgs);
+        List<Object> itemArgs = new ArrayList<>(List.of(filterArgs));
+        itemArgs.add(safeSize);
+        itemArgs.add(offset);
         List<Map<String, Object>> items = jdbc.queryForList("""
                 select id, occurred_at, actor, role, feature, route, action, client_ip, user_agent,
                        authenticated, source
                   from (%s) usage
-                 where occurred_at >= ? and occurred_at < ?
+                 where %s
                  order by occurred_at desc, id desc
                  limit ? offset ?
-                """.formatted(union), dayStart, dayEnd, safeSize, offset);
+                """.formatted(union, filters), itemArgs.toArray());
         Map<String, Object> summary = jdbc.queryForMap("""
                 select count(*)::int as total,
                        count(distinct client_ip)::int as unique_ips,
                        count(*) filter (where authenticated)::int as authenticated,
-                       count(*) filter (where source = 'ATLAS_PAGE_VIEW')::int as atlas_page_views
+                       count(*) filter (where source = 'ATLAS_PAGE_VIEW')::int as atlas_page_views,
+                       count(*) filter (where role = 'ADMIN')::int as admin_count,
+                       count(*) filter (where role = 'PM')::int as pm_count,
+                       count(*) filter (where role = 'OPERATOR')::int as operator_count,
+                       count(*) filter (where role = 'PUBLIC')::int as public_count
                   from (%s) usage
-                 where occurred_at >= ? and occurred_at < ?
-                """.formatted(union), dayStart, dayEnd);
+                 where %s
+                """.formatted(union, filters), filterArgs);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("items", items);
         result.put("page", safePage);
         result.put("size", safeSize);
         result.put("total", total == null ? 0 : total);
         result.put("selected_date", selectedDate.toString());
+        result.put("filters", Map.of("query", query, "role", role));
         result.put("summary", summary);
         result.put("atlas", atlasAccessSummary(selectedDate));
         return result;
@@ -195,6 +217,7 @@ public class UsageAuditService {
         if (events.size() > 200) throw new IllegalArgumentException("Atlas 접속 이벤트는 한 번에 200건까지 허용됩니다.");
 
         int imported = 0;
+        int excluded = 0;
         for (Object value : events) {
             Map<String, Object> event = objectMap(value, "events[]");
             rejectUnexpected(event, ATLAS_EVENT_KEYS, "Atlas 접속 이벤트");
@@ -211,15 +234,21 @@ public class UsageAuditService {
             if (status < 100 || status > 599) throw new IllegalArgumentException("status 값이 올바르지 않습니다.");
             String clientIp = requiredText(event.get("clientIp"), "clientIp", 64);
             validateIp(clientIp);
+            if (UsageAddressPolicy.isExcluded(clientIp)) {
+                excluded += 1;
+                continue;
+            }
             String userAgent = truncate(event.get("userAgent") == null ? null : String.valueOf(event.get("userAgent")), 512);
+            String action = route.startsWith("/api/") ? "API_READ" : "PAGE_VIEW";
             imported += jdbc.update("""
                     insert into public.atlas_access_events(id, source_event_id, occurred_at, project_name,
                         route, action, client_ip, user_agent, http_status)
-                    values (?, ?, ?, ?, ?, 'PAGE_VIEW', ?::inet, ?, ?)
+                    values (?, ?, ?, ?, ?, ?, ?::inet, ?, ?)
                     on conflict (source_event_id) do nothing
-                    """, UUID.randomUUID(), sourceId, Timestamp.from(occurredAt), project, route, clientIp, userAgent, (int) status);
+                    """, UUID.randomUUID(), sourceId, Timestamp.from(occurredAt), project, route, action, clientIp, userAgent, (int) status);
         }
-        return Map.of("accepted", events.size(), "imported", imported, "duplicates", events.size() - imported);
+        return Map.of("accepted", events.size(), "imported", imported,
+                "duplicates", events.size() - imported - excluded, "excluded", excluded);
     }
 
     private Map<String, Object> atlasAccessSummary(LocalDate selectedDate) {
@@ -252,6 +281,38 @@ public class UsageAuditService {
         }
     }
 
+    private String normalizeSearch(String value) {
+        if (value == null || value.isBlank()) return "";
+        String normalized = value.trim();
+        if (normalized.length() > 100) throw new IllegalArgumentException("검색어는 100자 이하여야 합니다.");
+        return normalized;
+    }
+
+    private String normalizeRole(String value) {
+        if (value == null || value.isBlank() || "ALL".equalsIgnoreCase(value)) return "";
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("ADMIN", "PM", "OPERATOR", "PUBLIC").contains(normalized)) {
+            throw new IllegalArgumentException("조회할 계정 권한이 올바르지 않습니다.");
+        }
+        return normalized;
+    }
+
+    private String usageFilters() {
+        return """
+                occurred_at >= ? and occurred_at < ?
+                and (? = '' or lower(coalesce(actor, '')) like ?
+                    or lower(coalesce(feature, '')) like ?
+                    or lower(coalesce(route, '')) like ?
+                    or lower(coalesce(action, '')) like ?
+                    or lower(coalesce(client_ip, '')) like ?)
+                and (? = '' or upper(coalesce(role, '')) = ?)
+                """;
+    }
+
+    private Object[] filterArgs(Timestamp dayStart, Timestamp dayEnd, String query, String likeQuery, String role) {
+        return new Object[] { dayStart, dayEnd, query, likeQuery, likeQuery, likeQuery, likeQuery, likeQuery, role, role };
+    }
+
     private String auditUnion() {
         return """
                 select id::text as id, occurred_at, actor, role, feature, console_route as route, action,
@@ -267,7 +328,8 @@ public class UsageAuditService {
                    and lower(coalesce(request_path, '')) not like '/api/live-flow/%'
                 union all
                 select id::text as id, occurred_at, actor, role, project_name as feature, route, action,
-                       client_ip::text as client_ip, user_agent, authenticated, 'ATLAS_PAGE_VIEW' as source
+                       client_ip::text as client_ip, user_agent, authenticated,
+                       case when action = 'API_READ' then 'ATLAS_API_READ' else 'ATLAS_PAGE_VIEW' end as source
                   from public.atlas_access_events
                 """;
     }

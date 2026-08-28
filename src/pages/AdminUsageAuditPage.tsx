@@ -8,6 +8,9 @@ const PAGE_SIZE = 25;
 export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
   const [page, setPage] = useState(0);
   const [selectedDate, setSelectedDate] = useState(todayInKorea);
+  const [queryInput, setQueryInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [accountRole, setAccountRole] = useState("");
   const [data, setData] = useState<UsageAuditPage | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +20,7 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
     setLoading(true);
     setError(null);
     try {
-      const result = await getUsageAudit(page, PAGE_SIZE, selectedDate);
+      const result = await getUsageAudit(page, PAGE_SIZE, selectedDate, query, accountRole);
       setData(result);
       const lastPage = Math.max(0, Math.ceil(result.total / result.size) - 1);
       if (page > lastPage) setPage(lastPage);
@@ -26,7 +29,7 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
     } finally {
       setLoading(false);
     }
-  }, [page, role, selectedDate]);
+  }, [accountRole, page, query, role, selectedDate]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -50,6 +53,18 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
         <Summary label="선택일 접속 IP" value={data?.summary.unique_ips} />
         <Summary label="로그인 사용자 기록" value={data?.summary.authenticated} />
         <Summary label="Atlas 화면 기록" value={data?.summary.atlas_page_views} />
+      </div>
+      <form className="usage-audit-search-controls" onSubmit={(event) => { event.preventDefault(); setPage(0); setQuery(queryInput.trim()); }}>
+        <label>사용 내역 검색<input type="search" value={queryInput} placeholder="계정, 기능, 경로, IP 검색" maxLength={100} onChange={(event) => setQueryInput(event.target.value)} /></label>
+        <label>계정 권한 조회<select value={accountRole} onChange={(event) => { setPage(0); setAccountRole(event.target.value); }}><option value="">전체 권한</option><option value="ADMIN">관리자</option><option value="PM">PM</option><option value="OPERATOR">운영자</option><option value="PUBLIC">공개 사용자</option></select></label>
+        <button type="submit" className="button button-primary" disabled={loading}>검색</button>
+        <button type="button" className="button button-secondary" disabled={loading || (!query && !accountRole && !queryInput)} onClick={() => { setPage(0); setQueryInput(""); setQuery(""); setAccountRole(""); }}>초기화</button>
+      </form>
+      <div className="usage-audit-role-summary" aria-label="계정 권한별 기록">
+        <Summary label="관리자" value={data?.summary.admin_count} />
+        <Summary label="PM" value={data?.summary.pm_count} />
+        <Summary label="운영자" value={data?.summary.operator_count} />
+        <Summary label="공개 사용자" value={data?.summary.public_count} />
       </div>
     </SectionCard>
 
@@ -76,7 +91,7 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
       </> : <p className="empty-copy">{selectedDate} Atlas·Archive 일일 집계가 아직 생성되지 않았습니다.</p>}
     </SectionCard>
 
-    <SectionCard title="최근 사용 내역" eyebrow={`최신순 · 페이지당 ${PAGE_SIZE}건`}>
+    <SectionCard title="최근 사용 내역" eyebrow={`최신순 · 페이지당 ${PAGE_SIZE}건${query ? ` · “${query}” 검색` : ""}`}>
       {error ? <div className="empty-state error-state" role="alert">{error}</div> : null}
       {loading && !data ? <div className="usage-audit-loading" role="status"><span className="page-loading-spinner" aria-hidden="true" />사용 기록을 불러오는 중입니다.</div> : null}
       {!loading && !error && !data?.items.length ? <p className="empty-copy">아직 기록된 ArchiveOS·Atlas 사용 내역이 없습니다.</p> : null}
@@ -110,7 +125,7 @@ function UsageRow({ entry }: { entry: UsageAuditEntry }) {
     <td><time dateTime={entry.occurred_at}>{formatDate(entry.occurred_at)}</time></td>
     <td><strong>{entry.actor || "anonymous"}</strong><StatusBadge status={entry.authenticated ? "healthy" : "empty"}>{roleLabel(entry.role)}</StatusBadge></td>
     <td><strong>{featureLabel(entry.feature)}</strong><small>{routeLabel(entry.route)}</small></td>
-    <td><span>{actionLabel(entry)}</span><small>{entry.source === "ATLAS_PAGE_VIEW" ? "외부 화면 사용" : entry.source === "PAGE_VIEW" ? "화면 사용" : "기능 실행"}</small></td>
+    <td><span>{actionLabel(entry)}</span><small>{entry.source === "ATLAS_API_READ" ? "외부 API 사용" : entry.source === "ATLAS_PAGE_VIEW" ? "외부 화면 사용" : entry.source === "PAGE_VIEW" ? "화면 사용" : "기능 실행"}</small></td>
     <td><code>{entry.client_ip || "확인 불가"}</code></td>
     <td title={entry.user_agent || ""}>{deviceLabel(entry.user_agent)}</td>
   </tr>;
@@ -126,6 +141,7 @@ function featureLabel(feature: string) { return ({ auth:"로그인", tasks:"작�
 function routeLabel(route: string) { return route.startsWith("/api/") ? route.replace(/^\/api\//, "API · ") : route.startsWith("/") ? route : `#/${route}`; }
 function actionLabel(entry: UsageAuditEntry) {
   if (entry.action === "PAGE_VIEW") return "페이지 조회";
+  if (entry.action === "API_READ") return "API 조회";
   if (entry.action === "approval_decision") return "승인 결정";
   if (entry.action === "workflow_retry") return "작업 재시도";
   const method = entry.action.split(" ")[0]?.toUpperCase();

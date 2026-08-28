@@ -37,7 +37,7 @@ export type UsageAuditEntry = {
   client_ip: string | null;
   user_agent: string | null;
   authenticated: boolean;
-  source: "PAGE_VIEW" | "API_ACTION" | "ATLAS_PAGE_VIEW" | string;
+  source: "PAGE_VIEW" | "API_ACTION" | "ATLAS_PAGE_VIEW" | "ATLAS_API_READ" | string;
 };
 
 export type UsageAuditPage = {
@@ -51,7 +51,12 @@ export type UsageAuditPage = {
     unique_ips: number;
     authenticated: number;
     atlas_page_views: number;
+    admin_count: number;
+    pm_count: number;
+    operator_count: number;
+    public_count: number;
   };
+  filters: { query: string; role: string };
   atlas: {
     privacy: "aggregate_only";
     reports: Array<{
@@ -702,8 +707,9 @@ export async function recordConsoleUsage(route: string) {
   return response.data;
 }
 
-export async function getUsageAudit(page = 0, size = 25, date = todayInKorea()) {
-  const response = await request<ApiEnvelope<UsageAuditPage>>(`/api/audit/usage?page=${page}&size=${size}&date=${encodeURIComponent(date)}`);
+export async function getUsageAudit(page = 0, size = 25, date = todayInKorea(), query = "", role = "") {
+  const params = new URLSearchParams({ page: String(page), size: String(size), date, query, role });
+  const response = await request<ApiEnvelope<UsageAuditPage>>(`/api/audit/usage?${params.toString()}`);
   return response.data;
 }
 

@@ -1,6 +1,7 @@
 package com.archiveos.ai.audit;
 
 import com.archiveos.ai.security.ClientAddressResolver;
+import com.archiveos.ai.security.UsageAddressPolicy;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
@@ -49,9 +50,12 @@ public class AuditLogFilter extends OncePerRequestFilter {
             if (after == null) after = readJson(response.getContentAsByteArray());
             if (after == null) after = readJson(request.getContentAsByteArray());
             Map<String, Object> metadata = new LinkedHashMap<>();
-            metadata.put("clientIp", ClientAddressResolver.resolve(request));
-            String userAgent = request.getHeader("User-Agent");
-            if (userAgent != null && !userAgent.isBlank()) metadata.put("userAgent", userAgent.length() <= 512 ? userAgent : userAgent.substring(0, 512));
+            String clientIp = ClientAddressResolver.resolve(request);
+            if (!UsageAddressPolicy.isExcluded(clientIp)) {
+                metadata.put("clientIp", clientIp);
+                String userAgent = request.getHeader("User-Agent");
+                if (userAgent != null && !userAgent.isBlank()) metadata.put("userAgent", userAgent.length() <= 512 ? userAgent : userAgent.substring(0, 512));
+            }
             try { audit.record(request.getMethod(), path, response.getStatus(), correlationId, before, after, metadata); }
             catch (RuntimeException ignored) { }
             response.copyBodyToResponse();
