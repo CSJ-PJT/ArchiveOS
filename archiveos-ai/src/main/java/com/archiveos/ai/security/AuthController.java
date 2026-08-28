@@ -92,7 +92,7 @@ public class AuthController {
         cookie.setSecure(sessions.properties().secureCookie());
         cookie.setPath("/");
         cookie.setMaxAge(maxAge);
-        cookie.setAttribute("SameSite", "Lax");
+        cookie.setAttribute("SameSite", "Strict");
         return cookie;
     }
 

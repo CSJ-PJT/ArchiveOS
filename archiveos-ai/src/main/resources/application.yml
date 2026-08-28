@@ -72,6 +72,9 @@ archiveos:
     enabled: ${ARCHIVEOS_SCHEDULER_ENABLED:false}
     nightly-cron: ${ARCHIVEOS_NIGHTLY_CRON:0 50 23 * * *}
     daily-cron: ${ARCHIVEOS_DAILY_CRON:0 0 9 * * *}
+    knowledge-sync-cron: ${ARCHIVEOS_KNOWLEDGE_SYNC_CRON:0 15 9 * * *}
+    maintenance-cron: ${ARCHIVEOS_MAINTENANCE_CRON:0 30 9 * * *}
+    atlas-cron: ${ARCHIVEOS_ATLAS_CRON:0 45 9 * * *}
   experimental:
     deepstake:
       enabled: ${ARCHIVEOS_EXPERIMENTAL_DEEPSTAKE_ENABLED:false}

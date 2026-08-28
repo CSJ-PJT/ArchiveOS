@@ -33,4 +33,14 @@ class ClientAddressResolverTest {
 
         assertThat(ClientAddressResolver.resolve(request)).isEqualTo("2001:db8:0:0:0:0:0:7");
     }
+
+    @Test
+    void ignoresForwardedHeadersFromUntrustedRemoteAddress() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRemoteAddr("203.0.113.20");
+        request.addHeader("X-Real-IP", "198.51.100.9");
+        request.addHeader("X-Forwarded-For", "198.51.100.10");
+
+        assertThat(ClientAddressResolver.resolve(request)).isEqualTo("203.0.113.20");
+    }
 }
