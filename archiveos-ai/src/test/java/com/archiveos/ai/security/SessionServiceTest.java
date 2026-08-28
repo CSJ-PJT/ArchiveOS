@@ -74,7 +74,7 @@ class SessionServiceTest {
                 .extracting(error -> ((SessionService.LoginRejectedException) error).rateLimited()).isEqualTo(false);
         assertThatThrownBy(() -> service.login("127.0.0.1", "wrong-2", PlatformRole.ADMIN))
                 .isInstanceOf(SessionService.LoginRejectedException.class)
-                .extracting(error -> ((SessionService.LoginRejectedException) error).rateLimited()).isEqualTo(false);
+                .extracting(error -> ((SessionService.LoginRejectedException) error).rateLimited()).isEqualTo(true);
         assertThatThrownBy(() -> service.login("127.0.0.1", "wrong-3", PlatformRole.ADMIN))
                 .isInstanceOf(SessionService.LoginRejectedException.class)
                 .extracting(error -> ((SessionService.LoginRejectedException) error).rateLimited()).isEqualTo(true);

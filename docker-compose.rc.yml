@@ -21,3 +21,4 @@ services:
   backend:
     environment:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS is required for rc}
+      ARCHIVE_TOKEN_ADMIN_OPERATOR: ${ARCHIVE_TOKEN_ADMIN_OPERATOR:?ARCHIVE_TOKEN_ADMIN_OPERATOR is required for rc}

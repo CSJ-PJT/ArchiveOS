@@ -9,10 +9,17 @@ export async function sendOperationalNotification(
   message: string,
 ): Promise<{ ok: true; channel: "slack" } | { ok: false; reason: string }> {
   const baseUrl = process.env.ARCHIVEOS_AI_BASE_URL?.trim() || "http://localhost:4100";
+  const adminToken = process.env.ARCHIVE_TOKEN_ADMIN_OPERATOR?.trim();
+  if (!adminToken) return { ok: false, reason: "ArchiveOS internal notification token is not configured" };
   try {
     const response = await fetch(`${baseUrl}/api/notifications`, {
       method: "POST",
-      headers: { "Content-Type": "application/json; charset=utf-8" },
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        Authorization: `Bearer ${adminToken}`,
+        "X-Archive-Source-System": "archive-os",
+        "X-Archive-Service-Scope": "admin:operate",
+      },
       body: JSON.stringify({ message }),
     });
     if (!response.ok) return { ok: false, reason: `Spring notification API returned HTTP ${response.status}` };

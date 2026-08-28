@@ -11,6 +11,8 @@ import type {
 } from "./types.js";
 
 const deviceRegistryPath = path.resolve(process.cwd(), "data", "approved-devices.json");
+const threatNotificationCooldownMs = 5 * 60 * 1_000;
+const recentThreatNotifications = new Map<string, number>();
 
 const protectedEndpoints: ProtectedEndpointDescriptor[] = [
   {
@@ -169,7 +171,8 @@ export async function notifySecurityEvent(input: {
     | "device_approved"
     | "device_denied"
     | "pm_decision_executed"
-    | "admin_configuration_changed";
+    | "admin_configuration_changed"
+    | "security_threat_detected";
   title: string;
   summary: string;
   metadata?: Record<string, string | number | boolean | null | undefined>;
@@ -184,7 +187,7 @@ export async function notifySecurityEvent(input: {
   if (input.metadata) {
     const metadataLines = Object.entries(input.metadata)
       .filter(([, value]) => value !== undefined && value !== null && String(value).trim().length > 0)
-      .map(([key, value]) => `- ${key}: ${String(value)}`);
+      .map(([key, value]) => `- ${slackField(key, 64)}: ${slackField(String(value), 240)}`);
     if (metadataLines.length) {
       lines.push("", "Metadata:", ...metadataLines);
     }
@@ -195,6 +198,45 @@ export async function notifySecurityEvent(input: {
     console.warn(`[archiveos-security] Slack notification skipped: ${result.reason}`);
   }
   return result;
+}
+
+export async function notifySecurityThreat(input: {
+  event: "cross_origin_mutation_blocked";
+  clientIp: string;
+  method: string;
+  path: string;
+  origin: string;
+}) {
+  const key = `${input.event}:${input.clientIp}`;
+  const now = Date.now();
+  if (recentThreatNotifications.size > 10_000) {
+    for (const [storedKey, sentAt] of recentThreatNotifications) {
+      if (now - sentAt >= threatNotificationCooldownMs) recentThreatNotifications.delete(storedKey);
+    }
+  }
+  const lastSentAt = recentThreatNotifications.get(key) ?? 0;
+  if (now - lastSentAt < threatNotificationCooldownMs) {
+    return { ok: false as const, reason: "Duplicate threat notification suppressed" };
+  }
+  recentThreatNotifications.set(key, now);
+  return notifySecurityEvent({
+    type: "security_threat_detected",
+    title: "차단된 외부 출처 쓰기 요청",
+    summary: "허용되지 않은 Origin의 ArchiveOS 쓰기 요청을 차단했습니다.",
+    metadata: {
+      severity: "HIGH",
+      client_ip: input.clientIp,
+      method: input.method,
+      path: input.path,
+      origin: input.origin,
+      blocked_at: new Date(now).toISOString(),
+    },
+  });
+}
+
+function slackField(value: string, maxLength: number) {
+  const sanitized = value.replace(/[\r\n\t]+/g, " ").trim();
+  return sanitized.length > maxLength ? `${sanitized.slice(0, maxLength)}...` : sanitized;
 }
 
 export async function recordSeenDevice(input: {
