@@ -3,6 +3,7 @@ import type { AppData } from "../app/AppShell";
 import { Icon } from "../components/shared/Icon";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
+import { PaginatedItems } from "../components/shared/PaginatedItems";
 import { runLocalAction, type LocalAction } from "../lib/backendApi";
 import { formatTimeAgo } from "./pageUtils";
 
@@ -52,10 +53,11 @@ export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () =
 
       <SectionCard title="DB 에이전트 레지스트리" eyebrow="ARCHIVEOS POSTGRESQL">
         {registeredAgents.length ? <div className="agent-card-grid">{registeredAgents.map((agent) => {
-          const stale = isStaleRegistryRecord(agent.updated_at, data.refreshedAt);
+          const runtimeAgent = runtimeForRegistryRole(agent.role, agents);
+          const stale = !runtimeAgent && isStaleRegistryRecord(agent.updated_at, data.refreshedAt);
           return <article className="agent-card" key={agent.id}>
             <div className="agent-card-icon"><Icon name="agents" size={20} /></div>
-            <div className="agent-card-main"><div className="agent-card-title"><div><strong>{agent.name}</strong><span>{agentRoleLabel(agent.role)}</span></div><StatusBadge status={stale ? "waiting" : agent.status === "failed" ? "warning" : agent.status === "working" ? "working" : "waiting"}>{stale ? "과거 기록" : agentStatusLabel(agent.status)}</StatusBadge></div><p>{stale ? `마지막 등록 작업: ${agentTaskLabel(agent.current_task)}` : agentTaskLabel(agent.current_task)}</p><div className="agent-evidence"><span>ArchiveOS PostgreSQL 등록 이력</span><span>마지막 갱신 {formatTimeAgo(agent.updated_at)}</span></div></div>
+            <div className="agent-card-main"><div className="agent-card-title"><div><strong>{agent.name}</strong><span>{agentRoleLabel(agent.role)}</span></div><StatusBadge status={runtimeAgent?.status || (stale ? "waiting" : agent.status === "failed" ? "warning" : agent.status === "working" ? "working" : "waiting")}>{runtimeAgent ? agentStatusLabel(runtimeAgent.status) : stale ? "과거 기록" : agentStatusLabel(agent.status)}</StatusBadge></div><p>{runtimeAgent ? agentSummaryLabel(runtimeAgent.id, runtimeAgent.summary) : stale ? `마지막 등록 작업: ${agentTaskLabel(agent.current_task)}` : agentTaskLabel(agent.current_task)}</p><div className="agent-evidence"><span>{runtimeAgent ? "현재 로컬 Runtime 연동 상태" : "ArchiveOS PostgreSQL 등록 이력"}</span><span>마지막 갱신 {formatTimeAgo(runtimeAgent ? data.refreshedAt : agent.updated_at)}</span></div></div>
           </article>
         })}</div> : <div className="empty-state">등록된 DB 에이전트가 없습니다.</div>}
       </SectionCard>
@@ -80,15 +82,12 @@ export function AgentsPage({ data, onRefresh }: { data: AppData; onRefresh: () =
       </SectionCard>
 
       <SectionCard title="최근 Handoff" eyebrow="에이전트 간 운영 기록">
-        <div className="event-list compact">
-          {(data.mesh?.recentInteractions || []).slice(0, 8).map((interaction, index) => (
+        <PaginatedItems items={data.mesh?.recentInteractions || []} pageSize={8} label="에이전트 Handoff 기록 페이지" className="event-list compact" empty={<div className="empty-state">아직 에이전트 간 handoff 기록이 없습니다.</div>} renderItem={(interaction, index) => (
             <article className="event-row" key={`${interaction.time}-${index}`}>
               <span>{formatTimeAgo(interaction.time)}</span><StatusBadge status="working">{interactionTypeLabel(interaction.type)}</StatusBadge>
               <strong>{agentNameLabel(interaction.from, interaction.from)} → {agentNameLabel(interaction.to, interaction.to)}</strong><p>{interactionSummaryLabel(interaction.summary)}</p>
             </article>
-          ))}
-          {!data.mesh?.recentInteractions.length ? <div className="empty-state">아직 에이전트 간 handoff 기록이 없습니다.</div> : null}
-        </div>
+          )} />
       </SectionCard>
 
       <SectionCard title="로컬 에이전트 제어" eyebrow="관리자 세션 전용">
@@ -167,4 +166,9 @@ function isStaleRegistryRecord(updatedAt: string | null | undefined, refreshedAt
   const refreshed = Date.parse(refreshedAt || "");
   if (!Number.isFinite(updated) || !Number.isFinite(refreshed)) return true;
   return refreshed - updated > 60 * 60 * 1000;
+}
+
+function runtimeForRegistryRole(role: string | null | undefined, agents: NonNullable<AppData["mesh"]>["agents"]) {
+  const runtimeId = ({ planner: "loop", reviewer: "reviewer", logger: "historian", builder: "implementer" } as Record<string, string>)[String(role || "").toLowerCase()];
+  return runtimeId ? agents.find((agent) => agent.id === runtimeId) : undefined;
 }
