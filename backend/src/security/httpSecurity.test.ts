@@ -75,4 +75,25 @@ assert.equal(allowedRequests, 2);
 assert.equal(limitedStatus, 429);
 assert.equal(limitedBody.error, "Request rate limit exceeded.");
 
+const ragLimiter = createApiRateLimiter({ now: () => 2_000, generalLimit: 10, ragLimit: 1 });
+let ragAllowed = 0;
+let ragStatus = 0;
+const ragRequest = {
+  method: "POST",
+  path: "/api/rag/verification/plans",
+  socket: { remoteAddress: "198.51.100.9" },
+  header: () => undefined,
+} as never;
+const ragResponse = {
+  setHeader: () => undefined,
+  status: (value: number) => {
+    ragStatus = value;
+    return { json: () => undefined };
+  },
+} as never;
+ragLimiter(ragRequest, ragResponse, () => { ragAllowed += 1; });
+ragLimiter(ragRequest, ragResponse, () => { ragAllowed += 1; });
+assert.equal(ragAllowed, 1);
+assert.equal(ragStatus, 429);
+
 console.log("http security tests passed");
