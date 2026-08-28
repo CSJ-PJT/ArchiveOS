@@ -1202,15 +1202,44 @@ export type AiRuntime = {
 
 export type RagReference = {
   title: string;
-  path: string;
   heading: string | null;
-  chunkText: string;
   score: number;
+  updatedAt: string | null;
+  knowledgeScope: "PUBLIC" | "INTERNAL";
 };
 
 export type RagAnswer = {
   answer: string;
   references: RagReference[];
+  evidenceType: "DOCUMENT" | "LIVE" | string;
+  actualCheckPerformed: boolean;
+  checkedAt: string | null;
+  sourceFreshness: "CURRENT" | "RECENT" | "STALE" | "UNKNOWN" | string;
+  confidence: "HIGH" | "MEDIUM" | "LOW" | string;
+  answerScope: "PUBLIC_APPROVED_KNOWLEDGE" | "INTERNAL_KNOWLEDGE" | string;
+  cannotVerifyReason: string | null;
+};
+
+export type RagVerificationPlan = {
+  planId: string;
+  description: string;
+  checks: Array<{ id: string; description: string; mode: "READ_ONLY" | "EXTERNAL_EFFECT" }>;
+  approvalRequired: boolean;
+  externalEffect: boolean;
+  createdAt: string;
+  expiresAt: string;
+};
+
+export type RagVerificationReceipt = {
+  receiptId: string;
+  planId: string;
+  actualCheckPerformed: boolean;
+  checkedAt: string;
+  evidenceType: "LIVE";
+  result: string;
+  apiResults: Array<{ check: string; service: string; status: string; checkedAt: string }>;
+  slackDelivery: { status: string; configured: boolean };
+  executionScope: string;
 };
 
 export type RagRuntimeContext = {
@@ -1846,6 +1875,26 @@ export async function askRag(question: string, context?: RagRuntimeContext, init
     method: "POST",
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
     body: JSON.stringify({ question, ...(context ? { context } : {}) }),
+  });
+  return response.data;
+}
+
+export async function createRagVerificationPlan(question: string, init?: RequestInit) {
+  const response = await request<ApiEnvelope<RagVerificationPlan>>("/api/rag/verification/plans", {
+    ...init,
+    method: "POST",
+    headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+    body: JSON.stringify({ question }),
+  });
+  return response.data;
+}
+
+export async function executeRagVerificationPlan(planId: string, init?: RequestInit) {
+  const response = await request<ApiEnvelope<RagVerificationReceipt>>(`/api/rag/verification/plans/${encodeURIComponent(planId)}/execute`, {
+    ...init,
+    method: "POST",
+    headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+    body: JSON.stringify({ approved: true }),
   });
   return response.data;
 }

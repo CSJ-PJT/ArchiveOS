@@ -126,7 +126,7 @@ function RagView({ data }: { data: AppData }) {
           {loading ? "질문 처리 중…" : "질문하기"}
         </button>
         {error ? <div className="empty-state error-state">RAG 질문을 처리하지 못했습니다. {error}</div> : null}
-        {answer ? <div className="rag-answer"><p>{answer.answer}</p><strong>참조 {answer.references.length}건</strong><ol>{answer.references.map((reference, index) => <li key={`${reference.path}-${index}`}><span>{reference.title}</span><small>{reference.heading || reference.path} · 유사도 {(reference.score * 100).toFixed(1)}%</small></li>)}</ol></div> : <div className="empty-state">아직 RAG 답변이 없습니다.</div>}
+        {answer ? <div className="rag-answer"><p>{answer.answer}</p><small>근거: {answer.evidenceType === "DOCUMENT" ? "문서 기반" : answer.evidenceType} · 범위: {answer.answerScope === "PUBLIC_APPROVED_KNOWLEDGE" ? "승인 공개 지식" : "내부 운영 지식"} · 최신성: {answer.sourceFreshness} · 신뢰: {answer.confidence}</small>{answer.cannotVerifyReason ? <p>{answer.cannotVerifyReason}</p> : null}<strong>참조 {answer.references.length}건</strong><ol>{answer.references.map((reference, index) => <li key={`${reference.title}-${reference.heading}-${index}`}><span>{reference.title}</span><small>{reference.heading || "제목 근거"} · 유사도 {(reference.score * 100).toFixed(1)}%</small></li>)}</ol></div> : <div className="empty-state">아직 RAG 답변이 없습니다.</div>}
         <div className="rag-history"><strong>최근 RAG·지식 기록</strong><PaginatedItems items={data.timeline.filter((item) => item.event_type === "knowledge")} pageSize={5} label="RAG 지식 기록 페이지" renderItem={(item) => <span key={item.id}>{formatTimeAgo(item.occurred_at)} · {item.title}</span>} /></div>
       </div>
     </SectionCard>

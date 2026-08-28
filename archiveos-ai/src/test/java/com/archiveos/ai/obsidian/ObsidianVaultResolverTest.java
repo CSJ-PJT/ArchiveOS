@@ -17,7 +17,7 @@ class ObsidianVaultResolverTest {
         Files.writeString(tempDir.resolve("ArchiveOS.md"), "# ArchiveOS\nSpring AI RAG");
         Files.writeString(tempDir.resolve("DeepStake3D.md"), "# DeepStake3D");
         Files.writeString(tempDir.resolve("AX.md"), "# AX");
-        var properties = new ArchiveOsAiProperties("", tempDir.toString(), 1200, 160, 5);
+        var properties = new ArchiveOsAiProperties("", tempDir.toString(), 1200, 160, 5, java.util.List.of("public/"));
 
         var resolver = new ObsidianVaultResolver(properties);
 

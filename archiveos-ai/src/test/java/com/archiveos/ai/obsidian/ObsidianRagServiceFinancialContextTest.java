@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 class ObsidianRagServiceFinancialContextTest {
 
     private final ObsidianRagService service = new ObsidianRagService(
-            null, null, null, null, null, null, null);
+            null, null, null, null, null, null, null, null);
 
     @Test
     void includesBoundedFinancialEvidenceAndRedactsSecrets() {

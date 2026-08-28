@@ -47,6 +47,11 @@ archiveos:
   obsidian-chunk-size: ${OBSIDIAN_CHUNK_SIZE:1200}
   obsidian-chunk-overlap: ${OBSIDIAN_CHUNK_OVERLAP:160}
   rag-max-references: ${RAG_MAX_REFERENCES:5}
+  # Fail closed: only Markdown files below one of these approved vault paths
+  # are placed in the public vector collection. Everything else is INTERNAL.
+  rag-public-path-prefixes: ${RAG_PUBLIC_PATH_PREFIXES:public/}
+  rag:
+    usage-summary-cron: ${ARCHIVEOS_RAG_USAGE_SUMMARY_CRON:0 55 23 * * *}
   deploy-compose-file: ${ARCHIVEOS_DEPLOY_COMPOSE_FILE:}
   health-check-url: ${ARCHIVEOS_HEALTH_CHECK_URL:}
   node-base-url: ${ARCHIVEOS_NODE_BASE_URL:http://localhost:4000}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppData } from "../../app/AppShell";
-import { analyzeDecision, askRag, getAiRuntime, searchRag, syncObsidian, type AiRuntime, type DecisionRecommendation, type RagAnswer, type RagReference, type RagRuntimeContext } from "../../lib/backendApi";
+import { analyzeDecision, askRag, createRagVerificationPlan, executeRagVerificationPlan, getAiRuntime, searchRag, syncObsidian, type AiRuntime, type DecisionRecommendation, type RagAnswer, type RagReference, type RagRuntimeContext, type RagVerificationPlan, type RagVerificationReceipt } from "../../lib/backendApi";
 import { useI18n } from "../../i18n/I18nProvider";
 import type { TranslationKey } from "../../i18n";
 import { Icon } from "../shared/Icon";
@@ -23,6 +23,9 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
   const [requestError, setRequestError] = useState<string | null>(null);
   const [decision, setDecision] = useState<DecisionRecommendation | null>(null);
   const [decisionBusy, setDecisionBusy] = useState(false);
+  const [verificationPlan, setVerificationPlan] = useState<RagVerificationPlan | null>(null);
+  const [verificationReceipt, setVerificationReceipt] = useState<RagVerificationReceipt | null>(null);
+  const [verificationBusy, setVerificationBusy] = useState(false);
   const triggerRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -76,7 +79,7 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
     if (!normalized || loading) return;
     requestRef.current?.abort();
     const controller = new AbortController(); requestRef.current = controller;
-    setQuery(normalized); setOpen(true); setLoading(true); setRequestError(null); setAnswer(null); setResults(null); setDecision(null);
+    setQuery(normalized); setOpen(true); setLoading(true); setRequestError(null); setAnswer(null); setResults(null); setDecision(null); setVerificationPlan(null); setVerificationReceipt(null);
     try {
       if (mode === "search") setResults(await searchRag(normalized, { signal: controller.signal }));
       else setAnswer(await askRag(normalized, context, { signal: controller.signal }));
@@ -101,6 +104,22 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
     try { setDecision(await analyzeDecision({ question: query, service: context.selectedService || "Archive-Ledger", correlationId: context.selectedCorrelationId })); }
     catch (error) { setRequestError(safeError(error)); }
     finally { setDecisionBusy(false); }
+  }
+
+  async function planVerification() {
+    if (verificationBusy || !query.trim()) return;
+    setVerificationBusy(true); setRequestError(null); setVerificationReceipt(null);
+    try { setVerificationPlan(await createRagVerificationPlan(query)); }
+    catch (error) { setRequestError(safeError(error)); }
+    finally { setVerificationBusy(false); }
+  }
+
+  async function executeVerification() {
+    if (verificationBusy || !verificationPlan || !data.auth.authenticated) return;
+    setVerificationBusy(true); setRequestError(null);
+    try { setVerificationReceipt(await executeRagVerificationPlan(verificationPlan.planId)); setVerificationPlan(null); }
+    catch (error) { setRequestError(safeError(error)); }
+    finally { setVerificationBusy(false); }
   }
 
   function trapFocus(event: React.KeyboardEvent<HTMLElement>) {
@@ -131,7 +150,9 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
         {!loading && !answer && !results && !requestError ? <section className="copilot-suggestions"><strong>{translate("copilot.recommendation")}</strong>{suggestions.length ? <div>{suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => void submit(suggestion)}>{suggestion}</button>)}</div> : <p>{translate("copilot.runtimeContext")}</p>}</section> : null}
         {loading ? <section className="copilot-loading"><span className="copilot-spinner" aria-hidden="true" />{translate("copilot.loading")}<button type="button" className="text-button" onClick={() => requestRef.current?.abort()}>{translate("copilot.cancel")}</button></section> : null}
         {requestError ? <section className="copilot-error"><strong>{translate("copilot.error")}</strong><p>{requestError}</p><button type="button" onClick={() => void submit()}>{translate("copilot.retry")}</button></section> : null}
-        {answer ? <><section className="copilot-answer"><strong>{translate("copilot.answer")}</strong><p>{answer.answer}</p><small>{translate("copilot.humanReview")}</small>{data.auth.role === "ADMIN" ? <button type="button" className="text-button" onClick={() => void createDecision()} disabled={decisionBusy || !answer.references.length}>{decisionBusy ? "분석 제안 생성 중" : "근거 기반 제안 만들기"}</button> : null}</section><ReferenceList references={answer.references} title={translate("copilot.references")} empty={translate("copilot.noReferences")} /></> : null}
+        {answer ? <><section className="copilot-answer"><strong>{translate("copilot.answer")}</strong><p>{answer.answer}</p><EvidenceQuality answer={answer} /><small>{translate("copilot.humanReview")}</small><div><button type="button" className="text-button" onClick={() => void planVerification()} disabled={verificationBusy}>{verificationBusy ? "점검 계획 생성 중" : "실시간 점검 계획"}</button>{data.auth.role === "ADMIN" ? <button type="button" className="text-button" onClick={() => void createDecision()} disabled={decisionBusy || !answer.references.length}>{decisionBusy ? "분석 제안 생성 중" : "근거 기반 제안 만들기"}</button> : null}</div></section><ReferenceList references={answer.references} title={translate("copilot.references")} empty={translate("copilot.noReferences")} /></> : null}
+        {verificationPlan ? <section className="copilot-context"><strong>승인 대기 · 안전 점검 계획</strong><p>{verificationPlan.description}</p><ul>{verificationPlan.checks.map((check) => <li key={check.id}>{check.description} · {check.mode === "READ_ONLY" ? "읽기 전용" : "외부 효과 1회"}</li>)}</ul>{data.auth.authenticated ? <button type="button" onClick={() => void executeVerification()} disabled={verificationBusy}>{verificationPlan.externalEffect ? "외부 효과를 확인하고 1회 승인" : "읽기 전용 점검 승인"}</button> : <small>실행 승인은 로그인한 운영 계정에서만 가능합니다.</small>}</section> : null}
+        {verificationReceipt ? <section className="copilot-context"><strong>검증 영수증 · {verificationReceipt.result}</strong><dl><dt>실제 점검</dt><dd>{verificationReceipt.actualCheckPerformed ? "수행됨" : "미수행"}</dd><dt>점검 시각</dt><dd>{verificationReceipt.checkedAt}</dd><dt>증거 유형</dt><dd>{verificationReceipt.evidenceType}</dd><dt>Slack 전달</dt><dd>{verificationReceipt.slackDelivery.status}</dd></dl><ul>{verificationReceipt.apiResults.map((result, index) => <li key={`${result.check}-${result.service}-${index}`}>{result.service}: {result.status}</li>)}</ul><small>{verificationReceipt.receiptId}</small></section> : null}
         {decision ? <section className="copilot-context"><strong>Decision Engine · {decision.status}</strong><p>{decision.summary}</p><small>제안만 기록되었으며, 외부 서비스 실행은 수행되지 않았습니다.</small></section> : null}
         {results ? <ReferenceList references={results} title={translate("copilot.searchResults")} empty={translate("copilot.noResults")} /> : null}
         <section className="copilot-context"><strong>{translate("copilot.context")}</strong><p>{translate("copilot.runtimeContext")}</p><dl><dt>ecosystemStatus</dt><dd>{context.ecosystemStatus || "NO_DATA"}</dd><dt>activeEvents</dt><dd>{displayValue(context.activeEvents)}</dd><dt>approvalBacklog</dt><dd>{displayValue(context.approvalBacklog)}</dd><dt>processingBacklog</dt><dd>{displayValue(context.processingBacklog)}</dd><dt>balanceStatus</dt><dd>{context.balanceStatus || "NO_DATA"}</dd></dl></section>
@@ -141,7 +162,11 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
 }
 
 function ReferenceList({ references, title, empty }: { references: RagReference[]; title: string; empty: string }) {
-  return <section className="copilot-references"><strong>{title}</strong>{references.length ? <ol>{references.map((reference, index) => <li key={`${reference.path}-${reference.heading}-${index}`}><b>{reference.title}</b>{reference.heading ? <span>{reference.heading}</span> : null}<p>{reference.chunkText}</p><small>score {reference.score.toFixed(3)} · Obsidian</small></li>)}</ol> : <p>{empty}</p>}</section>;
+  return <section className="copilot-references"><strong>{title}</strong>{references.length ? <ol>{references.map((reference, index) => <li key={`${reference.title}-${reference.heading}-${index}`}><b>{reference.title}</b>{reference.heading ? <span>{reference.heading}</span> : null}<small>신뢰도 {(reference.score * 100).toFixed(1)}% · {reference.knowledgeScope === "PUBLIC" ? "승인 공개 문서" : "내부 운영 문서"}{reference.updatedAt ? ` · ${reference.updatedAt}` : ""}</small></li>)}</ol> : <p>{empty}</p>}</section>;
+}
+
+function EvidenceQuality({ answer }: { answer: RagAnswer }) {
+  return <dl className="copilot-evidence-quality"><dt>근거 유형</dt><dd>{answer.evidenceType === "DOCUMENT" ? "문서 기반" : answer.evidenceType}</dd><dt>답변 범위</dt><dd>{answer.answerScope === "PUBLIC_APPROVED_KNOWLEDGE" ? "승인된 공개 지식" : "내부 운영 지식"}</dd><dt>근거 최신성</dt><dd>{answer.sourceFreshness}</dd><dt>신뢰 수준</dt><dd>{answer.confidence}</dd><dt>실시간 확인</dt><dd>{answer.actualCheckPerformed ? "수행됨" : "수행하지 않음"}</dd>{answer.cannotVerifyReason ? <><dt>확인 제한</dt><dd>{answer.cannotVerifyReason}</dd></> : null}</dl>;
 }
 
 function deriveState(runtime: AiRuntime | null, error: string | null): CopilotState {

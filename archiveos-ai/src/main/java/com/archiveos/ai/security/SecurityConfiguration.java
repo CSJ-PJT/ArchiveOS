@@ -42,7 +42,9 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/obsidian/documents", "/api/rag/search").hasAnyRole("AUTHENTICATED_READ", "OPERATOR", "PM", "ADMIN")
                         // The public Control Tower exposes question answering, not raw document search.
                         // The controller applies a per-remote rate limit and records a redacted audit event.
-                        .requestMatchers(HttpMethod.POST, "/api/rag/ask").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/rag/ask", "/api/rag/verification/plans").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/rag/verification/plans/*/execute")
+                            .hasAnyRole("AUTHENTICATED_READ", "OPERATOR", "PM", "ADMIN")
                         // These endpoints back the public read-only Records/Live Flow views.
                         // Keep entity/correlation/replay and all mutation routes role-gated.
                         .requestMatchers(HttpMethod.GET, "/api/runtime/timeline", "/api/live-flow/events/recent", "/api/live-flow/recent").permitAll()
