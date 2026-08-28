@@ -10,13 +10,19 @@ const ADMIN_READ_EXACT = new Set([
   "/api/security/status",
   "/api/audit/logs",
   "/api/audit/usage",
+]);
+
+const PUBLIC_BATCH_READ_EXACT = new Set([
   "/api/batch/jobs",
   "/api/batch/executions",
 ]);
 
 export function requiresAdminRead(method: string, requestPath: string) {
   if (method.toUpperCase() !== "GET") return false;
-  return ADMIN_READ_EXACT.has(requestPath) || requestPath.startsWith("/api/batch/executions/");
+  if (requestPath.startsWith("/api/batch/")) {
+    return !PUBLIC_BATCH_READ_EXACT.has(requestPath) && !/^\/api\/batch\/executions\/\d+$/.test(requestPath);
+  }
+  return ADMIN_READ_EXACT.has(requestPath);
 }
 
 export function isArchiveOsAdminServiceRequest(request: Request) {

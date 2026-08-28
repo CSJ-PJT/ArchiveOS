@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { isArchiveOsAdminServiceRequest, rejectCrossOriginMutation, requiresAdminRead, securityAlertClientIp, securityHeaders } from "./httpSecurity.js";
 
 assert.equal(requiresAdminRead("GET", "/api/local-actions/projects"), true);
-assert.equal(requiresAdminRead("GET", "/api/batch/executions/42"), true);
+assert.equal(requiresAdminRead("GET", "/api/batch/jobs"), false);
+assert.equal(requiresAdminRead("GET", "/api/batch/executions"), false);
+assert.equal(requiresAdminRead("GET", "/api/batch/executions/42"), false);
+assert.equal(requiresAdminRead("GET", "/api/batch/internal-config"), true);
 assert.equal(requiresAdminRead("GET", "/api/batches/latest"), false);
 assert.equal(requiresAdminRead("POST", "/api/batch/jobs"), false);
 assert.equal(isArchiveOsAdminServiceRequest({ header: (name: string) => ({

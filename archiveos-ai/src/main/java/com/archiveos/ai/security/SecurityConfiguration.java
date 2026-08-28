@@ -31,7 +31,12 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/auth/admin/users").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/security/**", "/api/audit/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/batch/**", "/api/runtime/public-access").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/runtime/public-access").hasRole("ADMIN")
+                        // Job catalog and execution telemetry are part of the public, read-only
+                        // operations console. Batch launches and every other mutation remain
+                        // admin-only below.
+                        .requestMatchers(HttpMethod.GET, "/api/batch/jobs", "/api/batch/executions", "/api/batch/executions/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/batch/**").hasRole("ADMIN")
                         .requestMatchers("/api/mail/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/obsidian/documents", "/api/rag/search").hasAnyRole("AUTHENTICATED_READ", "OPERATOR", "PM", "ADMIN")
                         // The public Control Tower exposes question answering, not raw document search.

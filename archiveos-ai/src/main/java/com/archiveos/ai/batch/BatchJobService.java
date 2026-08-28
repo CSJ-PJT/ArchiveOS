@@ -71,7 +71,7 @@ public class BatchJobService {
                 .toJobParameters();
         try {
             JobExecution execution = jobLauncher.run(job, parameters);
-            return executionSummary(execution);
+            return administrativeExecutionSummary(execution);
         } catch (JobExecutionAlreadyRunningException
                  | JobRestartException
                  | JobInstanceAlreadyCompleteException
@@ -95,10 +95,10 @@ public class BatchJobService {
     public Map<String, Object> execution(long executionId) {
         JobExecution execution = jobExplorer.getJobExecution(executionId);
         if (execution == null) return null;
-        Map<String, Object> summary = executionSummary(execution);
+        Map<String, Object> summary = publicExecutionSummary(execution);
         summary.put("steps", execution.getStepExecutions().stream()
                 .sorted(Comparator.comparing(StepExecution::getStepName))
-                .map(this::stepSummary)
+                .map(this::publicStepSummary)
                 .toList());
         return summary;
     }
@@ -109,7 +109,7 @@ public class BatchJobService {
         List<JobInstance> instances = jobExplorer.getJobInstances(jobName, 0, pageSize);
         for (JobInstance instance : instances) {
             for (JobExecution execution : jobExplorer.getJobExecutions(instance)) {
-                rows.add(executionSummary(execution));
+                rows.add(publicExecutionSummary(execution));
             }
         }
         return rows.stream()
@@ -118,23 +118,28 @@ public class BatchJobService {
                 .toList();
     }
 
-    private Map<String, Object> executionSummary(JobExecution execution) {
+    private Map<String, Object> publicExecutionSummary(JobExecution execution) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("id", execution.getId());
         row.put("jobName", execution.getJobInstance() == null ? null : execution.getJobInstance().getJobName());
         row.put("status", execution.getStatus().name());
         row.put("exitCode", execution.getExitStatus().getExitCode());
-        row.put("exitDescription", safeExitDescription(execution));
         row.put("createTime", format(execution.getCreateTime()));
         row.put("startTime", format(execution.getStartTime()));
         row.put("endTime", format(execution.getEndTime()));
         row.put("running", execution.getStatus() == BatchStatus.STARTED || execution.getStatus() == BatchStatus.STARTING);
+        return row;
+    }
+
+    private Map<String, Object> administrativeExecutionSummary(JobExecution execution) {
+        Map<String, Object> row = publicExecutionSummary(execution);
+        row.put("exitDescription", safeExitDescription(execution));
         row.put("parameters", execution.getJobParameters().getParameters());
         row.put("executionContext", execution.getExecutionContext());
         return row;
     }
 
-    private Map<String, Object> stepSummary(StepExecution step) {
+    private Map<String, Object> publicStepSummary(StepExecution step) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("stepName", step.getStepName());
         row.put("status", step.getStatus().name());
@@ -145,7 +150,6 @@ public class BatchJobService {
         row.put("rollbackCount", step.getRollbackCount());
         row.put("startTime", format(step.getStartTime()));
         row.put("endTime", format(step.getEndTime()));
-        row.put("executionContext", step.getExecutionContext());
         return row;
     }
 
