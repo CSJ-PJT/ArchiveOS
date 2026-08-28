@@ -36,8 +36,10 @@ public class MailController {
     @GetMapping("/messages")
     public Map<String, Object> messages(@RequestParam(defaultValue = "inbox") String folder,
                                         @RequestParam(defaultValue = "0") int page,
-                                        @RequestParam(defaultValue = "20") int size) {
-        return Map.of("data", mail.list(folder, page, size));
+                                        @RequestParam(defaultValue = "20") int size,
+                                        @RequestParam(defaultValue = "") String q,
+                                        @RequestParam(defaultValue = "all") String field) {
+        return Map.of("data", mail.list(folder, page, size, q, field));
     }
 
     @GetMapping("/messages/{id}")
@@ -52,9 +54,34 @@ public class MailController {
         catch (MailService.MailNotFoundException missing) { return ResponseEntity.notFound().build(); }
     }
 
+    @PatchMapping("/messages/read")
+    public Map<String, Object> markSelectedRead(@RequestBody MessageStateRequest request) {
+        return Map.of("data", mail.markReadSelected(request.ids(), request.enabled()));
+    }
+
+    @PatchMapping("/messages/starred")
+    public Map<String, Object> markSelectedStarred(@RequestBody MessageStateRequest request) {
+        return Map.of("data", mail.markStarred(request.ids(), request.enabled()));
+    }
+
     @DeleteMapping("/messages")
     public Map<String, Object> deleteMessages(@RequestBody DeleteMessagesRequest request) {
         return Map.of("data", mail.deleteSelected(request.ids()));
+    }
+
+    @PostMapping("/messages/restore")
+    public Map<String, Object> restoreMessages(@RequestBody DeleteMessagesRequest request) {
+        return Map.of("data", mail.restoreSelected(request.ids()));
+    }
+
+    @DeleteMapping("/messages/permanent")
+    public Map<String, Object> permanentlyDeleteMessages(@RequestBody DeleteMessagesRequest request) {
+        return Map.of("data", mail.permanentlyDeleteSelected(request.ids()));
+    }
+
+    @DeleteMapping("/messages/trash")
+    public Map<String, Object> emptyTrash() {
+        return Map.of("data", mail.emptyTrash());
     }
 
     @DeleteMapping("/messages/folder")
@@ -98,5 +125,6 @@ public class MailController {
 
     public record SendRequest(List<String> to, List<String> cc, @NotBlank String subject, String text, String html) {}
     public record ReadRequest(boolean read) {}
+    public record MessageStateRequest(List<UUID> ids, boolean enabled) {}
     public record DeleteMessagesRequest(List<UUID> ids) {}
 }
