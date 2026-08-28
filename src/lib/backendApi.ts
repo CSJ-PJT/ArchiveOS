@@ -37,7 +37,7 @@ export type UsageAuditEntry = {
   client_ip: string | null;
   user_agent: string | null;
   authenticated: boolean;
-  source: "PAGE_VIEW" | "API_ACTION" | string;
+  source: "PAGE_VIEW" | "API_ACTION" | "ATLAS_PAGE_VIEW" | string;
 };
 
 export type UsageAuditPage = {

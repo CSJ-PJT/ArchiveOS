@@ -795,6 +795,14 @@ app.post("/api/audit/usage", async (request, response) => {
   await relayArchiveOsAi(response, "/api/audit/usage", jsonProxyRequest("POST", request.body), undefined, request);
 });
 
+app.post("/api/audit/usage/atlas-report", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/audit/usage/atlas-report", jsonProxyRequest("POST", request.body), undefined, request);
+});
+
+app.post("/api/audit/usage/atlas-events", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/audit/usage/atlas-events", jsonProxyRequest("POST", request.body), undefined, request);
+});
+
 app.get("/api/audit/usage", async (request, response) => {
   const page = Number(request.query.page ?? 0);
   const size = Number(request.query.size ?? 25);
@@ -2235,6 +2243,7 @@ function isArchiveOsAiAllowedAuthPath(path: string) {
 }
 
 function shouldForwardAuthenticatedReadHeaders(path: string, request: any) {
+  if (isArchiveOsAdminServiceRequest(request)) return true;
   if (!isArchiveOsAiAllowedAuthPath(path)) return false;
   const authorization = request?.header?.("authorization");
   if (!authorization || !authorization.startsWith("Bearer ")) return false;
