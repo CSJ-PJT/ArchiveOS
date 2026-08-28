@@ -44,7 +44,13 @@ if ((navigation.match(/\{ id: "/g) ?? []).length !== 7) throw new Error("Archive
 for (const contract of ['item.id !== "mail" || role === "ADMIN"', "관리자 전용 ArchiveOS 메일"]) {
   if (!sidebar.includes(contract) && !navigation.includes(contract)) throw new Error(`Admin-only mail navigation contract missing: ${contract}`);
 }
-for (const contract of ["getMailStatus", "getMailMessages", "getMailMessage", "markMailRead", "sendMail", "관리자 로그인이 필요합니다", "외부 메일 발송"]) {
+for (const contract of [
+  "getMailStatus", "getMailMessages", "getMailMessage", "markMailRead", "sendMail",
+  "markMailMessagesRead", "markMailMessagesStarred", "restoreMailMessages",
+  "permanentlyDeleteMailMessages", "emptyMailTrash", "관리자 로그인이 필요합니다",
+  "받은메일함", "보낸메일함", "읽지 않은 메일", "중요 메일", "첨부 메일", "휴지통",
+  "전체 답장", "메일 전달", "메일 발송",
+]) {
   if (!mailPage.includes(contract) && !api.includes(contract)) throw new Error(`ArchiveOS mail UI contract missing: ${contract}`);
 }
 for (const route of ["overview", "liveflow", "ecosystem", "agents", "approvals", "history", "mcp"]) {
