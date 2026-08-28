@@ -565,4 +565,7 @@ export const runtimePhrases: RuntimePhrase[] = [
   phrase("이력 에이전트가 설정됐으며 아직 내보내기 기록은 없습니다.", "The historian agent is configured; no export has been recorded yet.", "履歴エージェントは設定済みですが、エクスポート記録はまだありません。", "历史代理已配置，尚无导出记录。"),
   phrase("운영 큐:", "Operations queue:", "運用キュー:", "运营队列："),
   phrase("결과", "Results", "結果", "结果"),
+  phrase("일부 서비스 재무 데이터 미수집", "Financial data missing for some services", "一部サービスの財務データ未収集", "部分服务财务数据未采集"),
+  phrase("최근", "Last", "直近", "最近"),
+  phrase("수신", "received", "受信", "接收"),
 ];
