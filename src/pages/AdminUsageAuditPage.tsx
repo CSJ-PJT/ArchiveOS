@@ -7,6 +7,7 @@ const PAGE_SIZE = 25;
 
 export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
   const [page, setPage] = useState(0);
+  const [selectedDate, setSelectedDate] = useState(todayInKorea);
   const [data, setData] = useState<UsageAuditPage | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +17,7 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
     setLoading(true);
     setError(null);
     try {
-      const result = await getUsageAudit(page, PAGE_SIZE);
+      const result = await getUsageAudit(page, PAGE_SIZE, selectedDate);
       setData(result);
       const lastPage = Math.max(0, Math.ceil(result.total / result.size) - 1);
       if (page > lastPage) setPage(lastPage);
@@ -25,7 +26,7 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
     } finally {
       setLoading(false);
     }
-  }, [page, role]);
+  }, [page, role, selectedDate]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -34,15 +35,21 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
   }
 
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.size ?? PAGE_SIZE)));
-  const latestAtlas = data?.atlas.reports[0];
+  const latestAtlas = data?.atlas.reports.find((report) => report.target_date === selectedDate);
   return <div className="page-stack admin-usage-audit">
     <SectionCard title="ArchiveOS 사용 기록" eyebrow="관리자 전용 · 서버 기록" action={<button type="button" className="button button-secondary" onClick={() => void load()} disabled={loading}>{loading ? "갱신 중..." : "새로고침"}</button>}>
       <p className="body-copy">ArchiveOS 화면 사용과 승인·배치·메일 등 변경 작업의 계정, 접속 IP, 발생 시각을 확인합니다. IP는 브라우저 입력값이 아닌 서버 프록시 요청에서 기록합니다.</p>
+      <div className="usage-audit-date-controls" aria-label="사용 기록 조회 날짜">
+        <button type="button" onClick={() => moveDate(-1)} disabled={loading}>이전 날</button>
+        <label>조회 날짜<input type="date" value={selectedDate} max={todayInKorea()} onChange={(event) => { setPage(0); setSelectedDate(event.target.value || todayInKorea()); }} /></label>
+        <button type="button" onClick={() => { setPage(0); setSelectedDate(todayInKorea()); }} disabled={loading || selectedDate === todayInKorea()}>오늘</button>
+        <button type="button" onClick={() => moveDate(1)} disabled={loading || selectedDate >= todayInKorea()}>다음 날</button>
+      </div>
       <div className="usage-audit-summary" aria-label="사용 기록 요약">
-        <Summary label="전체 기록" value={data?.summary.total} />
-        <Summary label="최근 24시간" value={data?.summary.last_24_hours} />
-        <Summary label="24시간 접속 IP" value={data?.summary.unique_ips_24_hours} />
-        <Summary label="24시간 로그인 사용" value={data?.summary.authenticated_24_hours} />
+        <Summary label="선택일 전체 기록" value={data?.summary.total} />
+        <Summary label="선택일 접속 IP" value={data?.summary.unique_ips} />
+        <Summary label="로그인 사용자 기록" value={data?.summary.authenticated} />
+        <Summary label="Atlas 화면 기록" value={data?.summary.atlas_page_views} />
       </div>
     </SectionCard>
 
@@ -66,7 +73,7 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
             </tr>)}</tbody>
           </table>
         </div>
-      </> : <p className="empty-copy">Atlas 접근 집계가 아직 동기화되지 않았습니다.</p>}
+      </> : <p className="empty-copy">{selectedDate} Atlas·Archive 일일 집계가 아직 생성되지 않았습니다.</p>}
     </SectionCard>
 
     <SectionCard title="최근 사용 내역" eyebrow={`최신순 · 페이지당 ${PAGE_SIZE}건`}>
@@ -85,6 +92,13 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
       </div>
     </SectionCard>
   </div>;
+
+  function moveDate(days: number) {
+    const next = new Date(`${selectedDate}T12:00:00+09:00`);
+    next.setUTCDate(next.getUTCDate() + days);
+    setPage(0);
+    setSelectedDate(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(next));
+  }
 }
 
 function Summary({ label, value }: { label: string; value: number | string | undefined }) {
@@ -106,6 +120,7 @@ function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "시간 확인 불가" : date.toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
+function todayInKorea() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
 function roleLabel(role: string) { return ({ ADMIN:"관리자", PM:"PM", OPERATOR:"운영자", PUBLIC:"공개" } as Record<string,string>)[role] ?? role; }
 function featureLabel(feature: string) { return ({ auth:"로그인", tasks:"작업", approvals:"승인", batch:"배치", batches:"배치", mail:"메일", rag:"RAG", memory:"운영 메모리" } as Record<string,string>)[feature] ?? feature; }
 function routeLabel(route: string) { return route.startsWith("/api/") ? route.replace(/^\/api\//, "API · ") : route.startsWith("/") ? route : `#/${route}`; }

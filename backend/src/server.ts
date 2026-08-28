@@ -806,7 +806,8 @@ app.post("/api/audit/usage/atlas-events", async (request, response) => {
 app.get("/api/audit/usage", async (request, response) => {
   const page = Number(request.query.page ?? 0);
   const size = Number(request.query.size ?? 25);
-  await relayArchiveOsAi(response, `/api/audit/usage?page=${encodeURIComponent(String(page))}&size=${encodeURIComponent(String(size))}`, undefined, undefined, request);
+  const date = typeof request.query.date === "string" ? request.query.date : "";
+  await relayArchiveOsAi(response, `/api/audit/usage?page=${encodeURIComponent(String(page))}&size=${encodeURIComponent(String(size))}&date=${encodeURIComponent(date)}`, undefined, undefined, request);
 });
 
 app.get("/api/atlas/overview", async (request, response) => {

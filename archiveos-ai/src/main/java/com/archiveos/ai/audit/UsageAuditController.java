@@ -31,9 +31,14 @@ public class UsageAuditController {
     }
 
     @GetMapping
-    public Map<String, Object> recent(@RequestParam(defaultValue = "0") int page,
-                                      @RequestParam(defaultValue = "25") int size) {
-        return Map.of("data", usage.recent(page, size));
+    public ResponseEntity<Map<String, Object>> recent(@RequestParam(defaultValue = "0") int page,
+                                                       @RequestParam(defaultValue = "25") int size,
+                                                       @RequestParam(required = false) String date) {
+        try {
+            return ResponseEntity.ok(Map.of("data", usage.recent(page, size, date)));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(Map.of("error", error.getMessage()));
+        }
     }
 
     @PostMapping("/atlas-report")

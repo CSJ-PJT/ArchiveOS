@@ -20,18 +20,30 @@ class UsageAuditServiceTest {
     @Test
     void usageViewExcludesLiveFlowAutomationFromHumanActivity() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(jdbc.queryForObject(anyString(), eq(Integer.class))).thenReturn(0);
-        when(jdbc.queryForList(anyString(), eq(25), eq(0))).thenReturn(java.util.List.of());
-        when(jdbc.queryForMap(anyString())).thenReturn(java.util.Map.of());
+        when(jdbc.queryForObject(anyString(), eq(Integer.class), any(), any())).thenReturn(0);
+        when(jdbc.queryForList(anyString(), any(), any(), eq(25), eq(0))).thenReturn(java.util.List.of());
+        when(jdbc.queryForMap(anyString(), any(), any())).thenReturn(java.util.Map.of());
+        when(jdbc.queryForList(anyString())).thenReturn(java.util.List.of());
+        when(jdbc.queryForList(anyString(), any(java.time.LocalDate.class))).thenReturn(java.util.List.of());
         UsageAuditService service = new UsageAuditService(jdbc, mock(AuditLogService.class));
 
-        service.recent(0, 25);
+        service.recent(0, 25, "2026-08-28");
 
         ArgumentCaptor<String> totalSql = ArgumentCaptor.forClass(String.class);
-        verify(jdbc).queryForObject(totalSql.capture(), eq(Integer.class));
+        verify(jdbc).queryForObject(totalSql.capture(), eq(Integer.class), any(), any());
         assertThat(totalSql.getValue())
                 .contains("not in ('live_flow', 'live-flow')")
-                .contains("not like '/api/live-flow/%'");
+                .contains("not like '/api/live-flow/%'")
+                .contains("occurred_at >= ? and occurred_at < ?");
+    }
+
+    @Test
+    void rejectsInvalidDailyUsageDate() {
+        UsageAuditService service = new UsageAuditService(mock(JdbcTemplate.class), mock(AuditLogService.class));
+
+        assertThatThrownBy(() -> service.recent(0, 25, "2026-99-99"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("YYYY-MM-DD");
     }
 
     @Test
