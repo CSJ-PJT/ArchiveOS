@@ -8,6 +8,8 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
@@ -25,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class UsageAuditService {
     private static final int MAX_REQUESTS_PER_MINUTE = 60;
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private static final Set<String> ATLAS_REPORT_KEYS = Set.of(
             "schemaVersion", "targetDate", "baselineCutoff", "monitoredRequests",
             "monitoredUniqueIdentities", "statusCounts", "serviceCounts", "delivered",
@@ -90,32 +93,43 @@ public class UsageAuditService {
     }
 
     public Map<String, Object> recent(int page, int size) {
+        return recent(page, size, LocalDate.now(KST).toString());
+    }
+
+    public Map<String, Object> recent(int page, int size, String requestedDate) {
         int safePage = Math.max(0, page);
         int safeSize = Math.max(10, Math.min(size, 100));
         int offset = safePage * safeSize;
+        LocalDate selectedDate = parseUsageDate(requestedDate);
+        Timestamp dayStart = Timestamp.from(selectedDate.atStartOfDay(KST).toInstant());
+        Timestamp dayEnd = Timestamp.from(selectedDate.plusDays(1).atStartOfDay(KST).toInstant());
         String union = auditUnion();
-        Integer total = jdbc.queryForObject("select count(*)::int from (" + union + ") usage", Integer.class);
+        Integer total = jdbc.queryForObject("select count(*)::int from (" + union + ") usage where occurred_at >= ? and occurred_at < ?",
+                Integer.class, dayStart, dayEnd);
         List<Map<String, Object>> items = jdbc.queryForList("""
                 select id, occurred_at, actor, role, feature, route, action, client_ip, user_agent,
                        authenticated, source
                   from (%s) usage
+                 where occurred_at >= ? and occurred_at < ?
                  order by occurred_at desc, id desc
                  limit ? offset ?
-                """.formatted(union), safeSize, offset);
+                """.formatted(union), dayStart, dayEnd, safeSize, offset);
         Map<String, Object> summary = jdbc.queryForMap("""
                 select count(*)::int as total,
-                       count(*) filter (where occurred_at >= now() - interval '24 hours')::int as last_24_hours,
-                       count(distinct client_ip) filter (where occurred_at >= now() - interval '24 hours')::int as unique_ips_24_hours,
-                       count(*) filter (where occurred_at >= now() - interval '24 hours' and authenticated)::int as authenticated_24_hours
+                       count(distinct client_ip)::int as unique_ips,
+                       count(*) filter (where authenticated)::int as authenticated,
+                       count(*) filter (where source = 'ATLAS_PAGE_VIEW')::int as atlas_page_views
                   from (%s) usage
-                """.formatted(union));
+                 where occurred_at >= ? and occurred_at < ?
+                """.formatted(union), dayStart, dayEnd);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("items", items);
         result.put("page", safePage);
         result.put("size", safeSize);
         result.put("total", total == null ? 0 : total);
+        result.put("selected_date", selectedDate.toString());
         result.put("summary", summary);
-        result.put("atlas", atlasAccessSummary());
+        result.put("atlas", atlasAccessSummary(selectedDate));
         return result;
     }
 
@@ -208,7 +222,7 @@ public class UsageAuditService {
         return Map.of("accepted", events.size(), "imported", imported, "duplicates", events.size() - imported);
     }
 
-    private Map<String, Object> atlasAccessSummary() {
+    private Map<String, Object> atlasAccessSummary(LocalDate selectedDate) {
         List<Map<String, Object>> reports = jdbc.queryForList("""
                 select target_date, generated_at, delivered_at, monitored_requests,
                        monitored_unique_connections, status_2xx, status_3xx, status_4xx, status_5xx
@@ -219,14 +233,23 @@ public class UsageAuditService {
         List<Map<String, Object>> projects = jdbc.queryForList("""
                 select s.service_name, s.request_count
                   from public.atlas_access_daily_services s
-                 where s.target_date = (select max(target_date) from public.atlas_access_daily_reports)
+                 where s.target_date = ?
                  order by s.request_count desc, s.service_name
-                """);
+                """, selectedDate);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("reports", reports);
         result.put("projects", projects);
         result.put("privacy", "aggregate_only");
         return result;
+    }
+
+    private LocalDate parseUsageDate(String value) {
+        if (value == null || value.isBlank()) return LocalDate.now(KST);
+        try {
+            return LocalDate.parse(value.trim());
+        } catch (DateTimeParseException error) {
+            throw new IllegalArgumentException("조회 날짜는 YYYY-MM-DD 형식이어야 합니다.");
+        }
     }
 
     private String auditUnion() {

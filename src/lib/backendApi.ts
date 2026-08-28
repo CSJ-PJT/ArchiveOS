@@ -45,11 +45,12 @@ export type UsageAuditPage = {
   page: number;
   size: number;
   total: number;
+  selected_date: string;
   summary: {
     total: number;
-    last_24_hours: number;
-    unique_ips_24_hours: number;
-    authenticated_24_hours: number;
+    unique_ips: number;
+    authenticated: number;
+    atlas_page_views: number;
   };
   atlas: {
     privacy: "aggregate_only";
@@ -701,9 +702,13 @@ export async function recordConsoleUsage(route: string) {
   return response.data;
 }
 
-export async function getUsageAudit(page = 0, size = 25) {
-  const response = await request<ApiEnvelope<UsageAuditPage>>(`/api/audit/usage?page=${page}&size=${size}`);
+export async function getUsageAudit(page = 0, size = 25, date = todayInKorea()) {
+  const response = await request<ApiEnvelope<UsageAuditPage>>(`/api/audit/usage?page=${page}&size=${size}&date=${encodeURIComponent(date)}`);
   return response.data;
+}
+
+function todayInKorea() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 
 export async function getMcpRegistry() {
