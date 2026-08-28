@@ -168,6 +168,9 @@ for (const contract of ['data.auth.role === "ADMIN"', '["usage", "사용 기록"
 for (const contract of ["ArchiveOS 사용 기록", "client_ip", "사용 시각", "접속 환경", "PAGE_SIZE", "getUsageAudit"]) {
   if (!usageAudit.includes(contract)) throw new Error(`Admin usage audit UI contract missing: ${contract}`);
 }
+for (const contract of ["관리자 접속", "별도 감사 저장소", "getAdminAccessAudit", "매일 23:59 배치"]) {
+  if (!usageAudit.includes(contract)) throw new Error(`Admin access archive UI contract missing: ${contract}`);
+}
 for (const contract of ["recordConsoleUsage(route)", "lastUsageRecordedAt", "3_000"]) {
   if (!appShell.includes(contract)) throw new Error(`Console page usage tracking contract missing: ${contract}`);
 }

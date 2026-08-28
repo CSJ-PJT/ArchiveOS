@@ -1,6 +1,7 @@
 package com.archiveos.ai.batch;
 
 import com.archiveos.ai.rpa.RpaBatchConfiguration;
+import com.archiveos.ai.audit.AdminAccessBatchConfiguration;
 import com.archiveos.ai.operations.OperationsBatchConfiguration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -179,6 +180,7 @@ public class BatchJobService {
             case ArchiveBatchConfiguration.PIPELINE_AUDIT_JOB -> "Audit Log와 실패 응답을 집계해 Runtime Pipeline의 운영 증거를 남긴다.";
             case ArchiveBatchConfiguration.KNOWLEDGE_MAINTENANCE_JOB -> "Knowledge 문서, chunk, embedding, graph 저장소의 정합성과 준비 상태를 점검한다.";
             case RpaBatchConfiguration.JOB_NAME -> "PM 작업 설명을 rule-based RPA 분류와 승인 게이트로 전환한다.";
+            case AdminAccessBatchConfiguration.JOB_NAME -> "관리자 화면 사용과 API 작업을 별도 접속 감사 저장소로 보강한다.";
             default -> "ArchiveOS Spring Batch job.";
         };
     }
