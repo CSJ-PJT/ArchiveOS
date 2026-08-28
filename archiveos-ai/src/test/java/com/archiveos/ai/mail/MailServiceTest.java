@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -113,5 +114,37 @@ class MailServiceTest {
 
         verify(repository).saveInbound(anyString(), any(ResendMailGateway.ReceivedMail.class), any(Instant.class));
         verify(repository).completeForward("provider-inbound-123", "provider-forward-123");
+    }
+
+    @Test
+    void softDeletesSelectedMessagesWithinTheBoundedPageLimit() {
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        when(repository.deleteSelected("csj@archiveos.kr", List.of(first, second))).thenReturn(2);
+        when(repository.unreadCount("csj@archiveos.kr")).thenReturn(1L);
+
+        Map<String, Object> result = service.deleteSelected(List.of(first, second, first));
+
+        assertThat(result).containsEntry("deleted", 2).containsEntry("unread", 1L);
+        verify(repository).deleteSelected("csj@archiveos.kr", List.of(first, second));
+    }
+
+    @Test
+    void rejectsAnUnscopedOrUnsupportedFolderDelete() {
+        assertThatThrownBy(() -> service.deleteFolder("all"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("inbox or sent");
+        verify(repository, never()).deleteFolder(anyString(), anyString());
+    }
+
+    @Test
+    void softDeletesOnlyTheRequestedFolder() {
+        when(repository.deleteFolder("csj@archiveos.kr", "inbox")).thenReturn(4);
+        when(repository.unreadCount("csj@archiveos.kr")).thenReturn(0L);
+
+        Map<String, Object> result = service.deleteFolder("INBOX");
+
+        assertThat(result).containsEntry("deleted", 4).containsEntry("unread", 0L);
+        verify(repository).deleteFolder("csj@archiveos.kr", "inbox");
     }
 }

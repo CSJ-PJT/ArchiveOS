@@ -79,6 +79,26 @@ public class MailService {
         return Map.of("id", id, "read", read, "unread", repository.unreadCount(properties.normalizedAddress()));
     }
 
+    public Map<String, Object> deleteSelected(List<UUID> ids) {
+        requireMailbox();
+        List<UUID> uniqueIds = ids == null ? List.of() : ids.stream().distinct().toList();
+        if (uniqueIds.isEmpty() || uniqueIds.size() > 50) {
+            throw new IllegalArgumentException("Between 1 and 50 message ids are required.");
+        }
+        int deleted = repository.deleteSelected(properties.normalizedAddress(), uniqueIds);
+        return Map.of("deleted", deleted, "unread", repository.unreadCount(properties.normalizedAddress()));
+    }
+
+    public Map<String, Object> deleteFolder(String folder) {
+        requireMailbox();
+        String normalizedFolder = folder == null ? "" : folder.trim().toLowerCase(Locale.ROOT);
+        if (!List.of("inbox", "sent").contains(normalizedFolder)) {
+            throw new IllegalArgumentException("folder must be inbox or sent.");
+        }
+        int deleted = repository.deleteFolder(properties.normalizedAddress(), normalizedFolder);
+        return Map.of("deleted", deleted, "unread", repository.unreadCount(properties.normalizedAddress()));
+    }
+
     public Map<String, Object> send(List<String> to, List<String> cc, String subject, String text, String html) {
         requireMailbox();
         List<String> recipients = normalizeEmails(to, true);

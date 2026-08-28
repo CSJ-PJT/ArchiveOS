@@ -1,6 +1,8 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { CoreRoute } from "../app/navigation";
 import {
+  deleteMailFolder,
+  deleteMailMessages,
   getMailMessage,
   getMailMessages,
   getMailStatus,
@@ -19,9 +21,12 @@ type Folder = "inbox" | "sent";
 export function MailPage({ role, onNavigate }: { role: PlatformRole; onNavigate: (route: CoreRoute) => void }) {
   const [folder, setFolder] = useState<Folder>("inbox");
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
   const [status, setStatus] = useState<MailStatus | null>(null);
   const [messages, setMessages] = useState<MailMessagePage | null>(null);
   const [selected, setSelected] = useState<MailMessage | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -31,7 +36,7 @@ export function MailPage({ role, onNavigate }: { role: PlatformRole; onNavigate:
     setLoading(true);
     setError("");
     try {
-      const [nextStatus, nextMessages] = await Promise.all([getMailStatus(), getMailMessages(folder, page, 20)]);
+      const [nextStatus, nextMessages] = await Promise.all([getMailStatus(), getMailMessages(folder, page, pageSize)]);
       setStatus({ ...nextStatus, unread: nextMessages.unread });
       setMessages(nextMessages);
     } catch (reason) {
@@ -39,7 +44,7 @@ export function MailPage({ role, onNavigate }: { role: PlatformRole; onNavigate:
     } finally {
       setLoading(false);
     }
-  }, [folder, page, role]);
+  }, [folder, page, pageSize, role]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -59,6 +64,51 @@ export function MailPage({ role, onNavigate }: { role: PlatformRole; onNavigate:
     }
   };
 
+  const changeFolder = (nextFolder: Folder) => {
+    setFolder(nextFolder);
+    setPage(0);
+    setSelected(null);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const deleteSelection = async () => {
+    if (!selectedIds.size || !window.confirm(`선택한 메일 ${selectedIds.size}건을 삭제하시겠습니까?`)) return;
+    setDeleting(true); setError(""); setNotice("");
+    try {
+      const ids = [...selectedIds];
+      const result = await deleteMailMessages(ids);
+      if (selected && selectedIds.has(selected.id)) setSelected(null);
+      setSelectedIds(new Set());
+      setStatus((current) => current ? { ...current, unread: result.unread } : current);
+      setNotice(`메일 ${result.deleted}건을 삭제했습니다.`);
+      if (page > 0 && result.deleted >= (messages?.items.length ?? 0)) setPage((value) => Math.max(0, value - 1));
+      else await refresh();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "메일 삭제에 실패했습니다."); }
+    finally { setDeleting(false); }
+  };
+
+  const deleteCurrentFolder = async () => {
+    const label = folder === "inbox" ? "받은메일" : "보낸메일";
+    if (!window.confirm(`${label} 전체를 삭제하시겠습니까? 이 작업은 관리자 화면에서 되돌릴 수 없습니다.`)) return;
+    setDeleting(true); setError(""); setNotice("");
+    try {
+      const result = await deleteMailFolder(folder);
+      setSelected(null); setSelectedIds(new Set()); setPage(0);
+      setStatus((current) => current ? { ...current, unread: result.unread } : current);
+      setNotice(`${label} ${result.deleted}건을 삭제했습니다.`);
+      setMessages({ items: [], page: 0, size: pageSize, total: 0, unread: result.unread });
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "메일 전체 삭제에 실패했습니다."); }
+    finally { setDeleting(false); }
+  };
+
   if (role !== "ADMIN") {
     return <div className="console-page mail-page"><PageHeader title="메일" description="ArchiveOS 도메인 메일은 관리자 세션에서만 접근할 수 있습니다." />
       <section className="mail-access-card"><StatusBadge status="blocked">관리자 전용</StatusBadge><h2>관리자 로그인이 필요합니다.</h2><p>메일 본문과 외부 발송 기능은 공개·운영자·PM 세션에 노출되지 않습니다.</p><button className="primary-action" type="button" onClick={() => onNavigate("settings")}>로그인 화면으로 이동</button></section>
@@ -76,12 +126,18 @@ export function MailPage({ role, onNavigate }: { role: PlatformRole; onNavigate:
     {error ? <div className="mail-banner error" role="alert">{error}</div> : null}
     {notice ? <div className="mail-banner success" role="status">{notice}</div> : null}
     <div className="mail-layout">
-      <aside className="mail-folders"><button className={folder === "inbox" ? "active" : ""} onClick={() => { setFolder("inbox"); setPage(0); setSelected(null); }}>받은메일 <b>{status?.unread ?? 0}</b></button><button className={folder === "sent" ? "active" : ""} onClick={() => { setFolder("sent"); setPage(0); setSelected(null); }}>보낸메일</button></aside>
+      <aside className="mail-folders"><button className={folder === "inbox" ? "active" : ""} onClick={() => changeFolder("inbox")}>받은메일 <b>{status?.unread ?? 0}</b></button><button className={folder === "sent" ? "active" : ""} onClick={() => changeFolder("sent")}>보낸메일</button></aside>
       <section className="mail-list" aria-label={folder === "inbox" ? "받은메일" : "보낸메일"}>
         <ComposeMail onSent={(message) => { setNotice(`“${message.subject}” 메일을 발송했습니다.`); setFolder("sent"); setPage(0); setSelected(message); void refresh(); }} onError={setError} />
+        <div className="mail-list-toolbar">
+          <label><input type="checkbox" checked={Boolean(messages?.items.length) && messages!.items.every((message) => selectedIds.has(message.id))} onChange={(event) => setSelectedIds(event.target.checked ? new Set(messages?.items.map((message) => message.id) ?? []) : new Set())} /> 현재 페이지 전체 선택</label>
+          <button type="button" disabled={!selectedIds.size || deleting} onClick={() => void deleteSelection()}>선택 삭제</button>
+          <button type="button" className="danger" disabled={!messages?.total || deleting} onClick={() => void deleteCurrentFolder()}>현재 편지함 전체 삭제</button>
+          <label>페이지당 <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(0); setSelectedIds(new Set()); }}>{[10, 20, 50].map((size) => <option key={size} value={size}>{size}개</option>)}</select></label>
+        </div>
         {!messages?.items.length && !loading ? <p className="empty-copy">표시할 메일이 없습니다.</p> : null}
-        {messages?.items.map((message) => <button key={message.id} type="button" className={`mail-row ${selected?.id === message.id ? "selected" : ""} ${message.is_read ? "" : "unread"}`} onClick={() => void openMessage(message)}><span className="mail-row-party">{folder === "inbox" ? message.from_address : message.to_addresses.join(", ")}</span><strong>{message.subject || "(제목 없음)"}</strong><time>{new Date(message.occurred_at).toLocaleString()}</time>{message.direction === "outbound" ? <StatusBadge status={mailDeliveryTone(message.delivery_status)}>{mailDeliveryLabel(message.delivery_status)}</StatusBadge> : null}{message.attachments.length ? <span>첨부 {message.attachments.length}</span> : null}</button>)}
-        <div className="mail-pagination"><button type="button" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}>이전</button><span>{messages ? `${page + 1} / ${Math.max(1, Math.ceil(messages.total / messages.size))}` : "1 / 1"}</span><button type="button" disabled={!messages || (page + 1) * messages.size >= messages.total} onClick={() => setPage((value) => value + 1)}>다음</button></div>
+        {messages?.items.map((message) => <div key={message.id} className={`mail-row-shell ${selected?.id === message.id ? "selected" : ""} ${message.is_read ? "" : "unread"}`}><label className="mail-row-check"><input type="checkbox" checked={selectedIds.has(message.id)} onChange={() => toggleSelection(message.id)} aria-label={`메일 선택: ${message.subject || "제목 없음"}`} /></label><button type="button" className="mail-row" onClick={() => void openMessage(message)}><span className="mail-row-party">{folder === "inbox" ? message.from_address : message.to_addresses.join(", ")}</span><strong>{message.subject || "(제목 없음)"}</strong><time>{new Date(message.occurred_at).toLocaleString()}</time>{message.direction === "outbound" ? <StatusBadge status={mailDeliveryTone(message.delivery_status)}>{mailDeliveryLabel(message.delivery_status)}</StatusBadge> : null}{message.attachments.length ? <span>첨부 {message.attachments.length}</span> : null}</button></div>)}
+        <div className="mail-pagination"><button type="button" disabled={page === 0} onClick={() => { setSelectedIds(new Set()); setPage((value) => Math.max(0, value - 1)); }}>이전</button><span>{messages ? `${page + 1} / ${Math.max(1, Math.ceil(messages.total / messages.size))}` : "1 / 1"}</span><button type="button" disabled={!messages || (page + 1) * messages.size >= messages.total} onClick={() => { setSelectedIds(new Set()); setPage((value) => value + 1); }}>다음</button></div>
       </section>
       <MailDetail message={selected} onReply={(address, subject) => window.dispatchEvent(new CustomEvent("archiveos-mail-reply", { detail: { address, subject } }))} />
     </div>
