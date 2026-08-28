@@ -2,7 +2,9 @@
 
 이 스크립트들은 ArchiveOS와 DeepStake3D / WorldPrototype3D 작업 주변에서 사용하는 비대화형 로컬 프로세스를 시작, 중지, 조회하기 위한 개발자 도구입니다.
 
-ArchiveOS UI는 계속 읽기 전용입니다. 이 스크립트들은 프론트엔드나 백엔드 API로 노출하지 않습니다.
+ArchiveOS 관리자 UI는 고정된 네 가지 runtime 작업만 요청할 수 있습니다. Docker 백엔드는
+`queue/control`에 요청을 기록하고 Windows의 `host-controller.ps1`이 허용 목록을 검증한 뒤
+로컬 스크립트를 실행합니다. 임의 명령, 경로, 인자는 API에서 받지 않습니다.
 
 ## 관리 대상 프로세스
 
