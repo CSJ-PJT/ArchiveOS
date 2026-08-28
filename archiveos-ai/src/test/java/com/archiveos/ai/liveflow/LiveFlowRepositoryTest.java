@@ -70,6 +70,7 @@ class LiveFlowRepositoryTest {
                 .contains("partition by service_bucket")
                 .contains("ranked.service_rank asc")
                 .contains("source_system_id in ('archive-logistics', 'archive-logitics')")
-                .contains("partition by lower(trim(coalesce(from_node, '')))");
+                .contains("partition by lower(trim(coalesce(from_node, '')))")
+                .doesNotContain("'runtime_activity'");
     }
 }
