@@ -36,4 +36,19 @@ class UsageAuditControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("지원하지 않는 ArchiveOS 화면입니다."));
     }
+
+    @Test
+    void acceptsAggregateAtlasReport() throws Exception {
+        UsageAuditService service = mock(UsageAuditService.class);
+        when(service.importAtlasReport(any())).thenReturn(java.util.Map.of(
+                "imported", true, "targetDate", "2026-08-27", "projectCount", 8));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service)).build();
+
+        mvc.perform(post("/api/audit/usage/atlas-report")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"schemaVersion\":1}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.imported").value(true))
+                .andExpect(jsonPath("$.data.projectCount").value(8));
+    }
 }

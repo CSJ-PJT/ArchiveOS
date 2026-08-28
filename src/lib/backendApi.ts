@@ -51,6 +51,24 @@ export type UsageAuditPage = {
     unique_ips_24_hours: number;
     authenticated_24_hours: number;
   };
+  atlas: {
+    privacy: "aggregate_only";
+    reports: Array<{
+      target_date: string;
+      generated_at: string;
+      delivered_at: string | null;
+      monitored_requests: number;
+      monitored_unique_connections: number;
+      status_2xx: number;
+      status_3xx: number;
+      status_4xx: number;
+      status_5xx: number;
+    }>;
+    projects: Array<{
+      service_name: string;
+      request_count: number;
+    }>;
+  };
 };
 
 export type McpRegistryEntry = {

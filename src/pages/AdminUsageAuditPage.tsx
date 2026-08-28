@@ -34,6 +34,7 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
   }
 
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.size ?? PAGE_SIZE)));
+  const latestAtlas = data?.atlas.reports[0];
   return <div className="page-stack admin-usage-audit">
     <SectionCard title="ArchiveOS 사용 기록" eyebrow="관리자 전용 · 서버 기록" action={<button type="button" className="button button-secondary" onClick={() => void load()} disabled={loading}>{loading ? "갱신 중..." : "새로고침"}</button>}>
       <p className="body-copy">ArchiveOS 화면 사용과 승인·배치·메일 등 변경 작업의 계정, 접속 IP, 발생 시각을 확인합니다. IP는 브라우저 입력값이 아닌 서버 프록시 요청에서 기록합니다.</p>
@@ -43,6 +44,29 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
         <Summary label="24시간 접속 IP" value={data?.summary.unique_ips_24_hours} />
         <Summary label="24시간 로그인 사용" value={data?.summary.authenticated_24_hours} />
       </div>
+    </SectionCard>
+
+    <SectionCard title="Atlas 프로젝트 외부 접속" eyebrow="OCI 일일 집계 · 비식별">
+      <p className="body-copy">Atlas 운영 서버가 하루 단위로 집계한 외부 접속 현황입니다. 원 IP, HMAC 식별값, 별칭과 토큰은 ArchiveOS에 저장하거나 표시하지 않습니다.</p>
+      {latestAtlas ? <>
+        <div className="usage-audit-summary" aria-label="Atlas 외부 접속 요약">
+          <Summary label="집계 기준일" value={latestAtlas.target_date} />
+          <Summary label="외부 요청" value={latestAtlas.monitored_requests} />
+          <Summary label="고유 비식별 접속" value={latestAtlas.monitored_unique_connections} />
+          <Summary label="오류 응답" value={latestAtlas.status_4xx + latestAtlas.status_5xx} />
+        </div>
+        <div className="usage-audit-table-wrap">
+          <table className="usage-audit-table atlas-access-table">
+            <thead><tr><th>프로젝트</th><th>외부 요청</th><th>기준일</th><th>응답 상태</th></tr></thead>
+            <tbody>{data?.atlas.projects.map((project) => <tr key={project.service_name}>
+              <td><strong>{atlasProjectLabel(project.service_name)}</strong><small>{atlasProjectPath(project.service_name)}</small></td>
+              <td><strong>{project.request_count.toLocaleString()}건</strong></td>
+              <td><time dateTime={latestAtlas.generated_at}>{formatDate(latestAtlas.generated_at)}</time></td>
+              <td><span>2xx {latestAtlas.status_2xx.toLocaleString()} · 3xx {latestAtlas.status_3xx.toLocaleString()}</span><small>4xx {latestAtlas.status_4xx.toLocaleString()} · 5xx {latestAtlas.status_5xx.toLocaleString()}</small></td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+      </> : <p className="empty-copy">Atlas 접근 집계가 아직 동기화되지 않았습니다.</p>}
     </SectionCard>
 
     <SectionCard title="최근 사용 내역" eyebrow={`최신순 · 페이지당 ${PAGE_SIZE}건`}>
@@ -63,8 +87,8 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
   </div>;
 }
 
-function Summary({ label, value }: { label: string; value: number | undefined }) {
-  return <article><span>{label}</span><strong>{value === undefined ? "-" : value.toLocaleString()}</strong></article>;
+function Summary({ label, value }: { label: string; value: number | string | undefined }) {
+  return <article><span>{label}</span><strong>{value === undefined ? "-" : typeof value === "number" ? value.toLocaleString() : value}</strong></article>;
 }
 
 function UsageRow({ entry }: { entry: UsageAuditEntry }) {
@@ -100,4 +124,30 @@ function deviceLabel(value: string | null) {
   if (/firefox/i.test(value)) return "Firefox";
   if (/safari/i.test(value)) return "Safari";
   return "브라우저";
+}
+
+function atlasProjectLabel(value: string) {
+  return ({
+    "Atlas Home/Other": "Atlas 통합 홈",
+    "Learn Atlas": "Backend Atlas 학습",
+    "Sketchfy Atlas": "Sketchfy Atlas",
+    "Incruit Atlas": "Incruit Atlas",
+    "Health Atlas": "Health Atlas",
+    "Travel Atlas": "Route Atlas",
+    "World Atlas": "Archive World",
+    Archive: "Archive",
+  } as Record<string, string>)[value] ?? value;
+}
+
+function atlasProjectPath(value: string) {
+  return ({
+    "Atlas Home/Other": "/atlas 및 기타",
+    "Learn Atlas": "/learn · /run",
+    "Sketchfy Atlas": "/sketchfy",
+    "Incruit Atlas": "/jobs",
+    "Health Atlas": "/health",
+    "Travel Atlas": "/travel",
+    "World Atlas": "/world",
+    Archive: "/archive",
+  } as Record<string, string>)[value] ?? "Atlas OCI";
 }
