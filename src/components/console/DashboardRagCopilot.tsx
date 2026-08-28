@@ -82,7 +82,7 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
     setQuery(normalized); setOpen(true); setLoading(true); setRequestError(null); setAnswer(null); setResults(null); setDecision(null); setVerificationPlan(null); setVerificationReceipt(null);
     try {
       if (mode === "search") setResults(await searchRag(normalized, { signal: controller.signal }));
-      else setAnswer(await askRag(normalized, context, { signal: controller.signal }));
+      else setAnswer(await askRag(normalized, data.auth.authenticated ? context : undefined, { signal: controller.signal }));
     } catch (error) {
       if ((error as Error).name !== "AbortError") setRequestError(safeError(error));
     } finally {
@@ -155,7 +155,7 @@ export function DashboardRagCopilot({ data, seedQuestion, onSeedHandled }: { dat
         {verificationReceipt ? <section className="copilot-context"><strong>검증 영수증 · {verificationReceipt.result}</strong><dl><dt>실제 점검</dt><dd>{verificationReceipt.actualCheckPerformed ? "수행됨" : "미수행"}</dd><dt>점검 시각</dt><dd>{verificationReceipt.checkedAt}</dd><dt>증거 유형</dt><dd>{verificationReceipt.evidenceType}</dd><dt>Slack 전달</dt><dd>{verificationReceipt.slackDelivery.status}</dd></dl><ul>{verificationReceipt.apiResults.map((result, index) => <li key={`${result.check}-${result.service}-${index}`}>{result.service}: {result.status}</li>)}</ul><small>{verificationReceipt.receiptId}</small></section> : null}
         {decision ? <section className="copilot-context"><strong>Decision Engine · {decision.status}</strong><p>{decision.summary}</p><small>제안만 기록되었으며, 외부 서비스 실행은 수행되지 않았습니다.</small></section> : null}
         {results ? <ReferenceList references={results} title={translate("copilot.searchResults")} empty={translate("copilot.noResults")} /> : null}
-        <section className="copilot-context"><strong>{translate("copilot.context")}</strong><p>{translate("copilot.runtimeContext")}</p><dl><dt>ecosystemStatus</dt><dd>{context.ecosystemStatus || "NO_DATA"}</dd><dt>activeEvents</dt><dd>{displayValue(context.activeEvents)}</dd><dt>approvalBacklog</dt><dd>{displayValue(context.approvalBacklog)}</dd><dt>processingBacklog</dt><dd>{displayValue(context.processingBacklog)}</dd><dt>balanceStatus</dt><dd>{context.balanceStatus || "NO_DATA"}</dd></dl></section>
+        {data.auth.authenticated ? <section className="copilot-context"><strong>{translate("copilot.context")}</strong><p>{translate("copilot.runtimeContext")}</p><dl><dt>ecosystemStatus</dt><dd>{context.ecosystemStatus || "NO_DATA"}</dd><dt>activeEvents</dt><dd>{displayValue(context.activeEvents)}</dd><dt>approvalBacklog</dt><dd>{displayValue(context.approvalBacklog)}</dd><dt>processingBacklog</dt><dd>{displayValue(context.processingBacklog)}</dd><dt>balanceStatus</dt><dd>{context.balanceStatus || "NO_DATA"}</dd></dl></section> : null}
       </aside>
     </div> : null}
   </div>;
