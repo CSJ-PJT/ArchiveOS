@@ -16,11 +16,24 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class UsageAuditControllerTest {
     @Test
+    void readsSeparateAdminAccessArchive() throws Exception {
+        UsageAuditService service = mock(UsageAuditService.class);
+        AdminAccessAuditService adminAccess = mock(AdminAccessAuditService.class);
+        when(adminAccess.recent(0, 25, "2026-08-28", "csj")).thenReturn(java.util.Map.of(
+                "selected_date", "2026-08-28", "items", java.util.List.of(), "total", 0));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service, adminAccess)).build();
+
+        mvc.perform(get("/api/audit/usage/admin-access").param("date", "2026-08-28").param("query", "csj"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.selected_date").value("2026-08-28"));
+    }
+
+    @Test
     void readsOneKoreanCalendarDay() throws Exception {
         UsageAuditService service = mock(UsageAuditService.class);
         when(service.recent(0, 25, "2026-08-28", "travel", "PUBLIC")).thenReturn(java.util.Map.of(
                 "selected_date", "2026-08-28", "items", java.util.List.of(), "total", 0));
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service)).build();
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service, mock(AdminAccessAuditService.class))).build();
 
         mvc.perform(get("/api/audit/usage").param("date", "2026-08-28").param("query", "travel").param("role", "PUBLIC"))
                 .andExpect(status().isOk())
@@ -31,7 +44,7 @@ class UsageAuditControllerTest {
     void acceptsValidPageViewWithoutEchoingRequestDetails() throws Exception {
         UsageAuditService service = mock(UsageAuditService.class);
         when(service.recordPageView(eq("dashboard"), any())).thenReturn(new UsageAuditService.RecordResult(true, false, "recorded"));
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service)).build();
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service, mock(AdminAccessAuditService.class))).build();
 
         mvc.perform(post("/api/audit/usage").contentType(MediaType.APPLICATION_JSON).content("{\"route\":\"dashboard\"}"))
                 .andExpect(status().isAccepted())
@@ -43,7 +56,7 @@ class UsageAuditControllerTest {
     void rejectsUnknownPageView() throws Exception {
         UsageAuditService service = mock(UsageAuditService.class);
         when(service.recordPageView(eq("private"), any())).thenThrow(new IllegalArgumentException("지원하지 않는 ArchiveOS 화면입니다."));
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service)).build();
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service, mock(AdminAccessAuditService.class))).build();
 
         mvc.perform(post("/api/audit/usage").contentType(MediaType.APPLICATION_JSON).content("{\"route\":\"private\"}"))
                 .andExpect(status().isBadRequest())
@@ -55,7 +68,7 @@ class UsageAuditControllerTest {
         UsageAuditService service = mock(UsageAuditService.class);
         when(service.importAtlasReport(any())).thenReturn(java.util.Map.of(
                 "imported", true, "targetDate", "2026-08-27", "projectCount", 13));
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service)).build();
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service, mock(AdminAccessAuditService.class))).build();
 
         mvc.perform(post("/api/audit/usage/atlas-report")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -69,7 +82,7 @@ class UsageAuditControllerTest {
     void acceptsAtlasPageEventBatch() throws Exception {
         UsageAuditService service = mock(UsageAuditService.class);
         when(service.importAtlasEvents(any())).thenReturn(java.util.Map.of("accepted", 1, "imported", 1, "duplicates", 0));
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service)).build();
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service, mock(AdminAccessAuditService.class))).build();
 
         mvc.perform(post("/api/audit/usage/atlas-events")
                         .contentType(MediaType.APPLICATION_JSON)

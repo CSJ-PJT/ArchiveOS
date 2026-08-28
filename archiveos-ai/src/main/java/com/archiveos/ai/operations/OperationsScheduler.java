@@ -1,6 +1,7 @@
 package com.archiveos.ai.operations;
 
 import com.archiveos.ai.atlas.AtlasService;
+import com.archiveos.ai.audit.AdminAccessBatchConfiguration;
 import com.archiveos.ai.batch.ArchiveBatchConfiguration;
 import com.archiveos.ai.batch.BatchJobService;
 import org.slf4j.Logger;
@@ -20,6 +21,9 @@ public class OperationsScheduler {
 
     @Scheduled(cron = "${archiveos.scheduler.nightly-cron:0 50 23 * * *}", zone = "Asia/Seoul")
     public void nightlyReview() { run(OperationsBatchConfiguration.NIGHTLY_REVIEW_JOB, "scheduler-nightly"); }
+
+    @Scheduled(cron = "${archiveos.scheduler.admin-access-cron:0 59 23 * * *}", zone = "Asia/Seoul")
+    public void archiveAdminAccess() { run(AdminAccessBatchConfiguration.JOB_NAME, "scheduler-admin-access"); }
 
     @Scheduled(cron = "${archiveos.scheduler.daily-cron:0 0 9 * * *}", zone = "Asia/Seoul")
     public void dailyReport() { run(OperationsBatchConfiguration.DAILY_REPORT_JOB, "scheduler-daily"); }

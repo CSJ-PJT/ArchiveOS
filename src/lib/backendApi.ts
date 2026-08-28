@@ -77,6 +77,30 @@ export type UsageAuditPage = {
   };
 };
 
+export type AdminAccessEntry = {
+  id: string;
+  occurred_at: string;
+  actor: string;
+  role: "ADMIN" | string;
+  event_type: "LOGIN" | "PAGE_VIEW" | "API_ACTION" | string;
+  feature: string | null;
+  route: string | null;
+  action: string;
+  client_ip: string;
+  user_agent: string | null;
+  source: string;
+};
+
+export type AdminAccessPage = {
+  items: AdminAccessEntry[];
+  page: number;
+  size: number;
+  total: number;
+  selected_date: string;
+  query: string;
+  summary: { total: number; logins: number; accounts: number; unique_ips: number };
+};
+
 export type McpRegistryEntry = {
   id: string;
   tool: string;
@@ -710,6 +734,12 @@ export async function recordConsoleUsage(route: string) {
 export async function getUsageAudit(page = 0, size = 25, date = todayInKorea(), query = "", role = "") {
   const params = new URLSearchParams({ page: String(page), size: String(size), date, query, role });
   const response = await request<ApiEnvelope<UsageAuditPage>>(`/api/audit/usage?${params.toString()}`);
+  return response.data;
+}
+
+export async function getAdminAccessAudit(page = 0, size = 25, date = todayInKorea(), query = "") {
+  const params = new URLSearchParams({ page: String(page), size: String(size), date, query });
+  const response = await request<ApiEnvelope<AdminAccessPage>>(`/api/audit/usage/admin-access?${params.toString()}`);
   return response.data;
 }
 

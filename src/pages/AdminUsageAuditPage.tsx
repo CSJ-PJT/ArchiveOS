@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import { getUsageAudit, type PlatformRole, type UsageAuditEntry, type UsageAuditPage } from "../lib/backendApi";
+import { getAdminAccessAudit, getUsageAudit, type AdminAccessEntry, type AdminAccessPage, type PlatformRole, type UsageAuditEntry, type UsageAuditPage } from "../lib/backendApi";
 
 const PAGE_SIZE = 25;
 
 export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
+  const [view, setView] = useState<"usage" | "admin">("usage");
   const [page, setPage] = useState(0);
   const [selectedDate, setSelectedDate] = useState(todayInKorea);
   const [queryInput, setQueryInput] = useState("");
@@ -40,6 +41,11 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.size ?? PAGE_SIZE)));
   const latestAtlas = data?.atlas.reports.find((report) => report.target_date === selectedDate);
   return <div className="page-stack admin-usage-audit">
+    <div className="usage-audit-view-tabs" role="tablist" aria-label="사용 기록 보기">
+      <button type="button" role="tab" aria-selected={view === "usage"} className={view === "usage" ? "active" : ""} onClick={() => setView("usage")}>전체 사용 기록</button>
+      <button type="button" role="tab" aria-selected={view === "admin"} className={view === "admin" ? "active" : ""} onClick={() => setView("admin")}>관리자 접속</button>
+    </div>
+    {view === "admin" ? <AdminAccessHistory /> : <>
     <SectionCard title="ArchiveOS 사용 기록" eyebrow="관리자 전용 · 서버 기록" action={<button type="button" className="button button-secondary" onClick={() => void load()} disabled={loading}>{loading ? "갱신 중..." : "새로고침"}</button>}>
       <p className="body-copy">ArchiveOS 화면 사용과 승인·배치·메일 등 변경 작업의 계정, 접속 IP, 발생 시각을 확인합니다. IP는 브라우저 입력값이 아닌 서버 프록시 요청에서 기록합니다.</p>
       <div className="usage-audit-date-controls" aria-label="사용 기록 조회 날짜">
@@ -106,6 +112,7 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
         <div><button type="button" disabled={page === 0 || loading} onClick={() => setPage((value) => Math.max(0, value - 1))}>이전</button><button type="button" disabled={page + 1 >= totalPages || loading} onClick={() => setPage((value) => value + 1)}>다음</button></div>
       </div>
     </SectionCard>
+    </>}
   </div>;
 
   function moveDate(days: number) {
@@ -114,6 +121,77 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
     setPage(0);
     setSelectedDate(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(next));
   }
+}
+
+function AdminAccessHistory() {
+  const [page, setPage] = useState(0);
+  const [selectedDate, setSelectedDate] = useState(todayInKorea);
+  const [queryInput, setQueryInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [data, setData] = useState<AdminAccessPage | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await getAdminAccessAudit(page, PAGE_SIZE, selectedDate, query);
+      setData(result);
+      const lastPage = Math.max(0, Math.ceil(result.total / result.size) - 1);
+      if (page > lastPage) setPage(lastPage);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
+    } finally {
+      setLoading(false);
+    }
+  }, [page, query, selectedDate]);
+  useEffect(() => { void load(); }, [load]);
+  const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.size ?? PAGE_SIZE)));
+  return <>
+    <SectionCard title="관리자 접속 기록" eyebrow="관리자 전용 · 별도 감사 저장소" action={<button type="button" className="button button-secondary" onClick={() => void load()} disabled={loading}>{loading ? "갱신 중..." : "새로고침"}</button>}>
+      <p className="body-copy">성공한 관리자 로그인과 관리자 활동을 별도 보관합니다. 제외 IP 대역에서 로그인해도 이 감사 기록에는 남으며, 매일 23:59 배치가 일반 사용 기록의 관리자 활동을 보강합니다.</p>
+      <div className="usage-audit-date-controls">
+        <label>조회 날짜<input type="date" value={selectedDate} max={todayInKorea()} onChange={(event) => { setPage(0); setSelectedDate(event.target.value || todayInKorea()); }} /></label>
+        <button type="button" onClick={() => { setPage(0); setSelectedDate(todayInKorea()); }} disabled={loading || selectedDate === todayInKorea()}>오늘</button>
+      </div>
+      <div className="usage-audit-summary">
+        <Summary label="전체 관리자 기록" value={data?.summary.total} />
+        <Summary label="로그인 성공" value={data?.summary.logins} />
+        <Summary label="관리자 계정" value={data?.summary.accounts} />
+        <Summary label="접속 IP" value={data?.summary.unique_ips} />
+      </div>
+      <form className="usage-audit-search-controls admin-access-search" onSubmit={(event) => { event.preventDefault(); setPage(0); setQuery(queryInput.trim()); }}>
+        <label>관리자 접속 검색<input type="search" value={queryInput} placeholder="계정, 기능, 경로, IP 검색" maxLength={100} onChange={(event) => setQueryInput(event.target.value)} /></label>
+        <button type="submit" className="button button-primary" disabled={loading}>검색</button>
+        <button type="button" className="button button-secondary" disabled={loading || (!query && !queryInput)} onClick={() => { setPage(0); setQueryInput(""); setQuery(""); }}>초기화</button>
+      </form>
+    </SectionCard>
+    <SectionCard title="관리자 접속 내역" eyebrow={`최신순 · 페이지당 ${PAGE_SIZE}건`}>
+      {error ? <div className="empty-state error-state" role="alert">{error}</div> : null}
+      {loading && !data ? <div className="usage-audit-loading" role="status"><span className="page-loading-spinner" aria-hidden="true" />관리자 접속 기록을 불러오는 중입니다.</div> : null}
+      {!loading && !error && !data?.items.length ? <p className="empty-copy">선택한 날짜의 관리자 접속 기록이 없습니다.</p> : null}
+      {data?.items.length ? <div className="usage-audit-table-wrap"><table className="usage-audit-table">
+        <thead><tr><th>접속 시각</th><th>관리자 계정</th><th>구분</th><th>기능·경로</th><th>IP</th><th>접속 환경</th></tr></thead>
+        <tbody>{data.items.map((entry) => <AdminAccessRow key={entry.id} entry={entry} />)}</tbody>
+      </table></div> : null}
+      <div className="list-pagination" aria-label="관리자 접속 기록 페이지 이동">
+        <span>{page + 1} / {totalPages} 페이지 · 총 {(data?.total ?? 0).toLocaleString()}건</span>
+        <div><button type="button" disabled={page === 0 || loading} onClick={() => setPage((value) => Math.max(0, value - 1))}>이전</button><button type="button" disabled={page + 1 >= totalPages || loading} onClick={() => setPage((value) => value + 1)}>다음</button></div>
+      </div>
+    </SectionCard>
+  </>;
+}
+
+function AdminAccessRow({ entry }: { entry: AdminAccessEntry }) {
+  const eventLabel = entry.event_type === "LOGIN" ? "로그인 성공" : entry.event_type === "PAGE_VIEW" ? "페이지 조회" : "관리자 작업";
+  return <tr>
+    <td><time dateTime={entry.occurred_at}>{formatDate(entry.occurred_at)}</time></td>
+    <td><strong>{entry.actor}</strong><StatusBadge status="healthy">관리자</StatusBadge></td>
+    <td><strong>{eventLabel}</strong><small>{entry.action}</small></td>
+    <td><strong>{entry.feature || "관리자 기능"}</strong><small>{entry.route || "-"}</small></td>
+    <td><code>{entry.client_ip}</code></td>
+    <td title={entry.user_agent || ""}>{deviceLabel(entry.user_agent)}</td>
+  </tr>;
 }
 
 function Summary({ label, value }: { label: string; value: number | string | undefined }) {

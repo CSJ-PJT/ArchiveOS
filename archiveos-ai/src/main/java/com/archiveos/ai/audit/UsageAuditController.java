@@ -14,9 +14,23 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/audit/usage")
 public class UsageAuditController {
     private final UsageAuditService usage;
+    private final AdminAccessAuditService adminAccess;
 
-    public UsageAuditController(UsageAuditService usage) {
+    public UsageAuditController(UsageAuditService usage, AdminAccessAuditService adminAccess) {
         this.usage = usage;
+        this.adminAccess = adminAccess;
+    }
+
+    @GetMapping("/admin-access")
+    public ResponseEntity<Map<String, Object>> adminAccess(@RequestParam(defaultValue = "0") int page,
+                                                            @RequestParam(defaultValue = "25") int size,
+                                                            @RequestParam(required = false) String date,
+                                                            @RequestParam(required = false) String query) {
+        try {
+            return ResponseEntity.ok(Map.of("data", adminAccess.recent(page, size, date, query)));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(Map.of("error", error.getMessage()));
+        }
     }
 
     @PostMapping

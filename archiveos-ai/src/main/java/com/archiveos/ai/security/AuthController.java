@@ -1,5 +1,6 @@
 package com.archiveos.ai.security;
 
+import com.archiveos.ai.audit.AdminAccessAuditService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -21,10 +22,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
     private final SessionService sessions;
     private final SecurityThreatNotificationService threatNotifications;
+    private final AdminAccessAuditService adminAccessAudit;
 
-    public AuthController(SessionService sessions, SecurityThreatNotificationService threatNotifications) {
+    public AuthController(SessionService sessions, SecurityThreatNotificationService threatNotifications,
+                          AdminAccessAuditService adminAccessAudit) {
         this.sessions = sessions;
         this.threatNotifications = threatNotifications;
+        this.adminAccessAudit = adminAccessAudit;
     }
 
     @PostMapping("/login")
@@ -35,6 +39,7 @@ public class AuthController {
             PlatformRole requested = body == null || body.role() == null ? PlatformRole.ADMIN
                     : PlatformRole.valueOf(body.role().trim().toUpperCase());
             PlatformSession session = sessions.login(clientIp, body == null ? null : body.username(), body == null ? null : body.password(), requested);
+            adminAccessAudit.recordSuccessfulLogin(session, clientIp, request.getHeader("User-Agent"));
             response.addCookie(cookie(session.id(), (int) Duration.between(session.createdAt(), session.expiresAt()).toSeconds()));
             return ResponseEntity.ok(Map.of("data", describe(session)));
         } catch (IllegalArgumentException error) {
