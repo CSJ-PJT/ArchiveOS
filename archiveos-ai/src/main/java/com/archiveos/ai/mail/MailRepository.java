@@ -123,6 +123,7 @@ public class MailRepository {
                   from public.archive_mail_message
                  where mailbox = ?
                    and direction = 'outbound'
+                   and deleted_at is null
                    and delivery_status in ('sent', 'delayed')
                  order by created_at desc
                  limit ?
@@ -137,12 +138,12 @@ public class MailRepository {
         };
         int safeSize = Math.min(Math.max(size, 1), 50);
         int safePage = Math.max(page, 0);
-        long total = jdbc.queryForObject("select count(*) from public.archive_mail_message where mailbox = ? and " + condition, Long.class, mailbox);
+        long total = jdbc.queryForObject("select count(*) from public.archive_mail_message where mailbox = ? and deleted_at is null and " + condition, Long.class, mailbox);
         List<Map<String, Object>> items = jdbc.query("""
                 select *, to_addresses::text as to_json, cc_addresses::text as cc_json,
                   reply_to_addresses::text as reply_to_json, headers::text as headers_json,
                   attachments::text as attachments_json
-                from public.archive_mail_message where mailbox = ? and %s
+                from public.archive_mail_message where mailbox = ? and deleted_at is null and %s
                 order by occurred_at desc limit ? offset ?
                 """.formatted(condition), this::summaryRow, mailbox, safeSize, safePage * safeSize);
         return Map.of("items", items, "page", safePage, "size", safeSize, "total", total,
@@ -154,17 +155,30 @@ public class MailRepository {
                 select *, to_addresses::text as to_json, cc_addresses::text as cc_json,
                   reply_to_addresses::text as reply_to_json, headers::text as headers_json,
                   attachments::text as attachments_json
-                from public.archive_mail_message where mailbox = ? and id = ?
+                from public.archive_mail_message where mailbox = ? and id = ? and deleted_at is null
                 """, this::row, mailbox, id);
         return rows.isEmpty() ? null : rows.get(0);
     }
 
     public boolean markRead(String mailbox, UUID id, boolean read) {
-        return jdbc.update("update public.archive_mail_message set is_read = ? where mailbox = ? and id = ? and direction = 'inbound'", read, mailbox, id) == 1;
+        return jdbc.update("update public.archive_mail_message set is_read = ? where mailbox = ? and id = ? and direction = 'inbound' and deleted_at is null", read, mailbox, id) == 1;
     }
 
     public long unreadCount(String mailbox) {
-        return jdbc.queryForObject("select count(*) from public.archive_mail_message where mailbox = ? and direction = 'inbound' and is_read = false", Long.class, mailbox);
+        return jdbc.queryForObject("select count(*) from public.archive_mail_message where mailbox = ? and direction = 'inbound' and is_read = false and deleted_at is null", Long.class, mailbox);
+    }
+
+    public int deleteSelected(String mailbox, List<UUID> ids) {
+        String placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        Object[] parameters = new Object[ids.size() + 1];
+        parameters[0] = mailbox;
+        for (int index = 0; index < ids.size(); index += 1) parameters[index + 1] = ids.get(index);
+        return jdbc.update("update public.archive_mail_message set deleted_at = now() where mailbox = ? and deleted_at is null and id in (" + placeholders + ")", parameters);
+    }
+
+    public int deleteFolder(String mailbox, String folder) {
+        String direction = "inbox".equals(folder) ? "inbound" : "outbound";
+        return jdbc.update("update public.archive_mail_message set deleted_at = now() where mailbox = ? and direction = ? and deleted_at is null", mailbox, direction);
     }
 
     private Map<String, Object> summaryRow(ResultSet rs, int index) throws SQLException {

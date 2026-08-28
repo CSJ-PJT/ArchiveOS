@@ -2191,6 +2191,22 @@ export async function markMailRead(id: string, read = true) {
   return response.data;
 }
 
+export async function deleteMailMessages(ids: string[]) {
+  const response = await request<ApiEnvelope<{ deleted: number; unread: number }>>("/api/mail/messages", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  return response.data;
+}
+
+export async function deleteMailFolder(folder: "inbox" | "sent") {
+  const response = await request<ApiEnvelope<{ deleted: number; unread: number }>>(`/api/mail/messages/folder?folder=${folder}`, {
+    method: "DELETE",
+  });
+  return response.data;
+}
+
 export async function sendMail(input: { to: string[]; cc?: string[]; subject: string; text?: string; html?: string }) {
   const response = await request<ApiEnvelope<MailMessage>>("/api/mail/send", {
     method: "POST",

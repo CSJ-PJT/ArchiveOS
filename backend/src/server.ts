@@ -79,7 +79,7 @@ type HealthServiceKey =
 
 type EndpointRegistration = {
   name: string;
-  method: "GET" | "POST" | "PATCH";
+  method: "GET" | "POST" | "PATCH" | "DELETE";
   path: string;
   service: HealthServiceKey;
   description: string;
@@ -199,6 +199,7 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Create Named Admin", method: "POST", path: "/api/auth/admin/users", service: "runtime", description: "Admin-only named credential creation." },
   { name: "Mail Status", method: "GET", path: "/api/mail/status", service: "runtime", description: "Admin-only ArchiveOS mailbox readiness." },
   { name: "Mail Messages", method: "GET", path: "/api/mail/messages", service: "runtime", description: "Admin-only inbox and sent mail listing." },
+  { name: "Delete Mail Messages", method: "DELETE", path: "/api/mail/messages", service: "runtime", description: "Admin-only recoverable mailbox deletion." },
   { name: "Send Mail", method: "POST", path: "/api/mail/send", service: "runtime", description: "Admin-only external mail delivery." },
   { name: "Queue Summary", method: "GET", path: "/api/queue/summary", service: "queue", description: "Semi-auto queue summary." },
   { name: "Queue Run Once", method: "POST", path: "/api/queue/run-once", service: "queue", description: "State transition and instruction generation only." },
@@ -355,6 +356,15 @@ app.get("/api/mail/messages", async (request, response) => {
   params.set("page", String(request.query.page ?? "0"));
   params.set("size", String(request.query.size ?? "20"));
   await relayArchiveOsAi(response, `/api/mail/messages?${params}`, undefined, undefined, request);
+});
+
+app.delete("/api/mail/messages", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/mail/messages", jsonProxyRequest("DELETE", request.body), undefined, request);
+});
+
+app.delete("/api/mail/messages/folder", async (request, response) => {
+  const params = new URLSearchParams({ folder: String(request.query.folder ?? "") });
+  await relayArchiveOsAi(response, `/api/mail/messages/folder?${params}`, { method: "DELETE" }, undefined, request);
 });
 
 app.get("/api/mail/messages/:id", async (request, response) => {
@@ -2285,7 +2295,7 @@ async function getJavaKnowledgeHealth() {
   return data?.available === true && data.databaseConnected === true;
 }
 
-function jsonProxyRequest(method: "POST" | "PATCH", body: unknown): RequestInit {
+function jsonProxyRequest(method: "POST" | "PATCH" | "DELETE", body: unknown): RequestInit {
   return {
     method,
     headers: { "content-type": "application/json" },
