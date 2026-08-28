@@ -17,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -116,6 +117,19 @@ public class MailService {
         }
     }
 
+    @Scheduled(fixedDelayString = "${archiveos.mail.status-refresh-ms:30000}")
+    public void refreshOutboundDeliveryStatuses() {
+        if (!properties.outboundReady() || properties.normalizedAddress().isBlank()) return;
+        for (String providerMessageId : repository.pendingOutboundProviderIds(properties.normalizedAddress(), 20)) {
+            try {
+                DeliveryUpdate delivery = outboundDelivery("email." + gateway.deliveryStatus(providerMessageId));
+                if (delivery != null) repository.updateOutboundStatus(providerMessageId, delivery.status(), delivery.priority());
+            } catch (RuntimeException ignored) {
+                // Provider/webhook delivery is retried on the next bounded refresh cycle.
+            }
+        }
+    }
+
     private String slackMessage(ResendMailGateway.ReceivedMail mail) {
         return "[ArchiveOS 메일 수신]\n"
                 + "받는 계정: " + properties.normalizedAddress() + "\n"
@@ -130,6 +144,7 @@ public class MailService {
             case "email.sent" -> new DeliveryUpdate("sent", 1);
             case "email.delivery_delayed" -> new DeliveryUpdate("delayed", 2);
             case "email.delivered" -> new DeliveryUpdate("delivered", 3);
+            case "email.opened", "email.clicked" -> new DeliveryUpdate("delivered", 3);
             case "email.bounced" -> new DeliveryUpdate("bounced", 4);
             case "email.failed" -> new DeliveryUpdate("failed", 4);
             case "email.suppressed" -> new DeliveryUpdate("suppressed", 4);

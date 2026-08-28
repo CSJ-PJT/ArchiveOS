@@ -87,6 +87,18 @@ public class MailRepository {
                 """, status, providerMessageId, priority, status) == 1;
     }
 
+    public List<String> pendingOutboundProviderIds(String mailbox, int limit) {
+        return jdbc.queryForList("""
+                select provider_message_id
+                  from public.archive_mail_message
+                 where mailbox = ?
+                   and direction = 'outbound'
+                   and delivery_status in ('sent', 'delayed')
+                 order by created_at desc
+                 limit ?
+                """, String.class, mailbox, Math.min(Math.max(limit, 1), 50));
+    }
+
     public Map<String, Object> list(String mailbox, String folder, int page, int size) {
         String condition = switch (folder) {
             case "inbox" -> "direction = 'inbound'";

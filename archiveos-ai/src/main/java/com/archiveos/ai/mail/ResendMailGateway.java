@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class ResendMailGateway {
     private static final URI SEND_URI = URI.create("https://api.resend.com/emails");
+    private static final URI SENT_EMAIL_URI = URI.create("https://api.resend.com/emails/");
     private static final URI RECEIVING_URI = URI.create("https://api.resend.com/emails/receiving/");
     private final MailProperties properties;
     private final ObjectMapper mapper;
@@ -63,6 +64,11 @@ public class ResendMailGateway {
                 map(response.get("headers")),
                 list(response.get("attachments")),
                 string(response.get("created_at")));
+    }
+
+    public String deliveryStatus(String providerMessageId) {
+        if (!properties.outboundReady()) throw new MailConfigurationException("ArchiveOS mail sending is not configured.");
+        return string(exchange(SENT_EMAIL_URI.resolve(encodePath(providerMessageId)), "GET", null).get("last_event"));
     }
 
     private Map<String, Object> exchange(URI uri, String method, Object body) {

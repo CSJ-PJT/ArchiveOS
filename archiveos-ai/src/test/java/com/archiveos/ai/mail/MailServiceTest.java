@@ -81,6 +81,17 @@ class MailServiceTest {
         assertThat(MailService.outboundDelivery("email.delivery_delayed")).isEqualTo(new MailService.DeliveryUpdate("delayed", 2));
         assertThat(MailService.outboundDelivery("email.delivered")).isEqualTo(new MailService.DeliveryUpdate("delivered", 3));
         assertThat(MailService.outboundDelivery("email.bounced")).isEqualTo(new MailService.DeliveryUpdate("bounced", 4));
+        assertThat(MailService.outboundDelivery("email.opened")).isEqualTo(new MailService.DeliveryUpdate("delivered", 3));
         assertThat(MailService.outboundDelivery("email.received")).isNull();
+    }
+
+    @Test
+    void reconcilesPendingOutboundMailFromProviderStatus() {
+        when(repository.pendingOutboundProviderIds("csj@archiveos.kr", 20)).thenReturn(List.of("provider-message-123"));
+        when(gateway.deliveryStatus("provider-message-123")).thenReturn("delivered");
+
+        service.refreshOutboundDeliveryStatuses();
+
+        verify(repository).updateOutboundStatus("provider-message-123", "delivered", 3);
     }
 }
