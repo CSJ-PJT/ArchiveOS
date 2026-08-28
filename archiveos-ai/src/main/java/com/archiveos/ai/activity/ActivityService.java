@@ -37,10 +37,11 @@ public class ActivityService {
         String commandType = optionalString(body, "command_type", "command_type must be a string or null.");
         String requested = body.has("status") ? text(body, "status", "status must be one of pending, running, succeeded, failed.") : "pending";
         if (!COMMAND_STATUSES.contains(requested)) fail("status must be one of pending, running, succeeded, failed.");
-        String status = "succeeded".equals(requested) ? "succeeded" : "pending";
+        String status = Set.of("succeeded", "failed").contains(requested) ? requested : "pending";
         String result = optionalString(body, "result", "result must be a string or null.");
         if (result == null) result = "succeeded".equals(status)
                 ? "Command intent recorded as succeeded. Real execution is not enabled yet."
+                : "failed".equals(status) ? "Command execution failed."
                 : "Command recorded as pending. Real execution is not enabled yet.";
         return repository.createCommand(command, commandType, status, result);
     }

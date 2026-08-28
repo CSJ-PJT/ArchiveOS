@@ -35,4 +35,12 @@ class ActivityServiceTest {
                 .isInstanceOf(ActivityValidationException.class)
                 .hasMessage("log_type must be one of summary, decision, error, review.");
     }
+
+    @Test void executedFailureCanBeRecordedAsFinalEvidence() throws Exception {
+        ActivityRepository repository = Mockito.mock(ActivityRepository.class);
+        ActivityService service = new ActivityService(repository);
+        when(repository.createCommand("runtime_start_all", "local_action", "failed", "exit 1")).thenReturn(Map.of("id", "2"));
+        service.createCommand(json.readTree("{\"command\":\"runtime_start_all\",\"command_type\":\"local_action\",\"status\":\"failed\",\"result\":\"exit 1\"}"));
+        verify(repository).createCommand("runtime_start_all", "local_action", "failed", "exit 1");
+    }
 }
