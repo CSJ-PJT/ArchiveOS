@@ -27,6 +27,7 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/health", "/actuator/health/**", "/api/auth/login", "/api/mail/webhooks/resend").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/audit/usage").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/audit/usage/atlas-report").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/auth/session").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/auth/admin/users").hasRole("ADMIN")
