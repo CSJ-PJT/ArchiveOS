@@ -21,7 +21,7 @@ export type SemanticStatus =
 
 export function normalizeStatus(value: string | null | undefined): SemanticStatus {
   const status = (value || "unknown").toLowerCase();
-  if (["healthy", "ok", "online", "connected", "clear", "enabled", "detected"].includes(status)) return "healthy";
+  if (["healthy", "ok", "online", "connected", "clear", "enabled", "detected", "observed"].includes(status)) return "healthy";
   if (["working", "running", "building", "review", "processing", "ready_for_build", "architect_review", "initializing"].includes(status)) {
     return "working";
   }
