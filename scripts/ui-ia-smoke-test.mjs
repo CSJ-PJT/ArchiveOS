@@ -53,6 +53,13 @@ for (const contract of [
 ]) {
   if (!mailPage.includes(contract) && !api.includes(contract)) throw new Error(`ArchiveOS mail UI contract missing: ${contract}`);
 }
+for (const contract of [
+  'params.set("q"', 'params.set("field"', 'app.patch("/api/mail/messages/read"',
+  'app.patch("/api/mail/messages/starred"', 'app.post("/api/mail/messages/restore"',
+  'app.delete("/api/mail/messages/permanent"', 'app.delete("/api/mail/messages/trash"',
+]) {
+  if (!backendServer.includes(contract)) throw new Error(`ArchiveOS mail proxy contract missing: ${contract}`);
+}
 for (const route of ["overview", "liveflow", "ecosystem", "agents", "approvals", "history", "mcp"]) {
   if (!navigation.includes(`${route}:`)) throw new Error(`Legacy redirect missing: ${route}`);
 }
