@@ -17,6 +17,20 @@ const PUBLIC_BATCH_READ_EXACT = new Set([
   "/api/batch/executions",
 ]);
 
+type RateLimitBucket = {
+  count: number;
+  resetAt: number;
+};
+
+type ApiRateLimitOptions = {
+  now?: () => number;
+  windowMs?: number;
+  generalLimit?: number;
+  loginLimit?: number;
+  ragLimit?: number;
+  webhookLimit?: number;
+};
+
 export function requiresAdminRead(method: string, requestPath: string) {
   if (method.toUpperCase() !== "GET") return false;
   if (requestPath.startsWith("/api/batch/")) {
@@ -46,6 +60,70 @@ export function securityHeaders(request: Request, response: Response, next: Next
   response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
   if (request.path.startsWith("/api/")) response.setHeader("Cache-Control", "no-store");
   next();
+}
+
+export function createApiRateLimiter(options: ApiRateLimitOptions = {}) {
+  const now = options.now ?? Date.now;
+  const windowMs = positiveInteger(options.windowMs, 60_000);
+  const limits = {
+    general: positiveInteger(options.generalLimit, 1_800),
+    login: positiveInteger(options.loginLimit, 20),
+    rag: positiveInteger(options.ragLimit, 60),
+    webhook: positiveInteger(options.webhookLimit, 600),
+  };
+  const buckets = new Map<string, RateLimitBucket>();
+  let requestsSincePrune = 0;
+
+  return (request: Request, response: Response, next: NextFunction) => {
+    if (!request.path.startsWith("/api/")) {
+      next();
+      return;
+    }
+
+    const policy = apiRateLimitPolicy(request.method, request.path, limits);
+    const timestamp = now();
+    const key = `${policy.name}:${securityAlertClientIp(request)}`;
+    let bucket = buckets.get(key);
+    if (!bucket || bucket.resetAt <= timestamp) {
+      bucket = { count: 0, resetAt: timestamp + windowMs };
+      buckets.set(key, bucket);
+    }
+    bucket.count += 1;
+
+    const remaining = Math.max(policy.limit - bucket.count, 0);
+    const retryAfterSeconds = Math.max(Math.ceil((bucket.resetAt - timestamp) / 1_000), 1);
+    response.setHeader("RateLimit-Limit", String(policy.limit));
+    response.setHeader("RateLimit-Remaining", String(remaining));
+    response.setHeader("RateLimit-Reset", String(Math.ceil(bucket.resetAt / 1_000)));
+
+    requestsSincePrune += 1;
+    if (requestsSincePrune >= 1_000 || buckets.size > 10_000) {
+      requestsSincePrune = 0;
+      for (const [storedKey, storedBucket] of buckets) {
+        if (storedBucket.resetAt <= timestamp) buckets.delete(storedKey);
+      }
+    }
+
+    if (bucket.count > policy.limit) {
+      response.setHeader("Retry-After", String(retryAfterSeconds));
+      response.status(429).json({ error: "Request rate limit exceeded.", retryAfterSeconds });
+      return;
+    }
+
+    next();
+  };
+}
+
+function apiRateLimitPolicy(method: string, requestPath: string, limits: Record<"general" | "login" | "rag" | "webhook", number>) {
+  const normalizedMethod = method.toUpperCase();
+  if (normalizedMethod === "POST" && requestPath === "/api/auth/login") return { name: "login", limit: limits.login };
+  if (normalizedMethod === "POST" && requestPath === "/api/mail/webhooks/resend") return { name: "webhook", limit: limits.webhook };
+  if (requestPath === "/api/rag/ask" || requestPath === "/api/rag/search") return { name: "rag", limit: limits.rag };
+  return { name: "general", limit: limits.general };
+}
+
+function positiveInteger(value: number | undefined, fallback: number) {
+  return Number.isInteger(value) && Number(value) > 0 ? Number(value) : fallback;
 }
 
 export function rejectCrossOriginMutation(

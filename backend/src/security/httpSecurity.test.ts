@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { isArchiveOsAdminServiceRequest, rejectCrossOriginMutation, requiresAdminRead, securityAlertClientIp, securityHeaders } from "./httpSecurity.js";
+import { createApiRateLimiter, isArchiveOsAdminServiceRequest, rejectCrossOriginMutation, requiresAdminRead, securityAlertClientIp, securityHeaders } from "./httpSecurity.js";
 
 assert.equal(requiresAdminRead("GET", "/api/local-actions/projects"), true);
 assert.equal(requiresAdminRead("GET", "/api/batch/jobs"), false);
@@ -50,5 +50,29 @@ assert.equal(status, 403);
 assert.equal(nextCalled, false);
 assert.equal(rejectedIp, "203.0.113.77");
 assert.equal(securityAlertClientIp({ socket: { remoteAddress: "198.51.100.5" }, header: () => "203.0.113.88" } as never), "198.51.100.5");
+
+const limiter = createApiRateLimiter({ now: () => 1_000, generalLimit: 2 });
+let limitedStatus = 0;
+let limitedBody: Record<string, unknown> = {};
+let allowedRequests = 0;
+const limitedRequest = {
+  method: "GET",
+  path: "/api/ecosystem/summary",
+  socket: { remoteAddress: "198.51.100.8" },
+  header: () => undefined,
+} as never;
+const limitedResponse = {
+  setHeader: () => undefined,
+  status: (value: number) => {
+    limitedStatus = value;
+    return { json: (value: Record<string, unknown>) => { limitedBody = value; } };
+  },
+} as never;
+limiter(limitedRequest, limitedResponse, () => { allowedRequests += 1; });
+limiter(limitedRequest, limitedResponse, () => { allowedRequests += 1; });
+limiter(limitedRequest, limitedResponse, () => { allowedRequests += 1; });
+assert.equal(allowedRequests, 2);
+assert.equal(limitedStatus, 429);
+assert.equal(limitedBody.error, "Request rate limit exceeded.");
 
 console.log("http security tests passed");
