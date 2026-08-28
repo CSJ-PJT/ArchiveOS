@@ -21,7 +21,7 @@ import { getLocalRuntimeStatus } from "./lib/localRuntime.js";
 import { getKpiOverview, normalizeRange } from "./kpi/index.js";
 import { getAgentMeshOverview } from "./mesh/index.js";
 import { getSecurityStatus, notifySecurityEvent, notifySecurityThreat } from "./security/securityModel.js";
-import { isArchiveOsAdminServiceRequest, rejectCrossOriginMutation, requiresAdminRead, securityHeaders } from "./security/httpSecurity.js";
+import { createApiRateLimiter, isArchiveOsAdminServiceRequest, rejectCrossOriginMutation, requiresAdminRead, securityHeaders } from "./security/httpSecurity.js";
 import {
   getTaskEvents,
   runNightlyQueueSummary,
@@ -262,6 +262,7 @@ function readOptionalUrlEnv(name: string) {
 }
 
 app.use(securityHeaders);
+app.use(createApiRateLimiter());
 app.use((request, response, next) => rejectCrossOriginMutation(allowedOrigins, request, response, next, (event) => {
   void notifySecurityThreat({ event: "cross_origin_mutation_blocked", ...event });
 }));
