@@ -3,6 +3,7 @@ package com.archiveos.ai.audit;
 import com.archiveos.ai.security.ClientAddressResolver;
 import com.archiveos.ai.security.PlatformRole;
 import jakarta.servlet.http.HttpServletRequest;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -144,7 +145,7 @@ public class UsageAuditService {
                     status_4xx = excluded.status_4xx,
                     status_5xx = excluded.status_5xx,
                     imported_at = now()
-                """, targetDate, generatedAt, deliveredAt, requests, uniqueConnections,
+                """, targetDate, Timestamp.from(generatedAt), deliveredAt == null ? null : Timestamp.from(deliveredAt), requests, uniqueConnections,
                 nonNegative(statuses.get("2xx"), "statusCounts.2xx"),
                 nonNegative(statuses.get("3xx"), "statusCounts.3xx"),
                 nonNegative(statuses.get("4xx"), "statusCounts.4xx"),
