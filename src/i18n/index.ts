@@ -219,6 +219,12 @@ function replaceDynamicText(value: string, locale: Locale) {
   next = next.replace(/(\d[\d,]*(?:\.\d+)?)\s*(초|분|시간|일|건|개)(?=\s|·|\/|$)/g, (_, count, name) => `${count} ${unit[name]}`);
   next = next.replace(/\b(\d+)\/(\d+)\s*페이지\b/g, (_, page, total) => `${page}/${total} ${unit.페이지}`);
   next = next.replace(/\s전(?=\s|$)/g, ` ${unit.전}`);
+  const fragments: Record<Exclude<Locale, "ko">, Record<string, string>> = {
+    en: { 최근: "Last", 수신: "received" },
+    ja: { 최근: "直近", 수신: "受信" },
+    "zh-CN": { 최근: "最近", 수신: "接收" },
+  };
+  for (const [source, target] of Object.entries(fragments[locale])) next = next.split(source).join(target);
   next = next.replace(/오전\s*/g, locale === "en" ? "AM " : locale === "ja" ? "午前 " : "上午 ");
   next = next.replace(/오후\s*/g, locale === "en" ? "PM " : locale === "ja" ? "午後 " : "下午 ");
   return next;
