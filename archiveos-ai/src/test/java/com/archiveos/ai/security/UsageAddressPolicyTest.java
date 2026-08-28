@@ -8,6 +8,7 @@ class UsageAddressPolicyTest {
     @Test
     void excludesRequestedAndInternalNetworks() {
         assertThat(UsageAddressPolicy.isExcluded("106.101.6.52")).isTrue();
+        assertThat(UsageAddressPolicy.isExcluded("161.33.17.84")).isTrue();
         assertThat(UsageAddressPolicy.isExcluded("172.20.0.4")).isTrue();
         assertThat(UsageAddressPolicy.isExcluded("10.0.0.1")).isTrue();
         assertThat(UsageAddressPolicy.isExcluded("192.168.1.1")).isTrue();
@@ -19,5 +20,6 @@ class UsageAddressPolicyTest {
     void keepsExternalAddresses() {
         assertThat(UsageAddressPolicy.isExcluded("203.0.113.21")).isFalse();
         assertThat(UsageAddressPolicy.isExcluded("8.8.8.8")).isFalse();
+        assertThat(UsageAddressPolicy.isExcluded("161.33.17.85")).isFalse();
     }
 }
