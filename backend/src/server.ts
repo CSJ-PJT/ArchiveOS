@@ -20,6 +20,7 @@ import { getLocalRuntimeStatus } from "./lib/localRuntime.js";
 import { getKpiOverview, normalizeRange } from "./kpi/index.js";
 import { getAgentMeshOverview } from "./mesh/index.js";
 import { getSecurityStatus, notifySecurityEvent } from "./security/securityModel.js";
+import { rejectCrossOriginMutation, requiresAdminRead, securityHeaders } from "./security/httpSecurity.js";
 import {
   getTaskEvents,
   runNightlyQueueSummary,
@@ -29,6 +30,7 @@ import { supabaseAdmin } from "./lib/supabaseAdmin.js";
 import { getLocalDashboardData, isLocalDashboardConfigured } from "./lib/localDashboard.js";
 
 const app = express();
+app.disable("x-powered-by");
 const port = Number(process.env.PORT ?? 4000);
 const startedAt = new Date().toISOString();
 const execFileAsync = promisify(execFile);
@@ -252,6 +254,8 @@ function readOptionalUrlEnv(name: string) {
   return value ? value : null;
 }
 
+app.use(securityHeaders);
+app.use((request, response, next) => rejectCrossOriginMutation(allowedOrigins, request, response, next));
 app.use(
   cors({
     credentials: true,
@@ -277,7 +281,7 @@ app.post("/api/mail/webhooks/resend", express.raw({ type: "application/json", li
     body: Buffer.isBuffer(request.body) ? request.body : Buffer.from(String(request.body ?? "")),
   });
 });
-app.use(express.json());
+app.use(express.json({ limit: "256kb" }));
 
 app.post("/api/auth/login", async (request, response) => {
   await relayArchiveOsAi(response, "/api/auth/login", jsonProxyRequest("POST", request.body), undefined, request);
@@ -297,7 +301,7 @@ app.post("/api/auth/admin/users", async (request, response) => {
 
 app.use("/api", async (request, response, next) => {
   const requestPath = normalizeApiPath(String(request.originalUrl ?? request.path));
-  const adminRead = ["/api/security/status", "/api/runtime/public-access", "/api/audit/logs", "/api/audit/usage"].includes(requestPath);
+  const adminRead = requiresAdminRead(request.method, requestPath);
   const readOnlyPost = new Set(["/api/audit/usage", "/api/rag/ask", "/api/ecosystem/demo/dry-run", "/api/game/settlement-agency/simulate", "/api/game/survival/simulate", "/api/integrations/market/events/review"]);
   if (request.method === "POST" && readOnlyPost.has(requestPath)) {
     next();

@@ -13,6 +13,9 @@ services:
       ARCHIVE_TOKEN_OS_TO_LEDGER: ${ARCHIVE_TOKEN_OS_TO_LEDGER:?ARCHIVE_TOKEN_OS_TO_LEDGER is required for rc}
       ARCHIVE_TOKEN_AUTHENTICATED_READ: ${ARCHIVE_TOKEN_AUTHENTICATED_READ:?ARCHIVE_TOKEN_AUTHENTICATED_READ is required for rc}
       ARCHIVE_TOKEN_ADMIN_OPERATOR: ${ARCHIVE_TOKEN_ADMIN_OPERATOR:?ARCHIVE_TOKEN_ADMIN_OPERATOR is required for rc}
+      # Public RC runs the complete operational batch set exactly once per day.
+      ARCHIVEOS_SCHEDULER_ENABLED: "true"
+      ARCHIVEOS_SECURE_COOKIE: "true"
       # RC must not start background collection unless explicitly opted in.
       ARCHIVE_LIVE_FLOW_COLLECTOR_ENABLED: ${ARCHIVE_LIVE_FLOW_COLLECTOR_ENABLED:-false}
   backend:

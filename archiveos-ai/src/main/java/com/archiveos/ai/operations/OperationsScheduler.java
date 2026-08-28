@@ -27,18 +27,14 @@ public class OperationsScheduler {
     @Scheduled(cron = "${archiveos.scheduler.knowledge-sync-cron:0 15 9 * * *}", zone = "Asia/Seoul")
     public void dailyKnowledgeSync() { run(ArchiveBatchConfiguration.OBSIDIAN_SYNC_JOB, "scheduler-daily-knowledge"); }
 
-    @Scheduled(
-            fixedDelayString = "${archiveos.scheduler.maintenance-delay-ms:900000}",
-            initialDelayString = "${archiveos.scheduler.maintenance-initial-delay-ms:20000}")
+    @Scheduled(cron = "${archiveos.scheduler.maintenance-cron:0 30 9 * * *}", zone = "Asia/Seoul")
     public void runtimeMaintenance() {
         run(ArchiveBatchConfiguration.RAG_HEALTH_CHECK_JOB, "scheduler-maintenance");
         run(ArchiveBatchConfiguration.PIPELINE_AUDIT_JOB, "scheduler-maintenance");
         run(ArchiveBatchConfiguration.KNOWLEDGE_MAINTENANCE_JOB, "scheduler-maintenance");
     }
 
-    @Scheduled(
-            fixedDelayString = "${archiveos.scheduler.atlas-delay-ms:300000}",
-            initialDelayString = "${archiveos.scheduler.atlas-initial-delay-ms:30000}")
+    @Scheduled(cron = "${archiveos.scheduler.atlas-cron:0 45 9 * * *}", zone = "Asia/Seoul")
     public void atlasHealthchecks() {
         try {
             atlas.runHealthchecks();

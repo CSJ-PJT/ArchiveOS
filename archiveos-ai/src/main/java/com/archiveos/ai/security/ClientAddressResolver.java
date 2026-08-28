@@ -7,19 +7,33 @@ public final class ClientAddressResolver {
     private ClientAddressResolver() { }
 
     public static String resolve(HttpServletRequest request) {
-        String realIp = normalize(request.getHeader("X-Real-IP"));
-        if (realIp != null) return realIp;
+        String remote = normalize(request.getRemoteAddr());
+        if (isTrustedProxy(remote)) {
+            String realIp = normalize(request.getHeader("X-Real-IP"));
+            if (realIp != null) return realIp;
 
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null) {
-            for (String candidate : forwarded.split(",")) {
-                String normalized = normalize(candidate);
-                if (normalized != null) return normalized;
+            String forwarded = request.getHeader("X-Forwarded-For");
+            if (forwarded != null) {
+                for (String candidate : forwarded.split(",")) {
+                    String normalized = normalize(candidate);
+                    if (normalized != null) return normalized;
+                }
             }
         }
 
-        String remote = normalize(request.getRemoteAddr());
         return remote == null ? "0.0.0.0" : remote;
+    }
+
+    private static boolean isTrustedProxy(String value) {
+        if (value == null) return false;
+        try {
+            InetAddress address = InetAddress.getByName(value);
+            if (address.isLoopbackAddress() || address.isSiteLocalAddress() || address.isLinkLocalAddress()) return true;
+            String normalized = value.toLowerCase();
+            return normalized.startsWith("fc") || normalized.startsWith("fd");
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private static String normalize(String raw) {

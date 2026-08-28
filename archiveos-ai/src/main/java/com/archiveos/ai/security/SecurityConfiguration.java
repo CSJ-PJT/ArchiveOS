@@ -31,6 +31,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/auth/admin/users").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/security/**", "/api/audit/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/batch/**", "/api/runtime/public-access").hasRole("ADMIN")
                         .requestMatchers("/api/mail/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/obsidian/documents", "/api/rag/search").hasAnyRole("AUTHENTICATED_READ", "OPERATOR", "PM", "ADMIN")
                         // The public Control Tower exposes question answering, not raw document search.
@@ -55,7 +56,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/approvals/external/*/approve", "/api/approvals/external/*/reject", "/api/approvals/external/*/hold")
                             .hasAnyRole("PM", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/batch/**", "/api/batches/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/live-flow/summary", "/api/live-flow/topology", "/api/runtime/public-access").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/live-flow/summary", "/api/live-flow/topology").permitAll()
                         // The public Control Tower is a read-only operational console. More
                         // sensitive GET routes (security, audit, document/RAG content) are
                         // matched above and remain role-gated; mutations stay admin-only.
