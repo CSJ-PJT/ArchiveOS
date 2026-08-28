@@ -118,7 +118,9 @@ function apiRateLimitPolicy(method: string, requestPath: string, limits: Record<
   const normalizedMethod = method.toUpperCase();
   if (normalizedMethod === "POST" && requestPath === "/api/auth/login") return { name: "login", limit: limits.login };
   if (normalizedMethod === "POST" && requestPath === "/api/mail/webhooks/resend") return { name: "webhook", limit: limits.webhook };
-  if (requestPath === "/api/rag/ask" || requestPath === "/api/rag/search") return { name: "rag", limit: limits.rag };
+  if (requestPath === "/api/rag/ask" || requestPath === "/api/rag/search" || requestPath.startsWith("/api/rag/verification/")) {
+    return { name: "rag", limit: limits.rag };
+  }
   return { name: "general", limit: limits.general };
 }
 

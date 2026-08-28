@@ -97,6 +97,7 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Obsidian Documents", method: "GET", path: "/api/obsidian/documents", service: "knowledge", description: "Spring AI indexed Obsidian document proxy." },
   { name: "RAG Search", method: "GET", path: "/api/rag/search", service: "knowledge", description: "Spring AI pgvector similarity search proxy." },
   { name: "RAG Ask", method: "POST", path: "/api/rag/ask", service: "knowledge", description: "Spring AI ChatModel grounded RAG answer proxy." },
+  { name: "RAG Verification Plan", method: "POST", path: "/api/rag/verification/plans", service: "knowledge", description: "Create a safe read-only verification plan before approval." },
   { name: "Spring Batch Jobs", method: "GET", path: "/api/batch/jobs", service: "ax", description: "Spring Batch job catalog proxy." },
   { name: "Spring Batch Run", method: "POST", path: "/api/batch/jobs/:jobName/run", service: "ax", description: "Manual Spring Batch job launch proxy." },
   { name: "Spring Batch Executions", method: "GET", path: "/api/batch/executions", service: "ax", description: "Spring Batch execution history proxy." },
@@ -312,7 +313,7 @@ app.post("/api/auth/admin/users", async (request, response) => {
 app.use("/api", async (request, response, next) => {
   const requestPath = normalizeApiPath(String(request.originalUrl ?? request.path));
   const adminRead = requiresAdminRead(request.method, requestPath);
-  const readOnlyPost = new Set(["/api/audit/usage", "/api/rag/ask", "/api/ecosystem/demo/dry-run", "/api/game/settlement-agency/simulate", "/api/game/survival/simulate", "/api/integrations/market/events/review"]);
+  const readOnlyPost = new Set(["/api/audit/usage", "/api/rag/ask", "/api/rag/verification/plans", "/api/ecosystem/demo/dry-run", "/api/game/settlement-agency/simulate", "/api/game/survival/simulate", "/api/integrations/market/events/review"]);
   if (request.method === "POST" && readOnlyPost.has(requestPath)) {
     next();
     return;
@@ -527,6 +528,26 @@ app.post("/api/rag/ask", async (request, response) => {
   } catch (error) {
     sendProxyError(response, error, "RAG ask failed.");
   }
+});
+
+app.post("/api/rag/verification/plans", async (request, response) => {
+  await relayArchiveOsAi(
+    response,
+    "/api/rag/verification/plans",
+    jsonProxyRequest("POST", request.body),
+    undefined,
+    request,
+  );
+});
+
+app.post("/api/rag/verification/plans/:planId/execute", async (request, response) => {
+  await relayArchiveOsAi(
+    response,
+    `/api/rag/verification/plans/${encodeURIComponent(request.params.planId)}/execute`,
+    jsonProxyRequest("POST", request.body),
+    undefined,
+    request,
+  );
 });
 
 app.get("/api/batch/jobs", async (_request, response) => {
