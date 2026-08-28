@@ -49,6 +49,8 @@ public class MailService {
         result.put("outbound_ready", properties.outboundReady());
         result.put("inbound_ready", properties.inboundReady());
         result.put("slack_ready", notifications.configured("slack"));
+        result.put("forwarding_ready", properties.forwardingReady());
+        result.put("forward_to", properties.normalizedForwardTo());
         result.put("unread", properties.normalizedAddress().isBlank() ? 0 : repository.unreadCount(properties.normalizedAddress()));
         result.put("inbound_last_sync", lastInboundSync == null ? "" : lastInboundSync.toString());
         result.put("inbound_last_imported", lastInboundImported);
@@ -117,6 +119,7 @@ public class MailService {
                 return new WebhookOutcome(false, false, "unrouted_address");
             }
             repository.saveInbound(properties.normalizedAddress(), mail, instant(mail.createdAt()));
+            forwardInbound(mail);
             List<NotificationResult> slack = notifications.send(slackMessage(mail));
             boolean notified = slack.stream().anyMatch(result -> "slack".equals(result.channel()) && result.sent());
             return new WebhookOutcome(false, notified, "stored");
@@ -157,6 +160,7 @@ public class MailService {
                     ResendMailGateway.ReceivedMail mail = gateway.receive(summary.id());
                     Instant occurredAt = instant(mail.createdAt());
                     repository.saveInbound(properties.normalizedAddress(), mail, occurredAt);
+                    forwardInbound(mail);
                     imported += 1;
                     if (Duration.between(occurredAt, Instant.now()).abs().compareTo(Duration.ofMinutes(10)) <= 0) {
                         notifications.send(slackMessage(mail));
@@ -180,6 +184,26 @@ public class MailService {
                 + "제목: " + compact(mail.subject(), 240) + "\n"
                 + "첨부: " + mail.attachments().size() + "개\n"
                 + "ArchiveOS 관리자 메일함에서 본문을 확인하세요.";
+    }
+
+    private void forwardInbound(ResendMailGateway.ReceivedMail mail) {
+        if (!properties.forwardingReady() || !repository.beginForward(mail.id())) return;
+        try {
+            String subject = "[전달] " + compact(mail.subject(), 180);
+            String header = "[ArchiveOS 자동 전달]\n"
+                    + "원본 발신자: " + compact(mail.from(), 180) + "\n"
+                    + "원본 수신자: " + String.join(", ", mail.to()) + "\n"
+                    + "원본 수신 시각: " + compact(mail.createdAt(), 80) + "\n"
+                    + "첨부파일: " + mail.attachments().size() + "개\n\n";
+            String text = header + (mail.text() == null || mail.text().isBlank()
+                    ? "HTML 본문 메일입니다. ArchiveOS 관리자 메일함에서 원문을 확인하세요."
+                    : mail.text());
+            ResendMailGateway.SentMail sent = gateway.send(
+                    List.of(properties.normalizedForwardTo()), List.of(), subject, text, "");
+            repository.completeForward(mail.id(), sent.id());
+        } catch (RuntimeException error) {
+            repository.failForward(mail.id(), error.getMessage());
+        }
     }
 
     static DeliveryUpdate outboundDelivery(String eventType) {

@@ -7,6 +7,7 @@ public record MailProperties(
         boolean enabled,
         String address,
         String senderName,
+        String forwardTo,
         String resendApiKey,
         String resendWebhookSecret) {
 
@@ -17,6 +18,14 @@ public record MailProperties(
     public String displayFrom() {
         String normalizedName = senderName == null || senderName.isBlank() ? "ArchiveOS" : senderName.trim();
         return normalizedName + " <" + normalizedAddress() + ">";
+    }
+
+    public String normalizedForwardTo() {
+        return forwardTo == null ? "" : forwardTo.trim().toLowerCase();
+    }
+
+    public boolean forwardingReady() {
+        return outboundReady() && !normalizedForwardTo().isBlank();
     }
 
     public boolean outboundReady() {

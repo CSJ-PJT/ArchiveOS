@@ -29,7 +29,7 @@ class MailServiceTest {
 
     @BeforeEach
     void setUp() {
-        MailProperties properties = new MailProperties(true, "csj@archiveos.kr", "ArchiveOS", "re_test", "whsec_dGVzdA==");
+        MailProperties properties = new MailProperties(true, "csj@archiveos.kr", "ArchiveOS", "csj1116@kakao.com", "re_test", "whsec_dGVzdA==");
         service = new MailService(properties, repository, gateway, notifications, new ObjectMapper());
     }
 
@@ -100,14 +100,18 @@ class MailServiceTest {
         when(gateway.listReceived()).thenReturn(List.of(new ResendMailGateway.ReceivedSummary(
                 "provider-inbound-123", List.of("csj@archiveos.kr"), "2026-08-28T07:30:00Z")));
         when(repository.providerMessageExists("provider-inbound-123")).thenReturn(false);
+        when(repository.beginForward("provider-inbound-123")).thenReturn(true);
         ResendMailGateway.ReceivedMail received = new ResendMailGateway.ReceivedMail(
                 "provider-inbound-123", "sender@example.com", List.of("csj@archiveos.kr"), List.of(), List.of(),
                 "동기화 확인", "본문", null, Map.of(), List.of(), "2026-08-28T07:30:00Z");
         when(gateway.receive("provider-inbound-123")).thenReturn(received);
+        when(gateway.send(anyList(), anyList(), anyString(), anyString(), anyString()))
+                .thenReturn(new ResendMailGateway.SentMail("provider-forward-123"));
         when(repository.list("csj@archiveos.kr", "inbox", 0, 20)).thenReturn(Map.of("items", List.of(), "total", 1));
 
         service.list("inbox", 0, 20);
 
         verify(repository).saveInbound(anyString(), any(ResendMailGateway.ReceivedMail.class), any(Instant.class));
+        verify(repository).completeForward("provider-inbound-123", "provider-forward-123");
     }
 }

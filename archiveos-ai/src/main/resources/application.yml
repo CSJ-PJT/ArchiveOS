@@ -62,6 +62,7 @@ archiveos:
     enabled: ${ARCHIVEOS_MAIL_ENABLED:false}
     address: ${ARCHIVEOS_MAIL_ADDRESS:}
     sender-name: ${ARCHIVEOS_MAIL_SENDER_NAME:ArchiveOS}
+    forward-to: ${ARCHIVEOS_MAIL_FORWARD_TO:}
     resend-api-key: ${RESEND_API_KEY:}
     resend-webhook-secret: ${RESEND_WEBHOOK_SECRET:}
   ledger:

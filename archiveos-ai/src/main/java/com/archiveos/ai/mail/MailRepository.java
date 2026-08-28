@@ -60,6 +60,30 @@ public class MailRepository {
                 Boolean.class, providerMessageId));
     }
 
+    public boolean beginForward(String providerMessageId) {
+        return jdbc.update("""
+                update public.archive_mail_message
+                   set forward_status = 'forwarding', forward_error = null
+                 where provider_message_id = ? and direction = 'inbound' and forward_status is null
+                """, providerMessageId) == 1;
+    }
+
+    public void completeForward(String providerMessageId, String forwardProviderMessageId) {
+        jdbc.update("""
+                update public.archive_mail_message
+                   set forward_status = 'sent', forward_provider_message_id = ?, forwarded_at = now(), forward_error = null
+                 where provider_message_id = ? and direction = 'inbound' and forward_status = 'forwarding'
+                """, forwardProviderMessageId, providerMessageId);
+    }
+
+    public void failForward(String providerMessageId, String error) {
+        jdbc.update("""
+                update public.archive_mail_message
+                   set forward_status = 'failed', forward_error = ?
+                 where provider_message_id = ? and direction = 'inbound' and forward_status = 'forwarding'
+                """, error == null ? "forwarding failed" : error.substring(0, Math.min(error.length(), 500)), providerMessageId);
+    }
+
     public Map<String, Object> saveOutbound(String mailbox, String providerMessageId, String from, List<String> to,
                                              List<String> cc, String subject, String text, String html, Instant occurredAt) {
         return jdbc.queryForObject("""
