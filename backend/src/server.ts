@@ -19,8 +19,8 @@ import {
 import { getLocalRuntimeStatus } from "./lib/localRuntime.js";
 import { getKpiOverview, normalizeRange } from "./kpi/index.js";
 import { getAgentMeshOverview } from "./mesh/index.js";
-import { getSecurityStatus, notifySecurityEvent } from "./security/securityModel.js";
-import { rejectCrossOriginMutation, requiresAdminRead, securityHeaders } from "./security/httpSecurity.js";
+import { getSecurityStatus, notifySecurityEvent, notifySecurityThreat } from "./security/securityModel.js";
+import { isArchiveOsAdminServiceRequest, rejectCrossOriginMutation, requiresAdminRead, securityHeaders } from "./security/httpSecurity.js";
 import {
   getTaskEvents,
   runNightlyQueueSummary,
@@ -255,7 +255,9 @@ function readOptionalUrlEnv(name: string) {
 }
 
 app.use(securityHeaders);
-app.use((request, response, next) => rejectCrossOriginMutation(allowedOrigins, request, response, next));
+app.use((request, response, next) => rejectCrossOriginMutation(allowedOrigins, request, response, next, (event) => {
+  void notifySecurityThreat({ event: "cross_origin_mutation_blocked", ...event });
+}));
 app.use(
   cors({
     credentials: true,
@@ -2253,6 +2255,11 @@ async function readJavaSession(request: any) {
   const integrationToken = request?.header?.("x-archiveos-integration-token");
   if (cookie) headers.set("cookie", cookie);
   if (integrationToken) headers.set("x-archiveos-integration-token", integrationToken);
+  if (isArchiveOsAdminServiceRequest(request)) {
+    headers.set("Authorization", request.header("authorization"));
+    headers.set("X-Archive-Source-System", "archive-os");
+    headers.set("X-Archive-Service-Scope", "admin:operate");
+  }
   const upstream = await fetch(`${baseUrl}/api/auth/session`, { headers });
   if (!upstream.ok) throw new Error(`Session validation failed with ${upstream.status}.`);
   const payload = await upstream.json() as { data?: Record<string, unknown> };

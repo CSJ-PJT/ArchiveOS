@@ -151,13 +151,13 @@ public class DailyReportService {
 
     private void appendLiveFlowSummary(StringBuilder text, Map<String, Object> liveFlowSummary) {
         text.append("\n\nLive Flow Summary")
-                .append("\nâ€¢ Active flows: ").append(liveFlowSummary.getOrDefault("active_flows", 0))
-                .append("\nâ€¢ Recent events: ").append(liveFlowSummary.getOrDefault("recent_events", 0))
-                .append("\nâ€¢ Pending approvals: ").append(liveFlowSummary.getOrDefault("pending_approvals", 0))
-                .append("\nâ€¢ Delayed shipments: ").append(liveFlowSummary.getOrDefault("delayed_shipments", 0))
-                .append("\nâ€¢ Failed callbacks: ").append(liveFlowSummary.getOrDefault("failed_callbacks", 0))
-                .append("\nâ€¢ Degraded systems: ").append(liveFlowSummary.getOrDefault("degraded_systems", 0))
-                .append("\nâ€¢ Latest event: ").append(liveFlowSummary.getOrDefault("latest_event_at", "no data"));
+                .append("\n• Active flows: ").append(liveFlowSummary.getOrDefault("active_flows", 0))
+                .append("\n• Recent events: ").append(liveFlowSummary.getOrDefault("recent_events", 0))
+                .append("\n• Pending approvals: ").append(liveFlowSummary.getOrDefault("pending_approvals", 0))
+                .append("\n• Delayed shipments: ").append(liveFlowSummary.getOrDefault("delayed_shipments", 0))
+                .append("\n• Failed callbacks: ").append(liveFlowSummary.getOrDefault("failed_callbacks", 0))
+                .append("\n• Degraded systems: ").append(liveFlowSummary.getOrDefault("degraded_systems", 0))
+                .append("\n• Latest event: ").append(liveFlowSummary.getOrDefault("latest_event_at", "no data"));
     }
 
     private void appendManagedSystemsSummary(StringBuilder text, Map<String, Object> managedSummary) {

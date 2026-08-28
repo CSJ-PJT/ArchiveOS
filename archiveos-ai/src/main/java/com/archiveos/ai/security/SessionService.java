@@ -45,8 +45,10 @@ public class SessionService {
         boolean bootstrapMatch = stored == null && "admin".equals(actor) && properties.configured()
                 && password != null && encoder.matches(password, passwordHash);
         if (!storedMatch && !bootstrapMatch) {
-            recordFailure(key, now, current);
-            throw new LoginRejectedException(properties.configured() || credentials != null ? "Invalid credentials." : "Admin login is not configured.", false);
+            boolean rateLimited = recordFailure(key, now, current);
+            String message = rateLimited ? "Too many login attempts. Try again later."
+                    : properties.configured() || credentials != null ? "Invalid credentials." : "Admin login is not configured.";
+            throw new LoginRejectedException(message, rateLimited);
         }
         attempts.remove(key);
         PlatformRole role = stored == null
@@ -97,13 +99,14 @@ public class SessionService {
         return new CredentialSummary(actor, role, true);
     }
 
-    private void recordFailure(String key, Instant now, AttemptWindow current) {
+    private boolean recordFailure(String key, Instant now, AttemptWindow current) {
         int count = current == null || current.windowStarted().plus(Duration.ofMinutes(properties.lockoutMinutes())).isBefore(now)
                 ? 1 : current.count() + 1;
         Instant started = count == 1 ? now : current.windowStarted();
         Instant lockedUntil = count >= properties.maxLoginAttempts()
                 ? now.plus(Duration.ofMinutes(properties.lockoutMinutes())) : null;
         attempts.put(key, new AttemptWindow(count, started, lockedUntil));
+        return lockedUntil != null;
     }
 
     private String normalizePasswordHash(String value) {

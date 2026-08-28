@@ -20,24 +20,28 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/auth")
 public class AuthController {
     private final SessionService sessions;
+    private final SecurityThreatNotificationService threatNotifications;
 
-    public AuthController(SessionService sessions) {
+    public AuthController(SessionService sessions, SecurityThreatNotificationService threatNotifications) {
         this.sessions = sessions;
+        this.threatNotifications = threatNotifications;
     }
 
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(@RequestBody(required = false) LoginRequest body,
                                                       HttpServletRequest request, HttpServletResponse response) {
+        String clientIp = ClientAddressResolver.resolve(request);
         try {
             PlatformRole requested = body == null || body.role() == null ? PlatformRole.ADMIN
                     : PlatformRole.valueOf(body.role().trim().toUpperCase());
-            PlatformSession session = sessions.login(ClientAddressResolver.resolve(request), body == null ? null : body.username(), body == null ? null : body.password(), requested);
+            PlatformSession session = sessions.login(clientIp, body == null ? null : body.username(), body == null ? null : body.password(), requested);
             response.addCookie(cookie(session.id(), (int) Duration.between(session.createdAt(), session.expiresAt()).toSeconds()));
             return ResponseEntity.ok(Map.of("data", describe(session)));
         } catch (IllegalArgumentException error) {
             return ResponseEntity.badRequest().body(Map.of("error", "role must be operator, pm, or admin."));
         } catch (SessionService.LoginRejectedException error) {
             HttpStatus status = error.rateLimited() ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.UNAUTHORIZED;
+            if (error.rateLimited()) threatNotifications.notifyLoginLockout(clientIp);
             return ResponseEntity.status(status).body(Map.of("error", error.getMessage()));
         }
     }
