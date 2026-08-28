@@ -2132,7 +2132,11 @@ export type MailStatus = {
   inbound_ready: boolean;
   slack_ready: boolean;
   unread: number;
+  counts?: Partial<Record<MailFolder, number>>;
 };
+
+export type MailFolder = "inbox" | "sent" | "unread" | "starred" | "attachments" | "trash" | "all";
+export type MailSearchField = "all" | "subject" | "sender" | "recipient";
 
 export type MailAttachment = {
   id?: string;
@@ -2156,6 +2160,10 @@ export type MailMessage = {
   attachments: MailAttachment[];
   delivery_status: string;
   is_read: boolean;
+  is_starred: boolean;
+  body_preview?: string;
+  size_bytes?: number;
+  deleted_at?: string;
   occurred_at: string;
 };
 
@@ -2172,8 +2180,9 @@ export async function getMailStatus() {
   return response.data;
 }
 
-export async function getMailMessages(folder: "inbox" | "sent" | "all", page = 0, size = 20) {
-  const response = await request<ApiEnvelope<MailMessagePage>>(`/api/mail/messages?folder=${folder}&page=${page}&size=${size}`);
+export async function getMailMessages(folder: MailFolder, page = 0, size = 20, query = "", field: MailSearchField = "all") {
+  const params = new URLSearchParams({ folder, page: String(page), size: String(size), q: query, field });
+  const response = await request<ApiEnvelope<MailMessagePage>>(`/api/mail/messages?${params.toString()}`);
   return response.data;
 }
 
@@ -2191,6 +2200,20 @@ export async function markMailRead(id: string, read = true) {
   return response.data;
 }
 
+export async function markMailMessagesRead(ids: string[], read: boolean) {
+  const response = await request<ApiEnvelope<{ updated: number; read: boolean; unread: number }>>("/api/mail/messages/read", {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids, enabled: read }),
+  });
+  return response.data;
+}
+
+export async function markMailMessagesStarred(ids: string[], starred: boolean) {
+  const response = await request<ApiEnvelope<{ updated: number; starred: boolean }>>("/api/mail/messages/starred", {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids, enabled: starred }),
+  });
+  return response.data;
+}
+
 export async function deleteMailMessages(ids: string[]) {
   const response = await request<ApiEnvelope<{ deleted: number; unread: number }>>("/api/mail/messages", {
     method: "DELETE",
@@ -2204,6 +2227,25 @@ export async function deleteMailFolder(folder: "inbox" | "sent") {
   const response = await request<ApiEnvelope<{ deleted: number; unread: number }>>(`/api/mail/messages/folder?folder=${folder}`, {
     method: "DELETE",
   });
+  return response.data;
+}
+
+export async function restoreMailMessages(ids: string[]) {
+  const response = await request<ApiEnvelope<{ restored: number; unread: number }>>("/api/mail/messages/restore", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }),
+  });
+  return response.data;
+}
+
+export async function permanentlyDeleteMailMessages(ids: string[]) {
+  const response = await request<ApiEnvelope<{ deleted: number; unread: number }>>("/api/mail/messages/permanent", {
+    method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }),
+  });
+  return response.data;
+}
+
+export async function emptyMailTrash() {
+  const response = await request<ApiEnvelope<{ deleted: number; unread: number }>>("/api/mail/messages/trash", { method: "DELETE" });
   return response.data;
 }
 
