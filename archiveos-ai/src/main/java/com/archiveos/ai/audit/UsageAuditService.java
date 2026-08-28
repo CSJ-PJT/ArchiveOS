@@ -104,6 +104,8 @@ public class UsageAuditService {
                        (role <> 'PUBLIC' and actor <> 'anonymous') as authenticated, 'API_ACTION' as source
                   from public.audit_logs
                  where metadata->>'clientIp' is not null
+                   and lower(coalesce(resource_type, '')) not in ('live_flow', 'live-flow')
+                   and lower(coalesce(request_path, '')) not like '/api/live-flow/%'
                 """;
     }
 
