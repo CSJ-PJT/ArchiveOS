@@ -54,6 +54,12 @@ public class MailRepository {
                 json(mail.replyTo()), mail.subject(), mail.text(), mail.html(), json(mail.headers()), json(mail.attachments()), Timestamp.from(occurredAt));
     }
 
+    public boolean providerMessageExists(String providerMessageId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject(
+                "select exists(select 1 from public.archive_mail_message where provider_message_id = ?)",
+                Boolean.class, providerMessageId));
+    }
+
     public Map<String, Object> saveOutbound(String mailbox, String providerMessageId, String from, List<String> to,
                                              List<String> cc, String subject, String text, String html, Instant occurredAt) {
         return jdbc.queryForObject("""

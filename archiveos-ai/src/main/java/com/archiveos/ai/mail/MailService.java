@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.Duration;
 import java.time.format.DateTimeParseException;
 import java.util.HexFormat;
 import java.util.List;
@@ -28,6 +29,9 @@ public class MailService {
     private final ResendMailGateway gateway;
     private final NotificationService notifications;
     private final ObjectMapper mapper;
+    private volatile Instant lastInboundSync;
+    private volatile int lastInboundImported;
+    private volatile int lastInboundErrors;
 
     public MailService(MailProperties properties, MailRepository repository, ResendMailGateway gateway,
                        NotificationService notifications, ObjectMapper mapper) {
@@ -39,17 +43,22 @@ public class MailService {
     }
 
     public Map<String, Object> status() {
-        return Map.of(
-                "enabled", properties.enabled(),
-                "mailbox", properties.normalizedAddress(),
-                "outbound_ready", properties.outboundReady(),
-                "inbound_ready", properties.inboundReady(),
-                "slack_ready", notifications.configured("slack"),
-                "unread", properties.normalizedAddress().isBlank() ? 0 : repository.unreadCount(properties.normalizedAddress()));
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("enabled", properties.enabled());
+        result.put("mailbox", properties.normalizedAddress());
+        result.put("outbound_ready", properties.outboundReady());
+        result.put("inbound_ready", properties.inboundReady());
+        result.put("slack_ready", notifications.configured("slack"));
+        result.put("unread", properties.normalizedAddress().isBlank() ? 0 : repository.unreadCount(properties.normalizedAddress()));
+        result.put("inbound_last_sync", lastInboundSync == null ? "" : lastInboundSync.toString());
+        result.put("inbound_last_imported", lastInboundImported);
+        result.put("inbound_last_errors", lastInboundErrors);
+        return result;
     }
 
     public Map<String, Object> list(String folder, int page, int size) {
         requireMailbox();
+        synchronizeInbound();
         String normalizedFolder = folder == null ? "inbox" : folder.trim().toLowerCase(Locale.ROOT);
         if (!List.of("inbox", "sent", "all").contains(normalizedFolder)) throw new IllegalArgumentException("folder must be inbox, sent, or all.");
         return repository.list(properties.normalizedAddress(), normalizedFolder, page, size);
@@ -128,6 +137,40 @@ public class MailService {
                 // Provider/webhook delivery is retried on the next bounded refresh cycle.
             }
         }
+    }
+
+    @Scheduled(initialDelayString = "${archiveos.mail.inbound-sync-initial-delay-ms:5000}",
+            fixedDelayString = "${archiveos.mail.inbound-sync-ms:15000}")
+    public void refreshInboundMessages() {
+        synchronizeInbound();
+    }
+
+    synchronized void synchronizeInbound() {
+        if (!properties.inboundReady() || properties.normalizedAddress().isBlank()) return;
+        int imported = 0;
+        int errors = 0;
+        try {
+            for (ResendMailGateway.ReceivedSummary summary : gateway.listReceived()) {
+                if (summary.to().stream().map(this::normalizeAddress).noneMatch(properties.normalizedAddress()::equals)
+                        || repository.providerMessageExists(summary.id())) continue;
+                try {
+                    ResendMailGateway.ReceivedMail mail = gateway.receive(summary.id());
+                    Instant occurredAt = instant(mail.createdAt());
+                    repository.saveInbound(properties.normalizedAddress(), mail, occurredAt);
+                    imported += 1;
+                    if (Duration.between(occurredAt, Instant.now()).abs().compareTo(Duration.ofMinutes(10)) <= 0) {
+                        notifications.send(slackMessage(mail));
+                    }
+                } catch (RuntimeException error) {
+                    errors += 1;
+                }
+            }
+        } catch (RuntimeException error) {
+            errors += 1;
+        }
+        lastInboundSync = Instant.now();
+        lastInboundImported = imported;
+        lastInboundErrors = errors;
     }
 
     private String slackMessage(ResendMailGateway.ReceivedMail mail) {

@@ -32,7 +32,7 @@ export function MailPage({ role, onNavigate }: { role: PlatformRole; onNavigate:
     setError("");
     try {
       const [nextStatus, nextMessages] = await Promise.all([getMailStatus(), getMailMessages(folder, page, 20)]);
-      setStatus(nextStatus);
+      setStatus({ ...nextStatus, unread: nextMessages.unread });
       setMessages(nextMessages);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "메일함을 불러오지 못했습니다.");
