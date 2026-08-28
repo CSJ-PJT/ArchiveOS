@@ -18,11 +18,11 @@ class UsageAuditControllerTest {
     @Test
     void readsOneKoreanCalendarDay() throws Exception {
         UsageAuditService service = mock(UsageAuditService.class);
-        when(service.recent(0, 25, "2026-08-28")).thenReturn(java.util.Map.of(
+        when(service.recent(0, 25, "2026-08-28", "travel", "PUBLIC")).thenReturn(java.util.Map.of(
                 "selected_date", "2026-08-28", "items", java.util.List.of(), "total", 0));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new UsageAuditController(service)).build();
 
-        mvc.perform(get("/api/audit/usage").param("date", "2026-08-28"))
+        mvc.perform(get("/api/audit/usage").param("date", "2026-08-28").param("query", "travel").param("role", "PUBLIC"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.selected_date").value("2026-08-28"));
     }
