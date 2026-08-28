@@ -74,4 +74,13 @@ class MailServiceTest {
                 .containsEntry("slack_ready", true)
                 .doesNotContainKeys("resend_api_key", "resend_webhook_secret");
     }
+
+    @Test
+    void mapsProviderDeliveryEventsWithoutRegressingDeliveredMail() {
+        assertThat(MailService.outboundDelivery("email.sent")).isEqualTo(new MailService.DeliveryUpdate("sent", 1));
+        assertThat(MailService.outboundDelivery("email.delivery_delayed")).isEqualTo(new MailService.DeliveryUpdate("delayed", 2));
+        assertThat(MailService.outboundDelivery("email.delivered")).isEqualTo(new MailService.DeliveryUpdate("delivered", 3));
+        assertThat(MailService.outboundDelivery("email.bounced")).isEqualTo(new MailService.DeliveryUpdate("bounced", 4));
+        assertThat(MailService.outboundDelivery("email.received")).isNull();
+    }
 }
