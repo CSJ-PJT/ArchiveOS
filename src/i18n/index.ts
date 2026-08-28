@@ -207,6 +207,7 @@ function buildRuntimePairs(locale: Locale) {
 }
 
 function replaceDynamicText(value: string, locale: Locale) {
+  if (locale === "ko") return value;
   const units: Record<Locale, Record<string, string>> = {
     ko: { 초: "초", 분: "분", 시간: "시간", 일: "일", 건: "건", 개: "개", 페이지: "페이지", 전: "전" },
     en: { 초: "sec", 분: "min", 시간: "hr", 일: "day", 건: "items", 개: "items", 페이지: "page", 전: "ago" },
@@ -218,10 +219,8 @@ function replaceDynamicText(value: string, locale: Locale) {
   next = next.replace(/(\d[\d,]*(?:\.\d+)?)\s*(초|분|시간|일|건|개)(?=\s|·|\/|$)/g, (_, count, name) => `${count} ${unit[name]}`);
   next = next.replace(/\b(\d+)\/(\d+)\s*페이지\b/g, (_, page, total) => `${page}/${total} ${unit.페이지}`);
   next = next.replace(/\s전(?=\s|$)/g, ` ${unit.전}`);
-  if (locale !== "ko") {
-    next = next.replace(/오전\s*/g, locale === "en" ? "AM " : locale === "ja" ? "午前 " : "上午 ");
-    next = next.replace(/오후\s*/g, locale === "en" ? "PM " : locale === "ja" ? "午後 " : "下午 ");
-  }
+  next = next.replace(/오전\s*/g, locale === "en" ? "AM " : locale === "ja" ? "午前 " : "上午 ");
+  next = next.replace(/오후\s*/g, locale === "en" ? "PM " : locale === "ja" ? "午後 " : "下午 ");
   return next;
 }
 
