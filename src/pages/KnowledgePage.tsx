@@ -3,6 +3,7 @@ import type { AppData } from "../app/AppShell";
 import { MetricCard } from "../components/shared/MetricCard";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
+import { PaginatedItems } from "../components/shared/PaginatedItems";
 import { KnowledgeGraphPanel } from "../components/knowledge/KnowledgeGraphPanel";
 import { askRag, type RagAnswer } from "../lib/backendApi";
 import { formatTimeAgo } from "./pageUtils";
@@ -85,17 +86,14 @@ function MemoryView({ data }: { data: AppData }) {
   const nodes = data.knowledge?.latestNodes || [];
   return (
     <SectionCard title="운영 메모리 체인" eyebrow="작업에서 지식 기록까지">
-      <div className="memory-chain-list">
-        {nodes.length === 0 ? <div className="empty-state">운영 메모리 투영 데이터가 없습니다.</div> : null}
-        {nodes.slice(0, 8).map((node) => (
+      <PaginatedItems items={nodes} pageSize={8} className="memory-chain-list" label="운영 메모리 페이지" renderItem={(node) => (
           <article className="memory-chain-card" key={node.id}>
             <StatusBadge status="healthy">{knowledgeNodeTypeLabel(node.node_type)}</StatusBadge>
             <strong>{node.title}</strong>
             <span>{node.source || "archiveos"}</span>
             <p>{node.summary || node.external_ref || "연결된 운영 메모리"}</p>
           </article>
-        ))}
-      </div>
+        )} empty={<div className="empty-state">운영 메모리 투영 데이터가 없습니다.</div>} />
     </SectionCard>
   );
 }
@@ -129,7 +127,7 @@ function RagView({ data }: { data: AppData }) {
         </button>
         {error ? <div className="empty-state error-state">RAG 질문을 처리하지 못했습니다. {error}</div> : null}
         {answer ? <div className="rag-answer"><p>{answer.answer}</p><strong>참조 {answer.references.length}건</strong><ol>{answer.references.map((reference, index) => <li key={`${reference.path}-${index}`}><span>{reference.title}</span><small>{reference.heading || reference.path} · 유사도 {(reference.score * 100).toFixed(1)}%</small></li>)}</ol></div> : <div className="empty-state">아직 RAG 답변이 없습니다.</div>}
-        <div className="rag-history"><strong>최근 RAG·지식 기록</strong>{data.timeline.filter((item) => item.event_type === "knowledge").slice(0, 5).map((item) => <span key={item.id}>{formatTimeAgo(item.occurred_at)} · {item.title}</span>)}</div>
+        <div className="rag-history"><strong>최근 RAG·지식 기록</strong><PaginatedItems items={data.timeline.filter((item) => item.event_type === "knowledge")} pageSize={5} label="RAG 지식 기록 페이지" renderItem={(item) => <span key={item.id}>{formatTimeAgo(item.occurred_at)} · {item.title}</span>} /></div>
       </div>
     </SectionCard>
   );

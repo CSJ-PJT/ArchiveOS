@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { AppData } from "../app/AppShell";
 import { MetricCard } from "../components/shared/MetricCard";
+import { PaginatedItems } from "../components/shared/PaginatedItems";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { simulateSettlementAgencyGame, type GameFinanceTrade, type SettlementAgencyGameSummary } from "../lib/backendApi";
@@ -195,8 +196,7 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
         </SectionCard>
 
         <SectionCard title="서비스 에이전트 제안" eyebrow="PM 결정 후보" className="span-7">
-          <div className="history-table">
-            {proposals.map((proposal) => (
+          <PaginatedItems items={proposals} pageSize={8} label="서비스 에이전트 제안 페이지" className="history-table" renderItem={(proposal) => (
               <article className="history-row" key={proposal.proposalId}>
                 <summary>
                   <strong>{proposal.agentName}</strong>
@@ -211,14 +211,11 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
                 </div>
                 <details><summary>근거</summary><pre>{stringifyMeta(proposal.evidence)}</pre></details>
               </article>
-            ))}
-            {!proposals.length ? <div className="empty-state">이번 tick에는 추가 재무 개입 제안이 필요하지 않습니다.</div> : null}
-          </div>
+            )} empty={<div className="empty-state">이번 tick에는 추가 재무 개입 제안이 필요하지 않습니다.</div>} />
         </SectionCard>
 
         <SectionCard title="Synthetic 정산 이벤트" eyebrow="simulationRunId / tickId / maxHop" className="span-5">
-          <div className="event-list compact">
-            {events.map((event) => (
+          <PaginatedItems items={events} pageSize={8} label="Synthetic 정산 이벤트 페이지" className="event-list compact" renderItem={(event) => (
               <article className="event-row" key={event.eventId}>
                 <span>{event.source} → {event.target}</span>
                 <StatusBadge status={event.hop <= event.maxHop ? "success" : "blocked"}>hop {event.hop}/{event.maxHop}</StatusBadge>
@@ -226,8 +223,7 @@ export function SettlementGamePage({ data, onRefresh }: { data: AppData; onRefre
                 <p>{event.idempotencyKey}</p>
                 <details><summary>payload</summary><pre>{stringifyMeta(event.payload)}</pre></details>
               </article>
-            ))}
-          </div>
+            )} empty={<div className="empty-state">기록된 Synthetic 정산 이벤트가 없습니다.</div>} />
         </SectionCard>
       </section>
 
@@ -253,16 +249,13 @@ function TradeList({ title, trades }: { title: string; trades: GameFinanceTrade[
   return (
     <details className="details-box">
       <summary>{title} ({trades.length})</summary>
-      <div className="compact-ledger-list">
-        {trades.slice(0, 5).map((trade) => (
+      <PaginatedItems items={trades} pageSize={5} label={`${title} 기록 페이지`} className="compact-ledger-list" renderItem={(trade) => (
           <div key={trade.trade_id}>
             <strong>{trade.trade_type}</strong>
             <span>{money(trade.amount)} {trade.currency}</span>
             <p>{trade.description}</p>
           </div>
-        ))}
-        {!trades.length ? <p>기록된 {title} 내역이 없습니다.</p> : null}
-      </div>
+        )} empty={<p>기록된 {title} 내역이 없습니다.</p>} />
     </details>
   );
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { AppData } from "../app/AppShell";
 import { MetricCard } from "../components/shared/MetricCard";
+import { PaginatedItems } from "../components/shared/PaginatedItems";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { refreshEcosystem, runEcosystemDryRun } from "../lib/backendApi";
@@ -104,15 +105,12 @@ export function EcosystemPage({ data, onRefresh }: { data: AppData; onRefresh: (
       </SectionCard>
 
       <SectionCard title="서비스 간 타임라인" eyebrow="최근 운영 이벤트" className="span-5">
-        <div className="event-list compact">
-          {(timeline?.events || []).slice(0, 8).map((event, index) => <article className="event-row" key={String(event.id ?? index)}>
+        <PaginatedItems items={timeline?.events || []} pageSize={8} label="서비스 간 타임라인 페이지" className="event-list compact" renderItem={(event, index) => <article className="event-row" key={String(event.id ?? index)}>
             <span>{event.occurred_at ? formatTimeAgo(String(event.occurred_at)) : "recent"}</span>
             <StatusBadge status={String(event.event_type ?? "event")}>{String(event.source_service ?? "archiveos")}</StatusBadge>
             <strong>{String(event.title ?? "Ecosystem event")}</strong>
             <details><summary>상세</summary><pre>{stringifyMeta(event.detail)}</pre></details>
-          </article>)}
-          {!timeline?.events?.length ? <div className="empty-state">아직 기록된 에코시스템 타임라인 이벤트가 없습니다.</div> : null}
-        </div>
+          </article>} empty={<div className="empty-state">아직 기록된 에코시스템 타임라인 이벤트가 없습니다.</div>} />
       </SectionCard>
     </section>
   </div>;

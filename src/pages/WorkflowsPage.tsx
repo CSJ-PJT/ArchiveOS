@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { AppData } from "../app/AppShell";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
+import { PaginatedItems } from "../components/shared/PaginatedItems";
 import { MetricCard } from "../components/shared/MetricCard";
 import { createPmTask, decidePmTask, retryPmTask } from "../lib/backendApi";
 import type { PmDecisionAction, PmTask, PmTaskStatus } from "../types/database";
@@ -140,9 +141,7 @@ export function WorkflowsPage({ data, onRefresh }: { data: AppData; onRefresh: (
               </button>
             ))}
           </div>
-          <div className="workflow-list">
-            {filteredTasks.length === 0 ? <div className="empty-state">현재 필터에 맞는 작업 흐름이 없습니다.</div> : null}
-            {filteredTasks.map((task) => (
+          <PaginatedItems items={filteredTasks} pageSize={10} label="작업 흐름 기록 페이지" resetKey={filter} className="workflow-list" empty={<div className="empty-state">현재 필터에 맞는 작업 흐름이 없습니다.</div>} renderItem={(task) => (
               <button
                 className={`workflow-row ${selectedTask?.id === task.id ? "selected" : ""}`}
                 key={task.id}
@@ -157,8 +156,7 @@ export function WorkflowsPage({ data, onRefresh }: { data: AppData; onRefresh: (
                 <span>{getOwner(task)}</span>
                 <span>{formatTimeAgo(task.updated_at)}</span>
               </button>
-            ))}
-          </div>
+            )} />
         </SectionCard>
 
         <SectionCard title="작업 흐름 상세" eyebrow="사람의 결정만 기록">

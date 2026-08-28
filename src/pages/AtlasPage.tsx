@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { AppData } from "../app/AppShell";
 import { SectionCard } from "../components/shared/SectionCard";
+import { PaginatedItems } from "../components/shared/PaginatedItems";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import type { AtlasCodexWorkLog } from "../lib/backendApi";
 import { createAtlasWorkLog, runAtlasHealthchecks } from "../lib/backendApi";
@@ -146,8 +147,7 @@ export function AtlasPage({ data, onRefresh }: { data: AppData; onRefresh: () =>
         {!canRun ? <span className="small-note">PM or Admin session is required to run healthchecks.</span> : null}
       </div>
       {message ? <p className="small-note">{message}</p> : null}
-      <div className="history-table">
-        {atlas.recent_healthchecks.map((result) => {
+      <PaginatedItems items={atlas.recent_healthchecks} pageSize={10} className="history-table" label="Atlas 상태 확인 기록 페이지" renderItem={(result) => {
           const relatedLogs = workLogsByService.get(result.service_id) || [];
           const latestLog = relatedLogs[0];
           return <div className="history-row" key={result.id}>
@@ -163,9 +163,7 @@ export function AtlasPage({ data, onRefresh }: { data: AppData; onRefresh: () =>
             </div>
             {result.error_message ? <p className="small-note">{result.error_message}</p> : null}
           </div>;
-        })}
-        {!atlas.recent_healthchecks.length ? <div className="empty-state">No Atlas healthcheck results yet. Run a check from a PM/Admin session.</div> : null}
-      </div>
+        }} empty={<div className="empty-state">No Atlas healthcheck results yet. Run a check from a PM/Admin session.</div>} />
     </SectionCard>
 
     <SectionCard title="Codex Work Log" eyebrow="Manual operation evidence">
@@ -198,8 +196,7 @@ export function AtlasPage({ data, onRefresh }: { data: AppData; onRefresh: () =>
           {logMessage ? <span className="small-note">{logMessage}</span> : null}
         </div>
       </div> : <p className="small-note">Admin session is required to create Codex work logs. Public mode remains read-only.</p>}
-      <div className="history-table">
-        {atlas.recent_work_logs.map((log) => <div className="history-row" key={log.id}>
+      <PaginatedItems items={atlas.recent_work_logs} pageSize={10} className="history-table" label="Atlas 작업 기록 페이지" renderItem={(log) => <div className="history-row" key={log.id}>
           <summary>
             <strong>{log.work_title}</strong>
             <StatusBadge status={log.failure_reason ? "failed" : "recorded"}>{log.failure_reason ? "failed" : "recorded"}</StatusBadge>
@@ -212,9 +209,7 @@ export function AtlasPage({ data, onRefresh }: { data: AppData; onRefresh: () =>
             <span>Commit<strong>{log.committed ? "Yes" : "No"}</strong></span>
             <span>Deploy<strong>{log.deployed ? "Yes" : "No"}</strong></span>
           </div>
-        </div>)}
-        {!atlas.recent_work_logs.length ? <div className="empty-state">No Codex work logs recorded yet.</div> : null}
-      </div>
+        </div>} empty={<div className="empty-state">No Codex work logs recorded yet.</div>} />
     </SectionCard>
 
     <SectionCard title="Repository Matrix" eyebrow="Service ownership map">

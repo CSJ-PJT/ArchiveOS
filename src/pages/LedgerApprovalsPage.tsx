@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AppData } from "../app/AppShell";
 import { MetricCard } from "../components/shared/MetricCard";
+import { PaginatedItems } from "../components/shared/PaginatedItems";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { decideExternalApproval, getApprovalCallbacks, getExternalApproval, retryApprovalCallback } from "../lib/backendApi";
@@ -81,8 +82,7 @@ export function LedgerApprovalsPage({ data, onRefresh }: { data: AppData; onRefr
 
     <section className="workflows-layout">
       <SectionCard title="승인 요청" eyebrow="합성 거래 승인">
-        <div className="workflow-list">
-          {approvals.map((approval) => <button
+        <PaginatedItems items={approvals} pageSize={10} className="workflow-list" label="승인 요청 페이지" renderItem={(approval) => <button
             className={`workflow-row ledger-approval-row ${selected?.approval_request_id === approval.approval_request_id ? "selected" : ""}`}
             key={approval.approval_request_id}
             type="button"
@@ -93,9 +93,7 @@ export function LedgerApprovalsPage({ data, onRefresh }: { data: AppData; onRefr
             <span>{formatAmount(approval)}</span>
             <span>{approvalReasonLabel(String(approval.metadata?.eventType ?? approval.reason ?? ""))}</span>
             <span>{formatTimeAgo(approval.created_at)}</span>
-          </button>)}
-          {!approvals.length ? <div className="empty-state">현재 Archive-Ledger 승인 요청이 없습니다.</div> : null}
-        </div>
+          </button>} empty={<div className="empty-state">현재 Archive-Ledger 승인 요청이 없습니다.</div>} />
       </SectionCard>
 
       <SectionCard title="승인 상세" eyebrow="근거 · 콜백 · 결정">
@@ -111,8 +109,7 @@ export function LedgerApprovalsPage({ data, onRefresh }: { data: AppData; onRefr
       </SectionCard>
 
       <SectionCard title="콜백 발신함" eyebrow="Ledger 콜백 재시도 대기열">
-        <div className="history-table">
-          {callbacks.map((callback) => <article className="history-row" key={String(callback.callback_id)}>
+        <PaginatedItems items={callbacks} pageSize={10} className="history-table" label="콜백 발신함 페이지" renderItem={(callback) => <article className="history-row" key={String(callback.callback_id)}>
             <summary>
               <strong>{String(callback.callback_id)}</strong>
               <StatusBadge status={String(callback.status)}>{statusLabel(String(callback.status))}</StatusBadge>
@@ -127,9 +124,7 @@ export function LedgerApprovalsPage({ data, onRefresh }: { data: AppData; onRefr
             {data.auth.role === "ADMIN" && String(callback.status) !== "SENT" ? <button className="button button-secondary" type="button" onClick={async () => { await retryApprovalCallback(String(callback.callback_id)); await onRefresh(); }}>
               콜백 재시도
             </button> : null}
-          </article>)}
-          {!callbacks.length ? <div className="empty-state">현재 콜백 발신 대기 항목이 없습니다.</div> : null}
-        </div>
+          </article>} empty={<div className="empty-state">현재 콜백 발신 대기 항목이 없습니다.</div>} />
       </SectionCard>
     </section>
   </div>;
@@ -169,17 +164,14 @@ function ApprovalDetail({
     </div>
 
     <SectionCard title="RAG / 규칙 기반 근거" eyebrow="정책 판단 근거">
-      <div className="history-table">
-        {(approval.evidence || []).map((evidence) => <article className="history-row" key={evidence.id}>
+      <PaginatedItems items={approval.evidence || []} pageSize={5} className="history-table" label="승인 근거 페이지" resetKey={approval.approval_request_id} renderItem={(evidence) => <article className="history-row" key={evidence.id}>
           <summary>
             <strong>{evidence.title}</strong>
             <StatusBadge status={evidence.evidence_type === "RAG" ? "healthy" : "warning"}>{evidence.evidence_type}</StatusBadge>
             <span>{evidence.source_path || "synthetic policy"}</span>
             <p>{evidence.content}</p>
           </summary>
-        </article>)}
-        {!approval.evidence?.length ? <div className="empty-state">저장된 요청의 근거가 아직 없습니다.</div> : null}
-      </div>
+        </article>} empty={<div className="empty-state">저장된 요청의 근거가 아직 없습니다.</div>} />
     </SectionCard>
 
     <SectionCard title="감사·콜백 요약" eyebrow="민감정보 미표시">

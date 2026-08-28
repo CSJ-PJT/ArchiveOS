@@ -2,6 +2,7 @@ import type { AppRoute } from "../app/navigation";
 import type { AppData } from "../app/AppShell";
 import { Icon } from "../components/shared/Icon";
 import { MetricCard } from "../components/shared/MetricCard";
+import { PaginatedItems } from "../components/shared/PaginatedItems";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { buildOverviewViewModel } from "../lib/viewModels/overview";
@@ -97,7 +98,7 @@ export function OverviewPage({ data, onRefresh, onNavigate }: { data: AppData; o
       </SectionCard>
 
       <SectionCard title="최근 활동" eyebrow="최근 운영 근거" className="span-12" action={<button className="text-button" type="button" onClick={() => onNavigate("history")}>이력 열기 →</button>}>
-        <div className="event-list compact">{overview.recentEvents.slice(0, 5).map((event) => <article className="event-row" key={event.id}><span>{formatTimeAgo(event.created_at)}</span><StatusBadge status={event.status}>{event.type}</StatusBadge><strong>{event.title}</strong><p>{event.description}</p></article>)}{!overview.recentEvents.length ? <div className="empty-state">아직 기록된 운영 이벤트가 없습니다.</div> : null}</div>
+        <PaginatedItems items={overview.recentEvents} pageSize={5} label="최근 활동 페이지" className="event-list compact" renderItem={(event) => <article className="event-row" key={event.id}><span>{formatTimeAgo(event.created_at)}</span><StatusBadge status={event.status}>{event.type}</StatusBadge><strong>{event.title}</strong><p>{event.description}</p></article>} empty={<div className="empty-state">아직 기록된 운영 이벤트가 없습니다.</div>} />
       </SectionCard>
     </section>
   </div>;

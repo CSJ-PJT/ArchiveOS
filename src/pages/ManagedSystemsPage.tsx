@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { AppRoute } from "../app/navigation";
 import type { AppData } from "../app/AppShell";
 import { MetricCard } from "../components/shared/MetricCard";
+import { PaginatedItems } from "../components/shared/PaginatedItems";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { acknowledgePmInboxItem, resolvePmInboxItem } from "../lib/backendApi";
@@ -86,17 +87,14 @@ export function ManagedSystemsPage({
 
       <SectionCard title="PM Inbox" eyebrow={`열린 항목 ${openInbox.length}건`} className="span-5">
         {message ? <p className="small-note">{message}</p> : null}
-        <div className="history-table">
-          {managed.pmInbox.map((item) => <InboxRow
+        <PaginatedItems items={managed.pmInbox} pageSize={8} className="history-table" label="PM Inbox 페이지" renderItem={(item) => <InboxRow
             key={item.id}
             item={item}
             systemName={systemsById.get(item.sourceSystemId)?.name || item.sourceSystemId}
             canAct={canAct}
             busyItem={busyItem}
             onUpdate={updateInbox}
-          />)}
-          {!managed.pmInbox.length ? <div className="empty-state">PM Inbox 항목이 없습니다. 현재 관제 상태는 안정적입니다.</div> : null}
-        </div>
+          />} empty={<div className="empty-state">PM Inbox 항목이 없습니다. 현재 관제 상태는 안정적입니다.</div>} />
         {!canAct ? <p className="small-note">Public, Operator, PM 세션은 PM Inbox를 조회할 수 있습니다. 확인/해결 처리는 Admin 권한이 필요합니다.</p> : null}
       </SectionCard>
 
@@ -137,15 +135,12 @@ export function ManagedSystemsPage({
       </SectionCard>
 
       <SectionCard title="최근 시스템 간 이벤트" eyebrow="감사 로그와 연결된 운영 근거" className="span-5">
-        <div className="event-list compact">
-          {data.timeline.slice(0, 6).map((event) => <article className="event-row" key={event.id}>
+        <PaginatedItems items={data.timeline} pageSize={6} className="event-list compact" label="관리 시스템 최근 이벤트 페이지" renderItem={(event) => <article className="event-row" key={event.id}>
             <span>{formatTimeAgo(event.occurred_at)}</span>
             <StatusBadge status={event.status}>{event.event_type}</StatusBadge>
             <strong>{event.title}</strong>
             <p>{event.summary || event.project_id || "기록된 요약이 없습니다."}</p>
-          </article>)}
-          {!data.timeline.length ? <div className="empty-state">타임라인 조회에는 Operator, PM 또는 Admin 권한이 필요합니다.</div> : null}
-        </div>
+          </article>} empty={<div className="empty-state">타임라인 조회에는 Operator, PM 또는 Admin 권한이 필요합니다.</div>} />
       </SectionCard>
     </section>
   </div>;

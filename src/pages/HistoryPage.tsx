@@ -2,6 +2,7 @@
 import type { AppData } from "../app/AppShell";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
+import { PaginatedItems } from "../components/shared/PaginatedItems";
 import { formatTimeAgo } from "./pageUtils";
 
 type HistoryFilter = "runtime timeline" | "events" | "commands" | "agent runs" | "decisions" | "errors" | "kpi";
@@ -145,10 +146,13 @@ function TimelineRows({
 }: {
   rows: Array<{ id: string; time: string; type: string; status: string; target: string; summary: string }>;
 }) {
-  if (rows.length === 0) return <div className="empty-state">해당 필터의 기록이 없습니다.</div>;
-  return (
-    <div className="history-table">
-      {rows.map((row) => (
+  return <PaginatedItems
+    items={rows}
+    pageSize={10}
+    label="감사 기록 페이지"
+    className="history-table"
+    empty={<div className="empty-state">해당 필터의 기록이 없습니다.</div>}
+    renderItem={(row) => (
         <details className="history-row" key={row.id}>
           <summary>
             <span>{formatTimeAgo(row.time)}</span>
@@ -158,9 +162,8 @@ function TimelineRows({
           </summary>
           <pre>{row.summary}</pre>
         </details>
-      ))}
-    </div>
-  );
+      )}
+  />;
 }
 
 function historyTypeLabel(value: string) {
