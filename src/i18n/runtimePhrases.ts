@@ -568,4 +568,7 @@ export const runtimePhrases: RuntimePhrase[] = [
   phrase("일부 서비스 재무 데이터 미수집", "Financial data missing for some services", "一部サービスの財務データ未収集", "部分服务财务数据未采集"),
   phrase("최근", "Last", "直近", "最近"),
   phrase("수신", "received", "受信", "接收"),
+  phrase("초기화 중", "Initializing", "初期化中", "正在初始化"),
+  phrase("재무 Runtime Mesh 수집 대기", "Waiting for finance Runtime Mesh collection", "財務 Runtime Mesh の収集待ち", "等待财务 Runtime Mesh 采集"),
+  phrase("실시간 연결은 정상이며 새 런타임 이벤트를 기다리고 있습니다.", "The live connection is healthy and waiting for a new runtime event.", "リアルタイム接続は正常で、新しいランタイムイベントを待機しています。", "实时连接正常，正在等待新的运行时事件。"),
 ];
