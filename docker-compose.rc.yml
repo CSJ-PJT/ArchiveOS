@@ -20,6 +20,10 @@ services:
       # rate-limited and does not start Nexus simulation or external writes.
       ARCHIVE_LIVE_FLOW_COLLECTOR_ENABLED: ${ARCHIVE_LIVE_FLOW_COLLECTOR_ENABLED:-true}
       ARCHIVE_LIVE_FLOW_COLLECTOR_INTERVAL_MS: ${ARCHIVE_LIVE_FLOW_COLLECTOR_INTERVAL_MS:-5000}
+      # The public administrator mailbox is an intentional ArchiveOS capability.
+      # Provider credentials remain runtime-only and are never committed.
+      ARCHIVEOS_MAIL_ENABLED: ${ARCHIVEOS_MAIL_ENABLED:-true}
+      ARCHIVEOS_MAIL_ADDRESS: ${ARCHIVEOS_MAIL_ADDRESS:-csj@archiveos.kr}
   backend:
     environment:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS is required for rc}
