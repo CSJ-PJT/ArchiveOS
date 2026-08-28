@@ -1223,14 +1223,8 @@ app.post("/api/local-actions/run", async (request, response) => {
   const commandStatus = result.status;
   const commandResult = summarizeCommandOutput(result.stdout, result.stderr);
 
-  const { error } = await supabaseAdmin.from("command_runs").insert({
-    command: result.action,
-    command_type: "local_action",
-    status: commandStatus,
-    result: commandResult,
-  });
-
-  if (error) {
+  const recorded = await recordLocalActionResult(request, result.action, commandStatus, commandResult);
+  if (!recorded) {
     response.status(500).json({ error: "Local action ran but failed to record command result." });
     return;
   }
@@ -2063,6 +2057,30 @@ function validateLocalActionBody(body: unknown): LocalActionValidationResult {
 
 function resolveProjectRoot(projectPath: string) {
   return path.basename(projectPath).toLowerCase() === "backend" ? path.dirname(projectPath) : projectPath;
+}
+
+async function recordLocalActionResult(request: any, command: string, status: string, result: string) {
+  const baseUrl = process.env.ARCHIVEOS_AI_BASE_URL?.trim() || "http://localhost:4100";
+  const headers = new Headers({ "content-type": "application/json" });
+  const token = process.env.ARCHIVE_TOKEN_ADMIN_OPERATOR?.trim();
+  const cookie = request?.header?.("cookie");
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+    headers.set("X-Archive-Source-System", "archive-os");
+    headers.set("X-Archive-Service-Scope", "admin:operate");
+  } else if (cookie) {
+    headers.set("cookie", cookie);
+  }
+  try {
+    const response = await fetch(`${baseUrl}/api/commands`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ command, command_type: "local_action", status, result }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 function runLocalAction(projectPath: string, action: LocalAction): Promise<LocalActionResult> {
