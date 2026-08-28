@@ -1181,13 +1181,13 @@ export type SpringBatchExecution = {
   jobName: string | null;
   status: string;
   exitCode: string;
-  exitDescription: string;
+  exitDescription?: string;
   createTime: string | null;
   startTime: string | null;
   endTime: string | null;
   running: boolean;
-  parameters: Record<string, unknown>;
-  executionContext: Record<string, unknown>;
+  parameters?: Record<string, unknown>;
+  executionContext?: Record<string, unknown>;
   steps?: Array<{
     stepName: string;
     status: string;
@@ -1198,7 +1198,7 @@ export type SpringBatchExecution = {
     rollbackCount: number;
     startTime: string | null;
     endTime: string | null;
-    executionContext: Record<string, unknown>;
+    executionContext?: Record<string, unknown>;
   }>;
 };
 
