@@ -597,6 +597,8 @@ function statusLabel(value: string) {
   if (status === "critical" || status === "failed" || status === "rejected") return "긴급";
   if (status === "approval_required") return "승인 필요";
   if (status === "info") return "정보";
+  if (status === "processing") return "처리 중";
+  if (status === "observed") return "확인됨";
   if (status === "working" || status === "running" || status === "moving") return "진행 중";
   if (status === "created") return "생성됨";
   if (status === "completed") return "완료";
