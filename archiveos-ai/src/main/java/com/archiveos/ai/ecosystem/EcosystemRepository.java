@@ -44,6 +44,17 @@ public class EcosystemRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
+    public Map<String, Object> latestHealthyHealth(String type) {
+        List<Map<String, Object>> rows = jdbc.query("""
+                select * from public.ecosystem_health_snapshot
+                 where service_type = ?
+                   and status = 'HEALTHY'
+                   and summary <> '{}'::jsonb
+                 order by checked_at desc limit 1
+                """, this::healthRow, type);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
     public void recordTimeline(String traceId, String correlationId, String sourceService, String eventType,
                                String aggregateType, String aggregateId, String title, Map<String, Object> detail) {
         jdbc.update("""

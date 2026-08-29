@@ -214,9 +214,25 @@ public class EcosystemService {
 
     private Map<String, Object> check(String type, EcosystemProperties.ServiceConfig config, IntegrationResult health, IntegrationResult summary) {
         if (config == null || !config.isEnabled()) return disabled(config);
+        if (health.status() == EcosystemServiceStatus.HEALTHY && summary.status() != EcosystemServiceStatus.HEALTHY) {
+            Map<String, Object> previous = repository.latestHealthyHealth(type);
+            if (previous != null) {
+                Map<String, Object> body = new LinkedHashMap<>(map(previous.get("summary")));
+                body.put("health", health.body());
+                body.put("latencyMs", summary.latencyMs());
+                Map<String, Object> collection = new LinkedHashMap<>();
+                collection.put("status", "STALE_LAST_KNOWN_GOOD");
+                collection.put("lastSuccessfulAt", previous.get("checked_at"));
+                collection.put("reason", summary.errorMessage() == null ? "SUMMARY_REFRESH_FAILED" : summary.errorMessage());
+                body.put("collection", collection);
+                Map<String, Object> snapshot = repository.recordHealth(type, config.getName(), config.getBaseUrl(),
+                        EcosystemServiceStatus.HEALTHY.name(), health.httpStatus(), body, null);
+                return serviceMap(config, EcosystemServiceStatus.HEALTHY.name(), snapshot.get("checked_at"), body, null);
+            }
+        }
         EcosystemServiceStatus status = health.status() == EcosystemServiceStatus.HEALTHY && summary.status() == EcosystemServiceStatus.HEALTHY
                 ? EcosystemServiceStatus.HEALTHY
-                : health.status() == EcosystemServiceStatus.UNAVAILABLE || summary.status() == EcosystemServiceStatus.UNAVAILABLE
+                : health.status() == EcosystemServiceStatus.UNAVAILABLE
                     ? EcosystemServiceStatus.UNAVAILABLE
                     : EcosystemServiceStatus.DEGRADED;
         // External services do not all use the same envelope. Normalize both

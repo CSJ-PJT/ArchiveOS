@@ -128,7 +128,7 @@ archive:
     collector-interval-ms: ${ARCHIVE_LIVE_FLOW_COLLECTOR_INTERVAL_MS:1000}
   ecosystem:
     enabled: ${ARCHIVE_ECOSYSTEM_ENABLED:true}
-    refresh-timeout-ms: ${ARCHIVE_ECOSYSTEM_REFRESH_TIMEOUT_MS:3000}
+    refresh-timeout-ms: ${ARCHIVE_ECOSYSTEM_REFRESH_TIMEOUT_MS:15000}
     services:
       nexus:
         enabled: ${ARCHIVE_ECOSYSTEM_SERVICES_NEXUS_ENABLED:true}
@@ -170,7 +170,7 @@ archive:
         enabled: ${ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_ENABLED:true}
         name: Archive-Ledger
         base-url: ${ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_BASE_URL:http://localhost:18080}
-        request-timeout-ms: ${ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_TIMEOUT_MS:6000}
+        request-timeout-ms: ${ARCHIVE_ECOSYSTEM_SERVICES_LEDGER_TIMEOUT_MS:20000}
         health-path: /actuator/health
         summary-path: /api/operations/summary
         approval-required-path: /api/transactions?status=APPROVAL_REQUIRED
