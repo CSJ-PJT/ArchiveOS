@@ -101,6 +101,50 @@ class EcosystemServiceTest {
         assertThat(logisticsBody).doesNotContainKey("data");
     }
 
+    @Test void healthyServiceUsesLastKnownGoodSummaryWhenCollectionTimesOut() {
+        EcosystemProperties properties = properties();
+        EcosystemRepository repository = Mockito.mock(EcosystemRepository.class);
+        NexusClient nexus = Mockito.mock(NexusClient.class);
+        MarketClient market = Mockito.mock(MarketClient.class);
+        LogiticsClient logitics = Mockito.mock(LogiticsClient.class);
+        LedgerClient ledger = Mockito.mock(LedgerClient.class);
+        when(repository.approvalSummary()).thenReturn(Map.of());
+        when(repository.callbackSummary()).thenReturn(Map.of());
+        when(market.config()).thenReturn(properties.getEcosystem().getServices().get("market"));
+        when(nexus.config()).thenReturn(properties.getEcosystem().getServices().get("nexus"));
+        when(logitics.config()).thenReturn(properties.getEcosystem().getServices().get("logitics"));
+        when(ledger.config()).thenReturn(properties.getEcosystem().getServices().get("ledger"));
+        IntegrationResult healthy = new IntegrationResult(EcosystemServiceStatus.HEALTHY, 200, Map.of(), null, 5);
+        IntegrationResult timedOut = new IntegrationResult(EcosystemServiceStatus.UNAVAILABLE, null, Map.of(), "Request timed out", 3001);
+        when(market.health()).thenReturn(healthy); when(market.operationsSummary()).thenReturn(healthy);
+        when(market.marketEconomySummary()).thenReturn(healthy); when(market.outboxSummary()).thenReturn(healthy);
+        when(nexus.health()).thenReturn(healthy); when(nexus.operationsSummary()).thenReturn(healthy); when(nexus.outboxSummary()).thenReturn(healthy);
+        when(logitics.health()).thenReturn(healthy); when(logitics.operationsSummary()).thenReturn(timedOut);
+        when(ledger.health()).thenReturn(healthy); when(ledger.operationsSummary()).thenReturn(healthy);
+        when(repository.latestHealthyHealth("LOGITICS")).thenReturn(Map.of(
+                "checked_at", "2026-08-29T00:00:00Z",
+                "summary", Map.of("economy", Map.of("revenue", 12345), "status", "HEALTHY")));
+        when(repository.recordHealth(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
+                .thenAnswer(invocation -> Map.of("status", invocation.getArgument(3), "checked_at", "2026-08-29T00:01:00Z"));
+
+        Map<String, Object> result = new EcosystemService(properties, repository, nexus, market, logitics, ledger).summary();
+
+        assertThat(result).containsEntry("status", "HEALTHY");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> services = (Map<String, Object>) result.get("services");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> logistics = (Map<String, Object>) services.get("logitics");
+        assertThat(logistics).containsEntry("status", "HEALTHY").containsEntry("errorMessage", null);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> summary = (Map<String, Object>) logistics.get("summary");
+        assertThat(summary).containsKey("economy");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> collection = (Map<String, Object>) summary.get("collection");
+        assertThat(collection)
+                .containsEntry("status", "STALE_LAST_KNOWN_GOOD")
+                .containsEntry("reason", "Request timed out");
+    }
+
     @Test void demoRunIsBlockedByDefaultSafeMode() {
         EcosystemService service = new EcosystemService(properties(), Mockito.mock(EcosystemRepository.class),
                 Mockito.mock(NexusClient.class), Mockito.mock(MarketClient.class), Mockito.mock(LogiticsClient.class), Mockito.mock(LedgerClient.class));
