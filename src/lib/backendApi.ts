@@ -1200,6 +1200,26 @@ export type AiRuntime = {
   };
 };
 
+export type OpenAiUsageSummary = {
+  status: "AVAILABLE" | "NOT_CONFIGURED" | "UNAVAILABLE";
+  configured: boolean;
+  budgetConfigured: boolean;
+  periodStart: string;
+  periodEnd: string;
+  currentCost: { value: number; currency: string } | null;
+  monthlyBudget: { value: number; currency: string } | null;
+  remainingBudget: { value: number; currency: string } | null;
+  usedPercent: number | null;
+  usage: {
+    requests: number;
+    inputTokens: number;
+    outputTokens: number;
+    cachedInputTokens: number;
+  };
+  updatedAt: string;
+  message: string;
+};
+
 export type RagReference = {
   title: string;
   heading: string | null;
@@ -1861,6 +1881,11 @@ export async function getRuntimeVersion() {
 
 export async function getAiRuntime(init?: RequestInit) {
   const response = await request<ApiEnvelope<AiRuntime>>("/api/ai/runtime", init);
+  return response.data;
+}
+
+export async function getOpenAiUsage(init?: RequestInit) {
+  const response = await request<ApiEnvelope<OpenAiUsageSummary>>("/api/openai/usage", init);
   return response.data;
 }
 

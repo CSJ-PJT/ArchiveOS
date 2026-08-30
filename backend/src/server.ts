@@ -93,6 +93,7 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "AX Roadmap", method: "GET", path: "/api/ax/roadmap", service: "ax", description: "AX architecture roadmap phases." },
   { name: "Obsidian Sync", method: "POST", path: "/api/obsidian/sync", service: "knowledge", description: "Spring AI Obsidian vault sync proxy." },
   { name: "Spring AI Runtime", method: "GET", path: "/api/ai/runtime", service: "knowledge", description: "archiveos-ai runtime telemetry proxy." },
+  { name: "OpenAI Usage", method: "GET", path: "/api/openai/usage", service: "knowledge", description: "Admin-only OpenAI organization cost and usage summary proxy." },
   { name: "Spring AI Runtime Check", method: "POST", path: "/api/ai/runtime/check", service: "knowledge", description: "Manual ChatModel and EmbeddingModel smoke check proxy." },
   { name: "Obsidian Documents", method: "GET", path: "/api/obsidian/documents", service: "knowledge", description: "Spring AI indexed Obsidian document proxy." },
   { name: "RAG Search", method: "GET", path: "/api/rag/search", service: "knowledge", description: "Spring AI pgvector similarity search proxy." },
@@ -479,6 +480,10 @@ app.get("/api/ai/runtime", async (_request, response) => {
   } catch (error) {
     sendProxyError(response, error, "ArchiveOS AI runtime is unavailable.");
   }
+});
+
+app.get("/api/openai/usage", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/openai/usage", undefined, undefined, request);
 });
 
 app.post("/api/ai/runtime/check", async (request, response) => {
