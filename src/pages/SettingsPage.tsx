@@ -1,15 +1,16 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { AppData } from "../app/AppShell";
 import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { useTheme, type ThemeMode } from "../theme/ThemeProvider";
 import { formatTimeAgo, stringifyMeta } from "./pageUtils";
-import { loginAdmin, logoutAdmin, type PlatformRole } from "../lib/backendApi";
+import { getOpenAiUsage, loginAdmin, logoutAdmin, type OpenAiUsageSummary, type PlatformRole } from "../lib/backendApi";
 
 const sections = [
   "Appearance",
   "Backend",
   "Spring AI",
+  "OpenAI Usage",
   "Database",
   "Obsidian",
   "Docker",
@@ -36,6 +37,22 @@ export function SettingsPage({
   const [requestedRole, setRequestedRole] = useState<Exclude<PlatformRole, "PUBLIC">>("ADMIN");
   const [authError, setAuthError] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
+  const [openAiUsage, setOpenAiUsage] = useState<OpenAiUsageSummary | null>(null);
+  const [openAiUsageBusy, setOpenAiUsageBusy] = useState(false);
+  const [openAiUsageError, setOpenAiUsageError] = useState<string | null>(null);
+
+  async function loadOpenAiUsage() {
+    if (data.auth.role !== "ADMIN") return;
+    setOpenAiUsageBusy(true);
+    setOpenAiUsageError(null);
+    try { setOpenAiUsage(await getOpenAiUsage()); }
+    catch (error) { setOpenAiUsageError(error instanceof Error ? error.message : String(error)); }
+    finally { setOpenAiUsageBusy(false); }
+  }
+
+  useEffect(() => {
+    if (open === "OpenAI Usage" && data.auth.role === "ADMIN" && !openAiUsage && !openAiUsageBusy) void loadOpenAiUsage();
+  }, [data.auth.role, open, openAiUsage, openAiUsageBusy]);
 
   async function login() {
     setAuthBusy(true); setAuthError(null);
@@ -95,6 +112,28 @@ export function SettingsPage({
             <KeyValue label="ChatModel" value={data.aiRuntime ? `${data.aiRuntime.chatModel.model} / ${data.aiRuntime.chatModel.available ? "available" : "unavailable"}` : "unknown"} />
             <KeyValue label="EmbeddingModel" value={data.aiRuntime ? `${data.aiRuntime.embeddingModel.model} / ${data.aiRuntime.embeddingModel.dimensions}d` : "unknown"} />
             <KeyValue label="RAG ready" value={data.aiRuntime?.rag.ready ? "yes" : "no"} />
+          </SettingsRow>
+
+          <SettingsRow title="OpenAI 사용량" status={openAiUsage?.status === "AVAILABLE" ? "connected" : openAiUsage?.status === "NOT_CONFIGURED" ? "not_configured" : openAiUsage?.status === "UNAVAILABLE" ? "warning" : "unknown"} open={open === "OpenAI Usage"} onToggle={() => setOpen(open === "OpenAI Usage" ? "" : "OpenAI Usage")}>
+            {data.auth.role !== "ADMIN" ? <p>OpenAI 비용과 사용량은 관리자 계정에서만 조회할 수 있습니다.</p> : null}
+            {data.auth.role === "ADMIN" ? <>
+              <div className="box-row"><strong>이번 달 조직 사용량</strong><button className="button button-secondary" type="button" onClick={() => void loadOpenAiUsage()} disabled={openAiUsageBusy}>{openAiUsageBusy ? "조회 중..." : "사용량 새로고침"}</button></div>
+              {openAiUsageError ? <div className="empty-state error-state">{openAiUsageError}</div> : null}
+              {openAiUsage ? <>
+                <KeyValue label="조회 상태" value={openAiUsage.status === "AVAILABLE" ? "정상" : openAiUsage.status === "NOT_CONFIGURED" ? "관리자 키 설정 필요" : "일시 조회 불가"} />
+                <KeyValue label="조회 기간" value={`${openAiUsage.periodStart} ~ ${formatPeriodEnd(openAiUsage.periodEnd)}`} />
+                <KeyValue label="이번 달 비용" value={formatMoney(openAiUsage.currentCost)} />
+                <KeyValue label="월 예산" value={openAiUsage.budgetConfigured ? formatMoney(openAiUsage.monthlyBudget) : "미설정"} />
+                <KeyValue label="남은 예산" value={openAiUsage.budgetConfigured ? formatMoney(openAiUsage.remainingBudget) : "예산 설정 후 계산"} />
+                <KeyValue label="예산 사용률" value={openAiUsage.usedPercent === null ? "예산 미설정" : `${openAiUsage.usedPercent.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}%`} />
+                <KeyValue label="모델 요청" value={`${openAiUsage.usage.requests.toLocaleString("ko-KR")}건`} />
+                <KeyValue label="입력 토큰" value={openAiUsage.usage.inputTokens.toLocaleString("ko-KR")} />
+                <KeyValue label="출력 토큰" value={openAiUsage.usage.outputTokens.toLocaleString("ko-KR")} />
+                <KeyValue label="캐시 입력 토큰" value={openAiUsage.usage.cachedInputTokens.toLocaleString("ko-KR")} />
+                <KeyValue label="마지막 조회" value={new Date(openAiUsage.updatedAt).toLocaleString("ko-KR")} />
+                <p className="small-note">{openAiUsage.message} API 키와 조직·프로젝트 식별자는 화면에 노출하지 않습니다.</p>
+              </> : openAiUsageBusy ? <p>OpenAI 조직 사용량을 조회하고 있습니다.</p> : null}
+            </> : null}
           </SettingsRow>
 
           <SettingsRow title="Database" status={data.knowledge ? "connected" : "unknown"} open={open === "Database"} onToggle={() => setOpen(open === "Database" ? "" : "Database")}>
@@ -175,4 +214,15 @@ function KeyValue({ label, value }: { label: string; value: ReactNode }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function formatMoney(money: OpenAiUsageSummary["currentCost"]) {
+  if (!money) return "조회되지 않음";
+  return new Intl.NumberFormat("ko-KR", { style: "currency", currency: money.currency.toUpperCase(), minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(money.value);
+}
+
+function formatPeriodEnd(periodEnd: string) {
+  const date = new Date(`${periodEnd}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
 }

@@ -43,6 +43,13 @@ archiveos:
     auto-approval-initial-delay-ms: ${ARCHIVEOS_AUTO_APPROVAL_INITIAL_DELAY_MS:60000}
     auto-approval-delay-ms: ${ARCHIVEOS_AUTO_APPROVAL_DELAY_MS:60000}
   openai-api-key: ${OPENAI_API_KEY:}
+  openai-usage:
+    admin-api-key: ${OPENAI_ADMIN_API_KEY:}
+    monthly-budget-usd: ${OPENAI_MONTHLY_BUDGET_USD:0}
+    organization-id: ${OPENAI_ORGANIZATION_ID:}
+    project-id: ${OPENAI_PROJECT_ID:}
+    cache-ttl: ${OPENAI_USAGE_CACHE_TTL:5m}
+    base-url: ${OPENAI_USAGE_BASE_URL:https://api.openai.com}
   obsidian-vault-path: ${OBSIDIAN_VAULT_PATH:}
   obsidian-chunk-size: ${OBSIDIAN_CHUNK_SIZE:1200}
   obsidian-chunk-overlap: ${OBSIDIAN_CHUNK_OVERLAP:160}
