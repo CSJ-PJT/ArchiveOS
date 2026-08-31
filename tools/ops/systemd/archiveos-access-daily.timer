@@ -1,0 +1,12 @@
+[Unit]
+Description=Import previous-day ArchiveOS edge access aggregates before the combined report
+
+[Timer]
+OnCalendar=*-*-* 00:05:00 Asia/Seoul
+Persistent=true
+AccuracySec=1s
+Unit=archiveos-access-daily.service
+
+[Install]
+WantedBy=timers.target
+
