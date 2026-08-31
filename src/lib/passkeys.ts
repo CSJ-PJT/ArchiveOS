@@ -15,8 +15,16 @@ export function passkeysAvailable() {
     && typeof navigator.credentials?.get === "function";
 }
 
+export function embeddedBrowserForPasskeys() {
+  if (typeof navigator === "undefined") return false;
+  return /;\s*wv\)|\bwv\b|KAKAOTALK|DaumApps|NAVER\(|Instagram|FBAN|FBAV/i.test(navigator.userAgent);
+}
+
 export async function createPasskey(label: string) {
   ensureAvailable();
+  if (embeddedBrowserForPasskeys()) {
+    throw new Error("앱 내 브라우저에서는 패스키를 안전하게 등록할 수 없습니다. 메뉴에서 ‘다른 브라우저로 열기’를 선택한 뒤 Chrome 또는 Samsung Internet에서 다시 시도해 주세요.");
+  }
   const options = await getPasskeyRegistrationOptions();
   const publicKey = decodeCreationOptions(options);
   let credential: Credential | null;
@@ -52,6 +60,9 @@ export async function createPasskey(label: string) {
 
 export async function signInWithPasskey() {
   ensureAvailable();
+  if (embeddedBrowserForPasskeys()) {
+    throw new Error("앱 내 브라우저에서는 패스키 로그인을 지원하지 않습니다. Chrome 또는 Samsung Internet에서 ArchiveOS를 열어 주세요.");
+  }
   const options = await getPasskeyAuthenticationOptions();
   const publicKey = decodeRequestOptions(options);
   let credential: Credential | null;

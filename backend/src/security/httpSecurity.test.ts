@@ -96,6 +96,27 @@ passkeyLimiter(passkeyRequest, passkeyResponse, () => { passkeyAllowed += 1; });
 assert.equal(passkeyAllowed, 1);
 assert.equal(passkeyStatus, 429);
 
+const recoveryLimiter = createApiRateLimiter({ now: () => 1_700, generalLimit: 20, loginLimit: 1 });
+let recoveryAllowed = 0;
+let recoveryStatus = 0;
+const recoveryRequest = {
+  method: "POST",
+  path: "/api/auth/recovery/password",
+  socket: { remoteAddress: "198.51.100.11" },
+  header: () => undefined,
+} as never;
+const recoveryResponse = {
+  setHeader: () => undefined,
+  status: (value: number) => {
+    recoveryStatus = value;
+    return { json: () => undefined };
+  },
+} as never;
+recoveryLimiter(recoveryRequest, recoveryResponse, () => { recoveryAllowed += 1; });
+recoveryLimiter(recoveryRequest, recoveryResponse, () => { recoveryAllowed += 1; });
+assert.equal(recoveryAllowed, 1);
+assert.equal(recoveryStatus, 429);
+
 const ragLimiter = createApiRateLimiter({ now: () => 2_000, generalLimit: 10, ragLimit: 1 });
 let ragAllowed = 0;
 let ragStatus = 0;

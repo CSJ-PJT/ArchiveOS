@@ -43,6 +43,16 @@ export type PasskeyStatus = {
   items: PasskeyCredentialSummary[];
 };
 
+export type ManagedAccount = {
+  username: string;
+  email: string | null;
+  role: Exclude<PlatformRole, "PUBLIC">;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt: string | null;
+};
+
 export type UsageAuditEntry = {
   id: string;
   occurred_at: string;
@@ -734,6 +744,41 @@ export async function loginAdmin(password: string, role: Exclude<PlatformRole, "
 
 export async function logoutAdmin() {
   const response = await request<ApiEnvelope<{ loggedOut: boolean }>>("/api/auth/logout", { method: "POST" });
+  return response.data;
+}
+
+export async function getManagedAccounts() {
+  const response = await request<ApiEnvelope<{ items: ManagedAccount[] }>>("/api/auth/admin/users");
+  return response.data.items;
+}
+
+export async function createManagedAccount(input: { username: string; email: string; password: string; role: Exclude<PlatformRole, "PUBLIC"> }) {
+  const response = await request<ApiEnvelope<ManagedAccount>>("/api/auth/admin/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
+export async function requestAccountId(email: string) {
+  const response = await request<ApiEnvelope<{ message: string }>>("/api/auth/recovery/id", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: email }),
+  });
+  return response.data;
+}
+
+export async function requestPasswordReset(value: string) {
+  const response = await request<ApiEnvelope<{ message: string }>>("/api/auth/recovery/password", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value }),
+  });
+  return response.data;
+}
+
+export async function completePasswordReset(token: string, password: string) {
+  const response = await request<ApiEnvelope<{ changed: boolean }>>("/api/auth/recovery/password/complete", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, password }),
+  });
   return response.data;
 }
 

@@ -4,7 +4,7 @@ import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { useTheme, type ThemeMode } from "../theme/ThemeProvider";
 import { formatTimeAgo, stringifyMeta } from "./pageUtils";
-import { deletePasskeyCredential, getOpenAiUsage, getPasskeys, loginAdmin, logoutAdmin, type OpenAiUsageSummary, type PasskeyStatus, type PlatformRole } from "../lib/backendApi";
+import { completePasswordReset, createManagedAccount, deletePasskeyCredential, getManagedAccounts, getOpenAiUsage, getPasskeys, loginAdmin, logoutAdmin, requestAccountId, requestPasswordReset, type ManagedAccount, type OpenAiUsageSummary, type PasskeyStatus, type PlatformRole } from "../lib/backendApi";
 import { createPasskey, passkeysAvailable, signInWithPasskey } from "../lib/passkeys";
 
 type BeforeInstallPromptEvent = Event & {
@@ -25,6 +25,7 @@ const sections = [
   "Public Access",
   "Security",
   "Passkeys",
+  "Accounts",
   "Build Information",
 ] as const;
 
@@ -51,6 +52,20 @@ export function SettingsPage({
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [recoveryMode, setRecoveryMode] = useState<"" | "id" | "password">("");
+  const [recoveryValue, setRecoveryValue] = useState("");
+  const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState("");
+  const [accounts, setAccounts] = useState<ManagedAccount[] | null>(null);
+  const [accountUsername, setAccountUsername] = useState("");
+  const [accountEmail, setAccountEmail] = useState("");
+  const [accountPassword, setAccountPassword] = useState("");
+  const [accountRole, setAccountRole] = useState<Exclude<PlatformRole, "PUBLIC">>("OPERATOR");
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountMessage, setAccountMessage] = useState<string | null>(null);
+  const resetToken = typeof window === "undefined" ? "" : new URLSearchParams(window.location.hash.split("?")[1] || "").get("resetToken") || "";
 
   async function loadOpenAiUsage() {
     if (data.auth.role !== "ADMIN") return;
@@ -111,9 +126,51 @@ export function SettingsPage({
     finally { setPasskeyBusy(false); }
   }
 
+  async function sendRecovery() {
+    setRecoveryBusy(true); setRecoveryMessage(null);
+    try {
+      const result = recoveryMode === "id" ? await requestAccountId(recoveryValue) : await requestPasswordReset(recoveryValue);
+      setRecoveryMessage(result.message); setRecoveryValue("");
+    } catch (error) { setRecoveryMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setRecoveryBusy(false); }
+  }
+
+  async function changeRecoveredPassword() {
+    if (resetPassword !== resetPasswordConfirm) { setRecoveryMessage("새 비밀번호가 서로 다릅니다."); return; }
+    setRecoveryBusy(true); setRecoveryMessage(null);
+    try {
+      await completePasswordReset(resetToken, resetPassword);
+      setRecoveryMessage("비밀번호를 변경했습니다. 새 비밀번호로 로그인해 주세요.");
+      setResetPassword(""); setResetPasswordConfirm("");
+    } catch (error) { setRecoveryMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setRecoveryBusy(false); }
+  }
+
+  async function loadAccounts() {
+    if (data.auth.role !== "ADMIN") return;
+    setAccountBusy(true); setAccountMessage(null);
+    try { setAccounts(await getManagedAccounts()); }
+    catch (error) { setAccountMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setAccountBusy(false); }
+  }
+
+  async function addAccount() {
+    setAccountBusy(true); setAccountMessage(null);
+    try {
+      await createManagedAccount({ username: accountUsername, email: accountEmail, password: accountPassword, role: accountRole });
+      setAccountUsername(""); setAccountEmail(""); setAccountPassword("");
+      setAccountMessage("계정을 생성했습니다."); setAccounts(await getManagedAccounts());
+    } catch (error) { setAccountMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setAccountBusy(false); }
+  }
+
   useEffect(() => {
     if (open === "Passkeys" && data.auth.role === "ADMIN" && !passkeys && !passkeyBusy) void loadPasskeys();
   }, [data.auth.role, open, passkeys, passkeyBusy]);
+
+  useEffect(() => {
+    if (open === "Accounts" && data.auth.role === "ADMIN" && !accounts && !accountBusy) void loadAccounts();
+  }, [accounts, accountBusy, data.auth.role, open]);
 
   useEffect(() => {
     const capture = (event: Event) => {
@@ -134,16 +191,30 @@ export function SettingsPage({
   if (data.auth.role === "PUBLIC") {
     return <div className="page-stack"><SectionCard title="운영자 로그인" eyebrow="PUBLIC 세션에서는 설정을 변경할 수 없습니다">
       <div className="decision-panel">
+        {resetToken ? <div className="recovery-panel">
+          <strong>새 비밀번호 설정</strong>
+          <input type="password" autoComplete="new-password" value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} placeholder="새 비밀번호 16자 이상" />
+          <input type="password" autoComplete="new-password" value={resetPasswordConfirm} onChange={(event) => setResetPasswordConfirm(event.target.value)} placeholder="새 비밀번호 확인" />
+          <button className="button button-primary" type="button" onClick={() => void changeRecoveredPassword()} disabled={recoveryBusy || resetPassword.length < 16 || !resetPasswordConfirm}>{recoveryBusy ? "변경 중..." : "비밀번호 변경"}</button>
+        </div> : null}
         <select value={requestedRole} onChange={(event) => setRequestedRole(event.target.value as Exclude<PlatformRole, "PUBLIC">)}>
           <option value="OPERATOR">운영자</option><option value="PM">PM</option><option value="ADMIN">관리자</option>
         </select>
         <input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="admin" />
         <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="관리자 비밀번호" />
         {authError ? <div className="empty-state error-state">{authError}</div> : null}
-        <button className="button button-primary" type="button" onClick={login} disabled={authBusy || !password}>{authBusy ? "로그인 중..." : "로그인"}</button>
-        <div className="passkey-divider"><span>또는</span></div>
-        <p className="passkey-login-hint">이미 패스키를 등록했다면 지문으로 로그인할 수 있습니다. 처음이면 위에서 비밀번호로 로그인해 주세요.</p>
-        <button className="button button-secondary passkey-login-button" type="button" onClick={() => void passkeyLogin()} disabled={passkeyBusy || !passkeysAvailable()}>{passkeyBusy ? "확인 중..." : "패스키 로그인"}</button>
+        <div className="login-action-row">
+          <button className="button button-primary" type="button" onClick={login} disabled={authBusy || !password}>{authBusy ? "로그인 중..." : "로그인"}</button>
+          <button className="button button-secondary" type="button" onClick={() => void passkeyLogin()} disabled={passkeyBusy || !passkeysAvailable()}>{passkeyBusy ? "확인 중..." : "패스키"}</button>
+          <button className="button button-quiet" type="button" onClick={() => { setRecoveryMode("id"); setRecoveryMessage(null); }}>ID 찾기</button>
+          <button className="button button-quiet" type="button" onClick={() => { setRecoveryMode("password"); setRecoveryMessage(null); }}>비밀번호 찾기</button>
+        </div>
+        {recoveryMode ? <div className="recovery-panel">
+          <strong>{recoveryMode === "id" ? "ID 찾기" : "비밀번호 재설정"}</strong>
+          <input type={recoveryMode === "id" ? "email" : "text"} autoComplete="email" value={recoveryValue} onChange={(event) => setRecoveryValue(event.target.value)} placeholder={recoveryMode === "id" ? "가입한 이메일" : "ID 또는 가입한 이메일"} />
+          <div className="recovery-actions"><button className="button button-primary" type="button" onClick={() => void sendRecovery()} disabled={recoveryBusy || recoveryValue.length < 3}>{recoveryBusy ? "전송 중..." : "메일 보내기"}</button><button className="button button-quiet" type="button" onClick={() => setRecoveryMode("")}>닫기</button></div>
+        </div> : null}
+        {recoveryMessage ? <div className="empty-state">{recoveryMessage}</div> : null}
         {installPrompt ? <button className="button button-secondary" type="button" onClick={() => void installApp()}>ArchiveOS 앱 설치</button> : null}
         {!passkeysAvailable() ? <p className="small-note">HTTPS와 패스키를 지원하는 브라우저에서 사용할 수 있습니다.</p> : null}
       </div>
@@ -242,10 +313,6 @@ export function SettingsPage({
           </SettingsRow>
 
           <SettingsRow title="패스키·지문 로그인" status={passkeys?.items.length ? "configured" : "not_configured"} open={open === "Passkeys"} onToggle={() => setOpen(open === "Passkeys" ? "" : "Passkeys")}>
-            <div className="passkey-setup-copy">
-              <strong>이 기기에서 지문 로그인을 켭니다.</strong>
-              <span>지문 원본은 기기 밖으로 전송되지 않고 ArchiveOS에는 공개키만 저장됩니다.</span>
-            </div>
             {passkeyError ? <div className="empty-state error-state">{passkeyError}</div> : null}
             <div className="passkey-register-row">
               <button className="button button-primary passkey-register-button" type="button" onClick={() => void addPasskey()} disabled={passkeyBusy || !passkeysAvailable()}>{passkeyBusy ? "등록 중..." : "패스키 등록"}</button>
@@ -254,8 +321,21 @@ export function SettingsPage({
               <div><strong>{credential.label || "이름 없는 패스키"}</strong><small>등록 {credential.created ? new Date(credential.created).toLocaleString("ko-KR") : "시각 없음"} · 최근 사용 {credential.last_used ? formatTimeAgo(credential.last_used) : "아직 없음"}</small></div>
               <button className="button button-secondary" type="button" onClick={() => void removePasskey(credential.id)} disabled={passkeyBusy}>삭제</button>
             </li>)}</ul> : <p className="small-note">아직 등록된 패스키가 없습니다.</p>}
-            <p className="small-note">다른 기기를 등록하려면 그 기기에서 비밀번호로 로그인한 뒤 이 버튼을 한 번 누르세요. 기기 간 QR이 필요하면 브라우저의 ‘다른 기기 사용’이 안전한 일회용 QR을 표시합니다.</p>
             {installPrompt ? <button className="button button-secondary" type="button" onClick={() => void installApp()}>이 기기에 ArchiveOS 앱 설치</button> : <p className="small-note">설치 버튼이 보이지 않으면 브라우저 메뉴에서 ‘홈 화면에 추가’ 또는 ‘앱 설치’를 선택하세요.</p>}
+          </SettingsRow>
+
+          <SettingsRow title="계정 관리" status={accounts ? `${accounts.length}` : "admin_only"} open={open === "Accounts"} onToggle={() => setOpen(open === "Accounts" ? "" : "Accounts")}>
+            {data.auth.role !== "ADMIN" ? <p>관리자만 내부 계정을 생성할 수 있습니다.</p> : <>
+              <div className="account-form-grid">
+                <input value={accountUsername} onChange={(event) => setAccountUsername(event.target.value.toLowerCase())} placeholder="ID" autoComplete="off" />
+                <input type="email" value={accountEmail} onChange={(event) => setAccountEmail(event.target.value)} placeholder="복구 이메일" autoComplete="off" />
+                <input type="password" value={accountPassword} onChange={(event) => setAccountPassword(event.target.value)} placeholder="초기 비밀번호 16자 이상" autoComplete="new-password" />
+                <select value={accountRole} onChange={(event) => setAccountRole(event.target.value as Exclude<PlatformRole, "PUBLIC">)}><option value="OPERATOR">운영자</option><option value="PM">PM</option><option value="ADMIN">관리자</option></select>
+                <button className="button button-primary" type="button" onClick={() => void addAccount()} disabled={accountBusy || accountUsername.length < 3 || accountEmail.length < 5 || accountPassword.length < 16}>{accountBusy ? "처리 중..." : "계정 생성"}</button>
+              </div>
+              {accountMessage ? <div className="empty-state">{accountMessage}</div> : null}
+              <ul className="account-list">{accounts?.map((account) => <li key={account.username}><div><strong>{account.username}</strong><span>{account.email || "이메일 미등록"}</span></div><StatusBadge status={account.enabled ? "connected" : "disabled"}>{account.role}</StatusBadge></li>)}</ul>
+            </>}
           </SettingsRow>
 
           <SettingsRow title="Build Information" status={data.runtimeVersion ? "connected" : "unknown"} open={open === "Build Information"} onToggle={() => setOpen(open === "Build Information" ? "" : "Build Information")}>

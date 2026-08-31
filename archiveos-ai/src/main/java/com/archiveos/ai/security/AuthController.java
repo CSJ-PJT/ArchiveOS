@@ -28,12 +28,17 @@ public class AuthController {
     private final SessionService sessions;
     private final SecurityThreatNotificationService threatNotifications;
     private final AdminAccessAuditService adminAccessAudit;
+    private final AdminCredentialRepository credentials;
+    private final AccountRecoveryService recovery;
 
     public AuthController(SessionService sessions, SecurityThreatNotificationService threatNotifications,
-                          AdminAccessAuditService adminAccessAudit) {
+                          AdminAccessAuditService adminAccessAudit, AdminCredentialRepository credentials,
+                          AccountRecoveryService recovery) {
         this.sessions = sessions;
         this.threatNotifications = threatNotifications;
         this.adminAccessAudit = adminAccessAudit;
+        this.credentials = credentials;
+        this.recovery = recovery;
     }
 
     @PostMapping("/login")
@@ -95,20 +100,60 @@ public class AuthController {
     @PostMapping("/admin/users")
     public ResponseEntity<Map<String, Object>> createAdmin(@RequestBody CreateCredentialRequest body,
                                                             Authentication authentication) {
-        if (authentication == null || !(authentication.getPrincipal() instanceof PlatformSession principal)
-                || principal.role() != PlatformRole.ADMIN) {
+        String adminActor = adminActor(authentication);
+        if (adminActor == null) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Admin session required."));
         }
         try {
             PlatformRole role = body == null || body.role() == null
                     ? PlatformRole.ADMIN : PlatformRole.valueOf(body.role().trim().toUpperCase());
             SessionService.CredentialSummary created = sessions.createCredential(
-                    body == null ? null : body.username(), body == null ? null : body.password(), role, principal.actor());
+                    body == null ? null : body.username(), body == null ? null : body.password(),
+                    body == null ? null : body.email(), role, adminActor);
             return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("data", Map.of(
-                    "username", created.username(), "role", created.role().name(), "enabled", created.enabled())));
+                    "username", created.username(), "email", created.email(),
+                    "role", created.role().name(), "enabled", created.enabled())));
         } catch (IllegalArgumentException error) {
             return ResponseEntity.badRequest().body(Map.of("error", error.getMessage()));
         }
+    }
+
+    @GetMapping("/admin/users")
+    public ResponseEntity<Map<String, Object>> users(Authentication authentication) {
+        if (adminActor(authentication) == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Admin session required."));
+        }
+        return ResponseEntity.ok(Map.of("data", Map.of("items", credentials.list())));
+    }
+
+    @PostMapping("/recovery/id")
+    public ResponseEntity<Map<String, Object>> recoverId(@RequestBody(required = false) RecoveryRequest body) {
+        try { return ResponseEntity.ok(Map.of("data", recovery.requestUsername(body == null ? null : body.value()))); }
+        catch (IllegalArgumentException error) { return ResponseEntity.badRequest().body(Map.of("error", error.getMessage())); }
+    }
+
+    @PostMapping("/recovery/password")
+    public ResponseEntity<Map<String, Object>> recoverPassword(@RequestBody(required = false) RecoveryRequest body) {
+        try { return ResponseEntity.ok(Map.of("data", recovery.requestPassword(body == null ? null : body.value()))); }
+        catch (IllegalArgumentException error) { return ResponseEntity.badRequest().body(Map.of("error", error.getMessage())); }
+    }
+
+    @PostMapping("/recovery/password/complete")
+    public ResponseEntity<Map<String, Object>> completePasswordReset(@RequestBody(required = false) PasswordResetRequest body) {
+        try {
+            return ResponseEntity.ok(Map.of("data", recovery.completePasswordReset(
+                    body == null ? null : body.token(), body == null ? null : body.password())));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(Map.of("error", error.getMessage()));
+        }
+    }
+
+    private String adminActor(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()
+                || authentication.getAuthorities().stream().noneMatch(value -> "ROLE_ADMIN".equals(value.getAuthority()))) return null;
+        if (authentication.getPrincipal() instanceof PlatformSession principal) return principal.actor();
+        if (authentication.getPrincipal() instanceof UserDetails principal) return principal.getUsername();
+        return null;
     }
 
     private Map<String, Object> describe(PlatformSession session) {
@@ -163,5 +208,7 @@ public class AuthController {
     }
 
     public record LoginRequest(String username, String password, String role) {}
-    public record CreateCredentialRequest(String username, String password, String role) {}
+    public record CreateCredentialRequest(String username, String password, String email, String role) {}
+    public record RecoveryRequest(String value) {}
+    public record PasswordResetRequest(String token, String password) {}
 }
