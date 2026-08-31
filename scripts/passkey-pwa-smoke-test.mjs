@@ -8,6 +8,7 @@ const required = [
   "public/service-worker.js",
   "src/lib/passkeys.ts",
   "archiveos-ai/src/main/resources/db/migration/V39__create_passkey_credentials.sql",
+  "archiveos-ai/src/main/resources/db/migration/V40__add_managed_account_recovery.sql",
 ];
 
 for (const file of required) {
@@ -27,6 +28,16 @@ if (!migration.includes("public_key bytea") || migration.includes(" public_key b
 const serviceWorker = read("public/service-worker.js");
 if (!serviceWorker.includes('request.method !== "GET"') || !serviceWorker.includes('url.pathname.startsWith("/api/")')) {
   throw new Error("Service worker must never cache mutating requests or API data.");
+}
+
+const settings = read("src/pages/SettingsPage.tsx");
+if (!settings.includes("ID 찾기") || !settings.includes("비밀번호 찾기") || !settings.includes("계정 관리")) {
+  throw new Error("Managed account recovery UI is incomplete.");
+}
+
+const passkeys = read("src/lib/passkeys.ts");
+if (!passkeys.includes("embeddedBrowserForPasskeys") || !passkeys.includes("다른 브라우저로 열기")) {
+  throw new Error("Embedded-browser passkey failure must be handled before WebAuthn registration.");
 }
 
 console.log("Passkey/PWA smoke test passed.");

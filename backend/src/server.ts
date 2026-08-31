@@ -199,6 +199,10 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Hold External Approval", method: "POST", path: "/api/approvals/external/:id/hold", service: "runtime", description: "PM/Admin hold decision without Ledger mutation." },
   { name: "Approve All External Approvals", method: "POST", path: "/api/approvals/external/approve-all", service: "runtime", description: "Admin-only audited approval backlog drain." },
   { name: "Create Named Admin", method: "POST", path: "/api/auth/admin/users", service: "runtime", description: "Admin-only named credential creation." },
+  { name: "Managed Accounts", method: "GET", path: "/api/auth/admin/users", service: "runtime", description: "Admin-only managed account listing." },
+  { name: "Recover Account ID", method: "POST", path: "/api/auth/recovery/id", service: "runtime", description: "Generic email-based ID recovery without account enumeration." },
+  { name: "Request Password Reset", method: "POST", path: "/api/auth/recovery/password", service: "runtime", description: "Generic single-use password reset request." },
+  { name: "Complete Password Reset", method: "POST", path: "/api/auth/recovery/password/complete", service: "runtime", description: "Complete a single-use password reset." },
   { name: "Passkey List", method: "GET", path: "/api/auth/passkeys", service: "runtime", description: "Admin-owned WebAuthn credential list without biometric data." },
   { name: "Passkey Registration Options", method: "POST", path: "/api/auth/passkeys/register/options", service: "runtime", description: "Authenticated WebAuthn registration challenge." },
   { name: "Passkey Register", method: "POST", path: "/api/auth/passkeys/register", service: "runtime", description: "Authenticated WebAuthn public credential registration." },
@@ -316,6 +320,16 @@ app.post("/api/auth/logout", async (request, response) => {
 app.post("/api/auth/admin/users", async (request, response) => {
   await relayArchiveOsAi(response, "/api/auth/admin/users", jsonProxyRequest("POST", request.body), undefined, request);
 });
+
+app.get("/api/auth/admin/users", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/auth/admin/users", undefined, undefined, request);
+});
+
+for (const path of ["/api/auth/recovery/id", "/api/auth/recovery/password", "/api/auth/recovery/password/complete"]) {
+  app.post(path, async (request, response) => {
+    await relayArchiveOsAi(response, path, jsonProxyRequest("POST", request.body), undefined, request);
+  });
+}
 
 app.get("/api/auth/passkeys", async (request, response) => {
   await relayArchiveOsAi(response, "/api/auth/passkeys", undefined, undefined, request);

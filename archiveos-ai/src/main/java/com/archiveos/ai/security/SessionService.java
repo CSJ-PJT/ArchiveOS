@@ -7,12 +7,14 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class SessionService {
+    private static final Pattern EMAIL = Pattern.compile("^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+\\.[A-Z]{2,63}$", Pattern.CASE_INSENSITIVE);
     public static final String COOKIE_NAME = "ARCHIVEOS_SESSION";
     private final SecurityProperties properties;
     private final AdminCredentialRepository credentials;
@@ -51,6 +53,7 @@ public class SessionService {
             throw new LoginRejectedException(message, rateLimited);
         }
         attempts.remove(key);
+        if (stored != null) credentials.recordLogin(actor);
         PlatformRole role = stored == null
                 ? (requestedRole == null || requestedRole == PlatformRole.PUBLIC ? PlatformRole.ADMIN : requestedRole)
                 : stored.role();
@@ -83,7 +86,7 @@ public class SessionService {
         return properties;
     }
 
-    public CredentialSummary createCredential(String username, String password, PlatformRole role, String updatedBy) {
+    public CredentialSummary createCredential(String username, String password, String email, PlatformRole role, String updatedBy) {
         if (credentials == null) throw new IllegalStateException("Persistent credential storage is unavailable.");
         String actor = normalizeUsername(username);
         if (!actor.matches("[a-z0-9][a-z0-9._-]{2,63}")) {
@@ -92,11 +95,15 @@ public class SessionService {
         if (password == null || password.length() < 16 || password.length() > 256) {
             throw new IllegalArgumentException("password must be 16-256 characters.");
         }
+        String normalizedEmail = email == null ? "" : email.trim().toLowerCase();
+        if (!EMAIL.matcher(normalizedEmail).matches() || normalizedEmail.length() > 254) {
+            throw new IllegalArgumentException("valid recovery email is required.");
+        }
         if (role == null || !List.of(PlatformRole.OPERATOR, PlatformRole.PM, PlatformRole.ADMIN).contains(role)) {
             throw new IllegalArgumentException("role must be OPERATOR, PM, or ADMIN.");
         }
-        credentials.upsert(actor, encoder.encode(password), role, updatedBy == null ? "archiveos-admin" : updatedBy);
-        return new CredentialSummary(actor, role, true);
+        credentials.upsert(actor, encoder.encode(password), normalizedEmail, role, updatedBy == null ? "archiveos-admin" : updatedBy);
+        return new CredentialSummary(actor, normalizedEmail, role, true);
     }
 
     private boolean recordFailure(String key, Instant now, AttemptWindow current) {
@@ -124,7 +131,7 @@ public class SessionService {
 
     private record AttemptWindow(int count, Instant windowStarted, Instant lockedUntil) {}
 
-    public record CredentialSummary(String username, PlatformRole role, boolean enabled) {}
+    public record CredentialSummary(String username, String email, PlatformRole role, boolean enabled) {}
 
     public static class LoginRejectedException extends RuntimeException {
         private final boolean rateLimited;

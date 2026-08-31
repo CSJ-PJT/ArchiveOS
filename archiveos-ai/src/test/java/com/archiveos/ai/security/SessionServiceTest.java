@@ -57,7 +57,7 @@ class SessionServiceTest {
         AdminCredentialRepository repository = mock(AdminCredentialRepository.class);
         String hash = new BCryptPasswordEncoder(12).encode("persistent-password");
         when(repository.find("portfolio-admin")).thenReturn(Optional.of(
-                new AdminCredentialRepository.Credential("portfolio-admin", hash, PlatformRole.ADMIN, true)));
+                new AdminCredentialRepository.Credential("portfolio-admin", hash, PlatformRole.ADMIN, true, "owner@example.com")));
         SessionService service = new SessionService(new SecurityProperties("bootstrap-password", "", 30, 5, 15, false), repository);
 
         PlatformSession session = service.login("127.0.0.1", "portfolio-admin", "persistent-password", PlatformRole.OPERATOR);

@@ -10,6 +10,7 @@ const ADMIN_READ_EXACT = new Set([
   "/api/security/status",
   "/api/audit/logs",
   "/api/audit/usage",
+  "/api/auth/admin/users",
 ]);
 
 const PUBLIC_BATCH_READ_EXACT = new Set([
@@ -118,6 +119,7 @@ function apiRateLimitPolicy(method: string, requestPath: string, limits: Record<
   const normalizedMethod = method.toUpperCase();
   if (normalizedMethod === "POST" && (
     requestPath === "/api/auth/login"
+    || requestPath.startsWith("/api/auth/recovery/")
     || requestPath === "/api/auth/passkeys/authenticate/options"
     || requestPath === "/api/auth/passkeys/authenticate"
   )) return { name: "login", limit: limits.login };
