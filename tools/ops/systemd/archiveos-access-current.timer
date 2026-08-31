@@ -1,0 +1,13 @@
+[Unit]
+Description=Import current ArchiveOS edge access aggregates every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+AccuracySec=10s
+Unit=archiveos-access-current.service
+
+[Install]
+WantedBy=timers.target
+
