@@ -17,7 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
 class LiveFlowRepositoryTest {
-    @Test void latestBusinessEventByNodeUsesDatabaseAggregateWithoutGlobalLimitSample() {
+    @Test void latestBusinessEventByNodeUsesBoundedAliasIndexLookups() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         when(jdbc.query(any(String.class), any(RowMapper.class))).thenReturn(List.of());
         LiveFlowRepository repository = new LiveFlowRepository(
@@ -30,8 +30,10 @@ class LiveFlowRepositoryTest {
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         verify(jdbc).query(sql.capture(), any(RowMapper.class));
         assertThat(sql.getValue()).contains("group by node");
-        assertThat(sql.getValue()).contains("union all");
-        assertThat(sql.getValue().toLowerCase()).doesNotContain("limit");
+        assertThat(sql.getValue()).contains("node_aliases");
+        assertThat(sql.getValue()).contains("left join lateral");
+        assertThat(sql.getValue().toLowerCase()).contains("limit 1");
+        assertThat(sql.getValue()).contains("('archive-logistics', 'logistics')");
         assertThat(sql.getValue()).contains("SERVICE_UNAVAILABLE".toLowerCase());
         assertThat(sql.getValue()).contains("SERVICE_DEGRADED".toLowerCase());
         assertThat(sql.getValue()).doesNotContain("andnot", "wherenot");

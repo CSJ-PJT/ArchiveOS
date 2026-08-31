@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -98,13 +99,17 @@ class UsageAuditServiceTest {
         report.put("monitoredUniqueIdentities", 4);
         report.put("statusCounts", java.util.Map.of("2xx", 15, "3xx", 1, "4xx", 2, "5xx", 0));
         report.put("serviceCounts", java.util.Map.of("Learn Atlas", 7, "Health Atlas", 11));
+        report.put("serviceStatusCounts", java.util.Map.of(
+                "Learn Atlas", java.util.Map.of("2xx", 6, "3xx", 0, "4xx", 1, "5xx", 0),
+                "Health Atlas", java.util.Map.of("2xx", 9, "3xx", 1, "4xx", 1, "5xx", 0)));
 
         java.util.Map<String, Object> result = service.importAtlasReport(report);
 
         assertThat(result).containsEntry("imported", true).containsEntry("projectCount", 13);
-        verify(jdbc).update(contains("atlas_access_daily_reports"), any(), any(), any(), eq(18L), eq(4L),
+        verify(jdbc).update(contains("atlas_access_daily_source_reports"), any(), eq("atlas"), any(), any(), eq(18L), eq(4L),
                 eq(15L), eq(1L), eq(2L), eq(0L));
-        verify(jdbc, org.mockito.Mockito.times(13)).update(contains("atlas_access_daily_services"), any(), anyString(), any());
+        verify(jdbc, org.mockito.Mockito.times(13)).update(startsWith("insert into public.atlas_access_daily_source_services"),
+                any(), eq("atlas"), anyString(), any(), any(), any(), any(), any());
     }
 
     @Test
