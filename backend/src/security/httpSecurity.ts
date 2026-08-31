@@ -116,7 +116,11 @@ export function createApiRateLimiter(options: ApiRateLimitOptions = {}) {
 
 function apiRateLimitPolicy(method: string, requestPath: string, limits: Record<"general" | "login" | "rag" | "webhook", number>) {
   const normalizedMethod = method.toUpperCase();
-  if (normalizedMethod === "POST" && requestPath === "/api/auth/login") return { name: "login", limit: limits.login };
+  if (normalizedMethod === "POST" && (
+    requestPath === "/api/auth/login"
+    || requestPath === "/api/auth/passkeys/authenticate/options"
+    || requestPath === "/api/auth/passkeys/authenticate"
+  )) return { name: "login", limit: limits.login };
   if (normalizedMethod === "POST" && requestPath === "/api/mail/webhooks/resend") return { name: "webhook", limit: limits.webhook };
   if (requestPath === "/api/rag/ask" || requestPath === "/api/rag/search" || requestPath.startsWith("/api/rag/verification/")) {
     return { name: "rag", limit: limits.rag };

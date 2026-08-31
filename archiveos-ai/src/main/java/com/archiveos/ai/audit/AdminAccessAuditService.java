@@ -36,6 +36,18 @@ public class AdminAccessAuditService {
                 """, session.actor(), clientIp, truncate(userAgent, 512), session.id());
     }
 
+    public void recordSuccessfulPasskeyLogin(String actor, String clientIp, String userAgent, String sessionId) {
+        if (actor == null || actor.isBlank() || clientIp == null || clientIp.isBlank()
+                || sessionId == null || sessionId.isBlank()) return;
+        jdbc.update("""
+                insert into public.admin_access_logs(actor, role, event_type, feature, route, action,
+                    client_ip, user_agent, source, source_event_id)
+                values (?, 'ADMIN', 'LOGIN', '패스키 로그인', '/login/webauthn', 'PASSKEY_LOGIN_SUCCEEDED',
+                    ?::inet, ?, 'AUTH_PASSKEY', ?)
+                on conflict (source, source_event_id) do nothing
+                """, actor, clientIp, truncate(userAgent, 512), sessionId);
+    }
+
     public Map<String, Object> recent(int page, int size, String requestedDate, String requestedQuery) {
         int safePage = Math.max(0, page);
         int safeSize = Math.max(10, Math.min(size, 100));

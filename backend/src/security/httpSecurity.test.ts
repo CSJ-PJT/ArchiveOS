@@ -75,6 +75,27 @@ assert.equal(allowedRequests, 2);
 assert.equal(limitedStatus, 429);
 assert.equal(limitedBody.error, "Request rate limit exceeded.");
 
+const passkeyLimiter = createApiRateLimiter({ now: () => 1_500, generalLimit: 20, loginLimit: 1 });
+let passkeyAllowed = 0;
+let passkeyStatus = 0;
+const passkeyRequest = {
+  method: "POST",
+  path: "/api/auth/passkeys/authenticate/options",
+  socket: { remoteAddress: "198.51.100.10" },
+  header: () => undefined,
+} as never;
+const passkeyResponse = {
+  setHeader: () => undefined,
+  status: (value: number) => {
+    passkeyStatus = value;
+    return { json: () => undefined };
+  },
+} as never;
+passkeyLimiter(passkeyRequest, passkeyResponse, () => { passkeyAllowed += 1; });
+passkeyLimiter(passkeyRequest, passkeyResponse, () => { passkeyAllowed += 1; });
+assert.equal(passkeyAllowed, 1);
+assert.equal(passkeyStatus, 429);
+
 const ragLimiter = createApiRateLimiter({ now: () => 2_000, generalLimit: 10, ragLimit: 1 });
 let ragAllowed = 0;
 let ragStatus = 0;

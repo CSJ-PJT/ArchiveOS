@@ -199,6 +199,12 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Hold External Approval", method: "POST", path: "/api/approvals/external/:id/hold", service: "runtime", description: "PM/Admin hold decision without Ledger mutation." },
   { name: "Approve All External Approvals", method: "POST", path: "/api/approvals/external/approve-all", service: "runtime", description: "Admin-only audited approval backlog drain." },
   { name: "Create Named Admin", method: "POST", path: "/api/auth/admin/users", service: "runtime", description: "Admin-only named credential creation." },
+  { name: "Passkey List", method: "GET", path: "/api/auth/passkeys", service: "runtime", description: "Admin-owned WebAuthn credential list without biometric data." },
+  { name: "Passkey Registration Options", method: "POST", path: "/api/auth/passkeys/register/options", service: "runtime", description: "Authenticated WebAuthn registration challenge." },
+  { name: "Passkey Register", method: "POST", path: "/api/auth/passkeys/register", service: "runtime", description: "Authenticated WebAuthn public credential registration." },
+  { name: "Passkey Authentication Options", method: "POST", path: "/api/auth/passkeys/authenticate/options", service: "runtime", description: "WebAuthn authentication challenge." },
+  { name: "Passkey Authenticate", method: "POST", path: "/api/auth/passkeys/authenticate", service: "runtime", description: "WebAuthn assertion verification." },
+  { name: "Passkey Delete", method: "DELETE", path: "/api/auth/passkeys/:credentialId", service: "runtime", description: "Delete one credential owned by the authenticated account." },
   { name: "Mail Status", method: "GET", path: "/api/mail/status", service: "runtime", description: "Admin-only ArchiveOS mailbox readiness." },
   { name: "Mail Messages", method: "GET", path: "/api/mail/messages", service: "runtime", description: "Admin-only searchable mailbox listing." },
   { name: "Read Mail Messages", method: "PATCH", path: "/api/mail/messages/read", service: "runtime", description: "Admin-only bulk read state update." },
@@ -309,6 +315,31 @@ app.post("/api/auth/logout", async (request, response) => {
 
 app.post("/api/auth/admin/users", async (request, response) => {
   await relayArchiveOsAi(response, "/api/auth/admin/users", jsonProxyRequest("POST", request.body), undefined, request);
+});
+
+app.get("/api/auth/passkeys", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/auth/passkeys", undefined, undefined, request);
+});
+
+app.post("/api/auth/passkeys/register/options", async (request, response) => {
+  await relayArchiveOsAi(response, "/webauthn/register/options", { method: "POST" }, undefined, request);
+});
+
+app.post("/api/auth/passkeys/register", async (request, response) => {
+  await relayArchiveOsAi(response, "/webauthn/register", jsonProxyRequest("POST", request.body), undefined, request);
+});
+
+app.post("/api/auth/passkeys/authenticate/options", async (request, response) => {
+  await relayArchiveOsAi(response, "/webauthn/authenticate/options", { method: "POST" }, undefined, request);
+});
+
+app.post("/api/auth/passkeys/authenticate", async (request, response) => {
+  await relayArchiveOsAi(response, "/login/webauthn", jsonProxyRequest("POST", request.body), undefined, request);
+});
+
+app.delete("/api/auth/passkeys/:credentialId", async (request, response) => {
+  const credentialId = encodeURIComponent(String(request.params.credentialId ?? ""));
+  await relayArchiveOsAi(response, `/webauthn/register/${credentialId}`, { method: "DELETE" }, undefined, request);
 });
 
 app.use("/api", async (request, response, next) => {
@@ -2471,8 +2502,12 @@ async function relayArchiveOsAi(
     appendClientRequestHeaders(headers, request);
     const upstream = await fetch(`${baseUrl}${path}`, { ...init, headers });
     const payload = await upstream.json().catch(() => ({}));
-    const setCookie = upstream.headers.get("set-cookie");
-    if (setCookie) response.setHeader("set-cookie", setCookie);
+    const setCookies = typeof upstream.headers.getSetCookie === "function" ? upstream.headers.getSetCookie() : [];
+    if (setCookies.length) response.setHeader("set-cookie", setCookies);
+    else {
+      const setCookie = upstream.headers.get("set-cookie");
+      if (setCookie) response.setHeader("set-cookie", setCookie);
+    }
     const upstreamCorrelation = upstream.headers.get("x-correlation-id");
     if (upstreamCorrelation) response.setHeader("x-correlation-id", upstreamCorrelation);
     if (upstream.ok) onSuccess?.(payload);
