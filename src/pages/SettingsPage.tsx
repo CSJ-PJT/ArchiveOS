@@ -48,7 +48,6 @@ export function SettingsPage({
   const [openAiUsageBusy, setOpenAiUsageBusy] = useState(false);
   const [openAiUsageError, setOpenAiUsageError] = useState<string | null>(null);
   const [passkeys, setPasskeys] = useState<PasskeyStatus | null>(null);
-  const [passkeyLabel, setPasskeyLabel] = useState("");
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -68,7 +67,12 @@ export function SettingsPage({
 
   async function login() {
     setAuthBusy(true); setAuthError(null);
-    try { await loginAdmin(password, requestedRole, username); setPassword(""); await onRefresh(); }
+    try {
+      await loginAdmin(password, requestedRole, username);
+      setPassword("");
+      if (requestedRole === "ADMIN") setOpen("Passkeys");
+      await onRefresh();
+    }
     catch (error) { setAuthError(error instanceof Error ? error.message : String(error)); }
     finally { setAuthBusy(false); }
   }
@@ -95,7 +99,7 @@ export function SettingsPage({
 
   async function addPasskey() {
     setPasskeyBusy(true); setPasskeyError(null);
-    try { await createPasskey(passkeyLabel); setPasskeyLabel(""); setPasskeys(await getPasskeys()); }
+    try { await createPasskey(""); setPasskeys(await getPasskeys()); }
     catch (error) { setPasskeyError(error instanceof Error ? error.message : String(error)); }
     finally { setPasskeyBusy(false); }
   }
@@ -138,7 +142,8 @@ export function SettingsPage({
         {authError ? <div className="empty-state error-state">{authError}</div> : null}
         <button className="button button-primary" type="button" onClick={login} disabled={authBusy || !password}>{authBusy ? "로그인 중..." : "로그인"}</button>
         <div className="passkey-divider"><span>또는</span></div>
-        <button className="button button-secondary" type="button" onClick={() => void passkeyLogin()} disabled={passkeyBusy || !passkeysAvailable()}>{passkeyBusy ? "지문 확인 중..." : "지문·패스키로 로그인"}</button>
+        <p className="passkey-login-hint">이미 패스키를 등록했다면 지문으로 로그인할 수 있습니다. 처음이면 위에서 비밀번호로 로그인해 주세요.</p>
+        <button className="button button-secondary passkey-login-button" type="button" onClick={() => void passkeyLogin()} disabled={passkeyBusy || !passkeysAvailable()}>{passkeyBusy ? "확인 중..." : "패스키 로그인"}</button>
         {installPrompt ? <button className="button button-secondary" type="button" onClick={() => void installApp()}>ArchiveOS 앱 설치</button> : null}
         {!passkeysAvailable() ? <p className="small-note">HTTPS와 패스키를 지원하는 브라우저에서 사용할 수 있습니다.</p> : null}
       </div>
@@ -237,17 +242,19 @@ export function SettingsPage({
           </SettingsRow>
 
           <SettingsRow title="패스키·지문 로그인" status={passkeys?.items.length ? "configured" : "not_configured"} open={open === "Passkeys"} onToggle={() => setOpen(open === "Passkeys" ? "" : "Passkeys")}>
-            <p className="body-copy">지문은 이 기기에서만 확인됩니다. ArchiveOS에는 공개키와 사용 이력만 저장됩니다.</p>
+            <div className="passkey-setup-copy">
+              <strong>이 기기에서 지문 로그인을 켭니다.</strong>
+              <span>지문 원본은 기기 밖으로 전송되지 않고 ArchiveOS에는 공개키만 저장됩니다.</span>
+            </div>
             {passkeyError ? <div className="empty-state error-state">{passkeyError}</div> : null}
             <div className="passkey-register-row">
-              <input value={passkeyLabel} onChange={(event) => setPasskeyLabel(event.target.value)} maxLength={80} placeholder="예: 갤럭시 관리자 패스키" aria-label="패스키 기기 이름" />
-              <button className="button button-primary" type="button" onClick={() => void addPasskey()} disabled={passkeyBusy || !passkeysAvailable()}>{passkeyBusy ? "처리 중..." : "현재 기기에 패스키 등록"}</button>
-              <button className="button button-secondary" type="button" onClick={() => void loadPasskeys()} disabled={passkeyBusy}>새로고침</button>
+              <button className="button button-primary passkey-register-button" type="button" onClick={() => void addPasskey()} disabled={passkeyBusy || !passkeysAvailable()}>{passkeyBusy ? "등록 중..." : "패스키 등록"}</button>
             </div>
             {passkeys?.items.length ? <ul className="passkey-list">{passkeys.items.map((credential) => <li key={credential.id}>
               <div><strong>{credential.label || "이름 없는 패스키"}</strong><small>등록 {credential.created ? new Date(credential.created).toLocaleString("ko-KR") : "시각 없음"} · 최근 사용 {credential.last_used ? formatTimeAgo(credential.last_used) : "아직 없음"}</small></div>
               <button className="button button-secondary" type="button" onClick={() => void removePasskey(credential.id)} disabled={passkeyBusy}>삭제</button>
-            </li>)}</ul> : <p className="small-note">등록된 패스키가 없습니다. 비밀번호로 로그인한 뒤 현재 기기를 등록하세요.</p>}
+            </li>)}</ul> : <p className="small-note">아직 등록된 패스키가 없습니다.</p>}
+            <p className="small-note">다른 기기를 등록하려면 그 기기에서 비밀번호로 로그인한 뒤 이 버튼을 한 번 누르세요. 기기 간 QR이 필요하면 브라우저의 ‘다른 기기 사용’이 안전한 일회용 QR을 표시합니다.</p>
             {installPrompt ? <button className="button button-secondary" type="button" onClick={() => void installApp()}>이 기기에 ArchiveOS 앱 설치</button> : <p className="small-note">설치 버튼이 보이지 않으면 브라우저 메뉴에서 ‘홈 화면에 추가’ 또는 ‘앱 설치’를 선택하세요.</p>}
           </SettingsRow>
 

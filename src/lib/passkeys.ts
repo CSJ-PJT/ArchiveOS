@@ -19,7 +19,15 @@ export async function createPasskey(label: string) {
   ensureAvailable();
   const options = await getPasskeyRegistrationOptions();
   const publicKey = decodeCreationOptions(options);
-  const credential = await navigator.credentials.create({ publicKey });
+  let credential: Credential | null;
+  try {
+    credential = await navigator.credentials.create({ publicKey });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "NotAllowedError") {
+      throw new Error("패스키 등록이 취소되었습니다. 화면 잠금을 해제하고 다시 시도해 주세요.");
+    }
+    throw error;
+  }
   if (!(credential instanceof PublicKeyCredential)) throw new Error("패스키 등록이 취소되었습니다.");
   const response = credential.response;
   if (!(response instanceof AuthenticatorAttestationResponse)) throw new Error("지원되지 않는 패스키 응답입니다.");
@@ -46,7 +54,15 @@ export async function signInWithPasskey() {
   ensureAvailable();
   const options = await getPasskeyAuthenticationOptions();
   const publicKey = decodeRequestOptions(options);
-  const credential = await navigator.credentials.get({ publicKey });
+  let credential: Credential | null;
+  try {
+    credential = await navigator.credentials.get({ publicKey });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "NotAllowedError") {
+      throw new Error("등록된 패스키가 없거나 인증이 취소되었습니다. 처음이라면 비밀번호로 로그인한 뒤 설정에서 패스키를 등록해 주세요.");
+    }
+    throw error;
+  }
   if (!(credential instanceof PublicKeyCredential)) throw new Error("패스키 로그인이 취소되었습니다.");
   const response = credential.response;
   if (!(response instanceof AuthenticatorAssertionResponse)) throw new Error("지원되지 않는 패스키 응답입니다.");
