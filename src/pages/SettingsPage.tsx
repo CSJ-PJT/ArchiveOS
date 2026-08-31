@@ -4,7 +4,7 @@ import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { useTheme, type ThemeMode } from "../theme/ThemeProvider";
 import { formatTimeAgo, stringifyMeta } from "./pageUtils";
-import { completePasswordReset, createManagedAccount, deletePasskeyCredential, getManagedAccounts, getOpenAiUsage, getPasskeys, loginAdmin, logoutAdmin, requestAccountId, requestPasswordReset, type ManagedAccount, type OpenAiUsageSummary, type PasskeyStatus, type PlatformRole } from "../lib/backendApi";
+import { ATLAS_SSO_APPS, authorizeAtlasSso, completePasswordReset, createManagedAccount, deletePasskeyCredential, getAtlasSsoGrants, getAtlasSsoStatus, getManagedAccounts, getOpenAiUsage, getPasskeys, loginAdmin, logoutAdmin, requestAccountId, requestPasswordReset, updateAtlasSsoGrants, type AtlasSsoApp, type AtlasSsoStatus, type ManagedAccount, type OpenAiUsageSummary, type PasskeyStatus, type PlatformRole } from "../lib/backendApi";
 import { createPasskey, passkeysAvailable, signInWithPasskey } from "../lib/passkeys";
 
 type BeforeInstallPromptEvent = Event & {
@@ -24,6 +24,7 @@ const sections = [
   "Slack",
   "Public Access",
   "Security",
+  "Atlas SSO",
   "Passkeys",
   "Accounts",
   "Build Information",
@@ -65,7 +66,20 @@ export function SettingsPage({
   const [accountRole, setAccountRole] = useState<Exclude<PlatformRole, "PUBLIC">>("OPERATOR");
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountMessage, setAccountMessage] = useState<string | null>(null);
-  const resetToken = typeof window === "undefined" ? "" : new URLSearchParams(window.location.hash.split("?")[1] || "").get("resetToken") || "";
+  const [atlasSso, setAtlasSso] = useState<AtlasSsoStatus | null>(null);
+  const [atlasGrantDrafts, setAtlasGrantDrafts] = useState<Record<string, AtlasSsoApp[]>>({});
+  const [atlasSsoBusy, setAtlasSsoBusy] = useState(false);
+  const [atlasSsoError, setAtlasSsoError] = useState<string | null>(null);
+  const [atlasSsoAttempted, setAtlasSsoAttempted] = useState(false);
+  const hashParams = typeof window === "undefined" ? new URLSearchParams() : new URLSearchParams(window.location.hash.split("?")[1] || "");
+  const resetToken = hashParams.get("resetToken") || "";
+  const incomingAtlasSso = hashParams.get("sso") === "atlas" ? {
+    clientId: hashParams.get("clientId") || "",
+    redirectUri: hashParams.get("redirectUri") || "",
+    codeChallenge: hashParams.get("codeChallenge") || "",
+    state: hashParams.get("state") || "",
+    app: hashParams.get("app") || "portal",
+  } : null;
 
   async function loadOpenAiUsage() {
     if (data.auth.role !== "ADMIN") return;
@@ -149,7 +163,11 @@ export function SettingsPage({
   async function loadAccounts() {
     if (data.auth.role !== "ADMIN") return;
     setAccountBusy(true); setAccountMessage(null);
-    try { setAccounts(await getManagedAccounts()); }
+    try {
+      const [managed, grants] = await Promise.all([getManagedAccounts(), getAtlasSsoGrants()]);
+      setAccounts(managed);
+      setAtlasGrantDrafts(grants.items);
+    }
     catch (error) { setAccountMessage(error instanceof Error ? error.message : String(error)); }
     finally { setAccountBusy(false); }
   }
@@ -164,6 +182,37 @@ export function SettingsPage({
     finally { setAccountBusy(false); }
   }
 
+  async function loadAtlasSso() {
+    setAtlasSsoBusy(true); setAtlasSsoError(null);
+    try { setAtlasSso(await getAtlasSsoStatus()); }
+    catch (error) { setAtlasSsoError(error instanceof Error ? error.message : String(error)); }
+    finally { setAtlasSsoBusy(false); }
+  }
+
+  async function saveAtlasGrants(username: string) {
+    setAccountBusy(true); setAccountMessage(null);
+    try {
+      const result = await updateAtlasSsoGrants(username, atlasGrantDrafts[username] || []);
+      setAtlasGrantDrafts((current) => ({ ...current, [username]: result.apps }));
+      setAccountMessage(`${username} 계정의 Atlas 권한을 저장했습니다.`);
+      if (username === data.auth.actor) setAtlasSso(await getAtlasSsoStatus());
+    } catch (error) { setAccountMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setAccountBusy(false); }
+  }
+
+  function toggleAtlasGrant(username: string, app: AtlasSsoApp) {
+    setAtlasGrantDrafts((current) => {
+      const selected = new Set(current[username] || []);
+      if (selected.has(app)) selected.delete(app); else selected.add(app);
+      return { ...current, [username]: ATLAS_SSO_APPS.filter((item) => selected.has(item)) };
+    });
+  }
+
+  function openAtlasPortal() {
+    if (!atlasSso?.gatewayUrl) return;
+    window.location.assign(`${atlasSso.gatewayUrl}/auth/archiveos/login?app=portal&return=%2F`);
+  }
+
   useEffect(() => {
     if (open === "Passkeys" && data.auth.role === "ADMIN" && !passkeys && !passkeyBusy) void loadPasskeys();
   }, [data.auth.role, open, passkeys, passkeyBusy]);
@@ -171,6 +220,18 @@ export function SettingsPage({
   useEffect(() => {
     if (open === "Accounts" && data.auth.role === "ADMIN" && !accounts && !accountBusy) void loadAccounts();
   }, [accounts, accountBusy, data.auth.role, open]);
+
+  useEffect(() => {
+    if (open === "Atlas SSO" && data.auth.role !== "PUBLIC" && !atlasSso && !atlasSsoBusy) void loadAtlasSso();
+  }, [atlasSso, atlasSsoBusy, data.auth.role, open]);
+
+  useEffect(() => {
+    if (!incomingAtlasSso || data.auth.role === "PUBLIC" || atlasSsoAttempted) return;
+    setAtlasSsoAttempted(true); setAtlasSsoBusy(true); setAtlasSsoError(null);
+    void authorizeAtlasSso(incomingAtlasSso).then((result) => window.location.replace(result.redirectUrl))
+      .catch((error) => { setOpen("Atlas SSO"); setAtlasSsoError(error instanceof Error ? error.message : String(error)); })
+      .finally(() => setAtlasSsoBusy(false));
+  }, [atlasSsoAttempted, data.auth.role, incomingAtlasSso?.state]);
 
   useEffect(() => {
     const capture = (event: Event) => {
@@ -191,6 +252,7 @@ export function SettingsPage({
   if (data.auth.role === "PUBLIC") {
     return <div className="page-stack"><SectionCard title="운영자 로그인" eyebrow="PUBLIC 세션에서는 설정을 변경할 수 없습니다">
       <div className="decision-panel">
+        {incomingAtlasSso ? <div className="empty-state">Atlas SSO를 계속하려면 ArchiveOS 계정으로 로그인해 주세요.</div> : null}
         {resetToken ? <div className="recovery-panel">
           <strong>새 비밀번호 설정</strong>
           <input type="password" autoComplete="new-password" value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} placeholder="새 비밀번호 16자 이상" />
@@ -312,6 +374,13 @@ export function SettingsPage({
             <KeyValue label="Approved devices" value={data.security?.deviceApproval.approvedDevicesCount ?? 0} />
           </SettingsRow>
 
+          <SettingsRow title="Atlas 단방향 SSO" status={atlasSso?.enabled ? "configured" : "not_configured"} open={open === "Atlas SSO"} onToggle={() => setOpen(open === "Atlas SSO" ? "" : "Atlas SSO")}>
+            {atlasSsoError ? <div className="empty-state error-state">{atlasSsoError}</div> : null}
+            <KeyValue label="인증 방향" value="ArchiveOS → Atlas" />
+            <KeyValue label="허용 서비스" value={atlasSso?.grants.length ? atlasSso.grants.map(atlasAppLabel).join(", ") : "부여된 서비스 없음"} />
+            <button className="button button-primary" type="button" onClick={openAtlasPortal} disabled={atlasSsoBusy || !atlasSso?.enabled || !atlasSso.gatewayUrl}>{atlasSsoBusy ? "확인 중..." : "Atlas 포털 SSO 로그인"}</button>
+          </SettingsRow>
+
           <SettingsRow title="패스키·지문 로그인" status={passkeys?.items.length ? "configured" : "not_configured"} open={open === "Passkeys"} onToggle={() => setOpen(open === "Passkeys" ? "" : "Passkeys")}>
             {passkeyError ? <div className="empty-state error-state">{passkeyError}</div> : null}
             <div className="passkey-register-row">
@@ -334,7 +403,7 @@ export function SettingsPage({
                 <button className="button button-primary" type="button" onClick={() => void addAccount()} disabled={accountBusy || accountUsername.length < 3 || accountEmail.length < 5 || accountPassword.length < 16}>{accountBusy ? "처리 중..." : "계정 생성"}</button>
               </div>
               {accountMessage ? <div className="empty-state">{accountMessage}</div> : null}
-              <ul className="account-list">{accounts?.map((account) => <li key={account.username}><div><strong>{account.username}</strong><span>{account.email || "이메일 미등록"}</span></div><StatusBadge status={account.enabled ? "connected" : "disabled"}>{account.role}</StatusBadge></li>)}</ul>
+              <ul className="account-list">{accounts?.map((account) => <li key={account.username} className="account-sso-card"><div className="account-summary"><strong>{account.username}</strong><span>{account.email || "이메일 미등록"}</span><StatusBadge status={account.enabled ? "connected" : "disabled"}>{account.role}</StatusBadge></div><fieldset className="atlas-grant-grid"><legend>Atlas SSO 권한</legend>{ATLAS_SSO_APPS.map((app) => <label key={app}><input type="checkbox" checked={(atlasGrantDrafts[account.username] || []).includes(app)} onChange={() => toggleAtlasGrant(account.username, app)} disabled={accountBusy} />{atlasAppLabel(app)}</label>)}<button className="button button-secondary" type="button" onClick={() => void saveAtlasGrants(account.username)} disabled={accountBusy}>권한 저장</button></fieldset></li>)}</ul>
             </>}
           </SettingsRow>
 
@@ -347,6 +416,10 @@ export function SettingsPage({
       </SectionCard>
     </div>
   );
+}
+
+function atlasAppLabel(app: AtlasSsoApp) {
+  return ({ management: "관리", travel: "여행", learn: "학습", health: "건강", jobs: "채용", sketchfy: "Sketchfy", backend: "백엔드 학습" })[app];
 }
 
 function SettingsRow({

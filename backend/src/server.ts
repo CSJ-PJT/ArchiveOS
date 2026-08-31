@@ -79,7 +79,7 @@ type HealthServiceKey =
 
 type EndpointRegistration = {
   name: string;
-  method: "GET" | "POST" | "PATCH" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   service: HealthServiceKey;
   description: string;
@@ -200,6 +200,11 @@ const endpointRegistry: EndpointRegistration[] = [
   { name: "Approve All External Approvals", method: "POST", path: "/api/approvals/external/approve-all", service: "runtime", description: "Admin-only audited approval backlog drain." },
   { name: "Create Named Admin", method: "POST", path: "/api/auth/admin/users", service: "runtime", description: "Admin-only named credential creation." },
   { name: "Managed Accounts", method: "GET", path: "/api/auth/admin/users", service: "runtime", description: "Admin-only managed account listing." },
+  { name: "Atlas SSO Grants", method: "GET", path: "/api/auth/admin/atlas-grants", service: "runtime", description: "Admin-only one-way Atlas application grants." },
+  { name: "Update Atlas SSO Grants", method: "PUT", path: "/api/auth/admin/users/:username/atlas-grants", service: "runtime", description: "Admin-only Atlas application grant update." },
+  { name: "Atlas SSO Apps", method: "GET", path: "/api/auth/sso/apps", service: "runtime", description: "Current ArchiveOS account Atlas SSO grants." },
+  { name: "Atlas SSO Authorize", method: "POST", path: "/api/auth/sso/authorize", service: "runtime", description: "Issue a short-lived one-time PKCE authorization code." },
+  { name: "Atlas SSO Exchange", method: "POST", path: "/api/auth/sso/exchange", service: "runtime", description: "One-time PKCE code exchange for the Atlas gateway." },
   { name: "Recover Account ID", method: "POST", path: "/api/auth/recovery/id", service: "runtime", description: "Generic email-based ID recovery without account enumeration." },
   { name: "Request Password Reset", method: "POST", path: "/api/auth/recovery/password", service: "runtime", description: "Generic single-use password reset request." },
   { name: "Complete Password Reset", method: "POST", path: "/api/auth/recovery/password/complete", service: "runtime", description: "Complete a single-use password reset." },
@@ -324,6 +329,25 @@ app.post("/api/auth/admin/users", async (request, response) => {
 app.get("/api/auth/admin/users", async (request, response) => {
   await relayArchiveOsAi(response, "/api/auth/admin/users", undefined, undefined, request);
 });
+
+app.get("/api/auth/admin/atlas-grants", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/auth/admin/atlas-grants", undefined, undefined, request);
+});
+
+app.put("/api/auth/admin/users/:username/atlas-grants", async (request, response) => {
+  const username = encodeURIComponent(String(request.params.username ?? ""));
+  await relayArchiveOsAi(response, `/api/auth/admin/users/${username}/atlas-grants`, jsonProxyRequest("PUT", request.body), undefined, request);
+});
+
+app.get("/api/auth/sso/apps", async (request, response) => {
+  await relayArchiveOsAi(response, "/api/auth/sso/apps", undefined, undefined, request);
+});
+
+for (const path of ["/api/auth/sso/authorize", "/api/auth/sso/exchange"]) {
+  app.post(path, async (request, response) => {
+    await relayArchiveOsAi(response, path, jsonProxyRequest("POST", request.body), undefined, request);
+  });
+}
 
 for (const path of ["/api/auth/recovery/id", "/api/auth/recovery/password", "/api/auth/recovery/password/complete"]) {
   app.post(path, async (request, response) => {
@@ -2402,7 +2426,7 @@ async function getJavaKnowledgeHealth() {
   return data?.available === true && data.databaseConnected === true;
 }
 
-function jsonProxyRequest(method: "POST" | "PATCH" | "DELETE", body: unknown): RequestInit {
+function jsonProxyRequest(method: "POST" | "PUT" | "PATCH" | "DELETE", body: unknown): RequestInit {
   return {
     method,
     headers: { "content-type": "application/json" },

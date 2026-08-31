@@ -53,6 +53,16 @@ export type ManagedAccount = {
   lastLoginAt: string | null;
 };
 
+export const ATLAS_SSO_APPS = ["management", "travel", "learn", "health", "jobs", "sketchfy", "backend"] as const;
+export type AtlasSsoApp = (typeof ATLAS_SSO_APPS)[number];
+export type AtlasSsoStatus = {
+  enabled: boolean;
+  gatewayUrl: string;
+  apps: AtlasSsoApp[];
+  grants: AtlasSsoApp[];
+  direction: "ARCHIVEOS_TO_ATLAS_ONLY";
+};
+
 export type UsageAuditEntry = {
   id: string;
   occurred_at: string;
@@ -754,6 +764,34 @@ export async function getManagedAccounts() {
 
 export async function createManagedAccount(input: { username: string; email: string; password: string; role: Exclude<PlatformRole, "PUBLIC"> }) {
   const response = await request<ApiEnvelope<ManagedAccount>>("/api/auth/admin/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
+export async function getAtlasSsoStatus() {
+  const response = await request<ApiEnvelope<AtlasSsoStatus>>("/api/auth/sso/apps");
+  return response.data;
+}
+
+export async function getAtlasSsoGrants() {
+  const response = await request<ApiEnvelope<{ items: Record<string, AtlasSsoApp[]>; apps: AtlasSsoApp[] }>>("/api/auth/admin/atlas-grants");
+  return response.data;
+}
+
+export async function updateAtlasSsoGrants(username: string, apps: AtlasSsoApp[]) {
+  const response = await request<ApiEnvelope<{ username: string; apps: AtlasSsoApp[] }>>(`/api/auth/admin/users/${encodeURIComponent(username)}/atlas-grants`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ apps }),
+  });
+  return response.data;
+}
+
+export async function authorizeAtlasSso(input: { clientId: string; redirectUri: string; codeChallenge: string; state: string; app: string }) {
+  const response = await request<ApiEnvelope<{ redirectUrl: string; expiresAt: string }>>("/api/auth/sso/authorize", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

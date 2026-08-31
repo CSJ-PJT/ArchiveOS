@@ -48,6 +48,11 @@ archiveos:
     rp-id: ${ARCHIVEOS_PASSKEY_RP_ID:archiveos.kr}
     rp-name: ${ARCHIVEOS_PASSKEY_RP_NAME:ArchiveOS}
     allowed-origins: ${ARCHIVEOS_PASSKEY_ALLOWED_ORIGINS:https://archiveos.kr,https://www.archiveos.kr}
+  atlas-sso:
+    enabled: ${ARCHIVEOS_ATLAS_SSO_ENABLED:true}
+    gateway-url: ${ARCHIVEOS_ATLAS_SSO_GATEWAY_URL:https://161.33.17.84}
+    allowed-redirects: ${ARCHIVEOS_ATLAS_SSO_ALLOWED_REDIRECTS:https://161.33.17.84/auth/archiveos/callback}
+    code-ttl-seconds: ${ARCHIVEOS_ATLAS_SSO_CODE_TTL_SECONDS:90}
   approval:
     auto-approve-all-enabled: ${ARCHIVEOS_AUTO_APPROVE_ALL_ENABLED:false}
     auto-approval-batch-size: ${ARCHIVEOS_AUTO_APPROVAL_BATCH_SIZE:200}
