@@ -9,13 +9,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $allowedKeys = @(
-    'schemaVersion', 'targetDate', 'baselineCutoff', 'monitoredRequests',
-    'monitoredUniqueIdentities', 'statusCounts', 'serviceCounts', 'delivered',
+    'schemaVersion', 'reportSource', 'targetDate', 'baselineCutoff', 'monitoredRequests',
+    'monitoredUniqueIdentities', 'statusCounts', 'serviceCounts', 'serviceStatusCounts', 'delivered',
     'generatedAt', 'deliveredAt'
 )
 $allowedServices = @(
     'Atlas Home/Other', 'Learn Atlas', 'Sketchfy Atlas', 'Incruit Atlas',
-    'Health Atlas', 'Travel Atlas', 'World Atlas', 'Archive'
+    'Health Atlas', 'Travel Atlas', 'World Atlas', 'ArchiveOS', 'Archive-Market',
+    'Archive-Nexus', 'Archive-Logistics', 'Archive-Ledger', 'Archive-World'
 )
 
 if (-not (Test-Path -LiteralPath $SshKeyPath)) {
@@ -39,6 +40,16 @@ if (@($report.statusCounts.PSObject.Properties.Name | Where-Object { $_ -notin @
 }
 if (@($report.serviceCounts.PSObject.Properties.Name | Where-Object { $_ -notin $allowedServices }).Count -gt 0) {
     throw "Atlas report contains an unregistered project."
+}
+if ($report.serviceStatusCounts) {
+    if (@($report.serviceStatusCounts.PSObject.Properties.Name | Where-Object { $_ -notin $allowedServices }).Count -gt 0) {
+        throw "Atlas report contains an unregistered project status."
+    }
+    foreach ($project in $report.serviceStatusCounts.PSObject.Properties) {
+        if (@($project.Value.PSObject.Properties.Name | Where-Object { $_ -notin @('2xx', '3xx', '4xx', '5xx') }).Count -gt 0) {
+            throw "Atlas report contains unsupported project status fields."
+        }
+    }
 }
 
 $containerId = (& docker.exe ps -q --filter "name=$ArchiveOsAiContainer" | Select-Object -First 1)
