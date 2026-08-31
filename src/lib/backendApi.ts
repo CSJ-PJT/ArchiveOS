@@ -73,6 +73,10 @@ export type UsageAuditPage = {
     projects: Array<{
       service_name: string;
       request_count: number;
+      status_2xx: number;
+      status_3xx: number;
+      status_4xx: number;
+      status_5xx: number;
     }>;
   };
 };

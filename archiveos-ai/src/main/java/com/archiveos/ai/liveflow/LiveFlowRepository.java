@@ -310,20 +310,35 @@ public class LiveFlowRepository {
     public Map<String, Instant> latestBusinessEventByNode() {
         try {
             List<Map<String, Object>> rows = jdbc.query("""
+                    with node_aliases(raw_node, node) as (values
+                        ('market', 'market'), ('archive-market', 'market'),
+                        ('nexus', 'nexus'), ('archive-nexus', 'nexus'),
+                        ('logistics', 'logistics'), ('archive-logistics', 'logistics'),
+                        ('ledger', 'ledger'), ('archive-ledger', 'ledger'),
+                        ('archiveos', 'archiveos'), ('ARCHIVE_OS', 'archiveos'),
+                        ('settlement', 'settlement')
+                    ), node_latest as (
+                        select aliases.node,
+                               greatest(from_event.occurred_at, to_event.occurred_at) as occurred_at
+                          from node_aliases aliases
+                          left join lateral (
+                              select occurred_at
+                                from public.ecosystem_flow_event
+                               where from_node = aliases.raw_node and """ + BUSINESS_EVENT_FILTER + """
+                               order by occurred_at desc, id desc
+                               limit 1
+                          ) from_event on true
+                          left join lateral (
+                              select occurred_at
+                                from public.ecosystem_flow_event
+                               where to_node = aliases.raw_node and """ + BUSINESS_EVENT_FILTER + """
+                               order by occurred_at desc, id desc
+                               limit 1
+                          ) to_event on true
+                    )
                     select node, max(occurred_at) as latest_event_at
-                      from (
-                        (select distinct on (from_node) from_node as node, occurred_at
-                           from public.ecosystem_flow_event
-                          where """ + BUSINESS_EVENT_FILTER + """
-                            and nullif(trim(coalesce(from_node, '')), '') is not null
-                          order by from_node, occurred_at desc, id desc)
-                        union all
-                        (select distinct on (to_node) to_node as node, occurred_at
-                           from public.ecosystem_flow_event
-                          where """ + BUSINESS_EVENT_FILTER + """
-                            and nullif(trim(coalesce(to_node, '')), '') is not null
-                          order by to_node, occurred_at desc, id desc)
-                      ) node_events
+                      from node_latest
+                     where occurred_at is not null
                      group by node
                     """, (rs, index) -> {
                         Map<String, Object> row = new LinkedHashMap<>();

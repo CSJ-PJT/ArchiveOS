@@ -81,7 +81,8 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
           <Summary label="집계 기준일" value={latestAtlas.target_date} />
           <Summary label="외부 요청" value={latestAtlas.monitored_requests} />
           <Summary label="고유 비식별 접속" value={latestAtlas.monitored_unique_connections} />
-          <Summary label="오류 응답" value={latestAtlas.status_4xx + latestAtlas.status_5xx} />
+          <Summary label="접근 차단·미존재(4xx)" value={latestAtlas.status_4xx} />
+          <Summary label="서비스 장애(5xx)" value={latestAtlas.status_5xx} />
         </div>
         <div className="usage-audit-table-wrap">
           <table className="usage-audit-table atlas-access-table">
@@ -90,7 +91,7 @@ export function AdminUsageAuditPage({ role }: { role: PlatformRole }) {
               <td><strong>{atlasProjectLabel(project.service_name)}</strong><small>{atlasProjectPath(project.service_name)}</small></td>
               <td><strong>{project.request_count.toLocaleString()}건</strong></td>
               <td><time dateTime={latestAtlas.generated_at}>{formatDate(latestAtlas.generated_at)}</time></td>
-              <td><span>2xx {latestAtlas.status_2xx.toLocaleString()} · 3xx {latestAtlas.status_3xx.toLocaleString()}</span><small>4xx {latestAtlas.status_4xx.toLocaleString()} · 5xx {latestAtlas.status_5xx.toLocaleString()}</small></td>
+              <td><span>정상 2xx {project.status_2xx.toLocaleString()} · 이동 3xx {project.status_3xx.toLocaleString()}</span><small>차단·미존재 4xx {project.status_4xx.toLocaleString()} · 장애 5xx {project.status_5xx.toLocaleString()}</small></td>
             </tr>)}</tbody>
           </table>
         </div>

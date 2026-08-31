@@ -31,8 +31,8 @@ public class UsageAuditService {
     private static final int MAX_REQUESTS_PER_MINUTE = 60;
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private static final Set<String> ATLAS_REPORT_KEYS = Set.of(
-            "schemaVersion", "targetDate", "baselineCutoff", "monitoredRequests",
-            "monitoredUniqueIdentities", "statusCounts", "serviceCounts", "delivered",
+            "schemaVersion", "reportSource", "targetDate", "baselineCutoff", "monitoredRequests",
+            "monitoredUniqueIdentities", "statusCounts", "serviceCounts", "serviceStatusCounts", "delivered",
             "generatedAt", "deliveredAt"
     );
     private static final Set<String> ATLAS_EVENT_BATCH_KEYS = Set.of("schemaVersion", "generatedAt", "events");
@@ -164,12 +164,16 @@ public class UsageAuditService {
         if (number(report.get("schemaVersion")) != 1) throw new IllegalArgumentException("지원하지 않는 Atlas 보고서 버전입니다.");
 
         LocalDate targetDate = date(report.get("targetDate"), "targetDate");
+        String reportSource = reportSource(report.get("reportSource"));
         Instant generatedAt = instant(report.get("generatedAt"), "generatedAt");
         Instant deliveredAt = optionalInstant(report.get("deliveredAt"), "deliveredAt");
         long requests = nonNegative(report.get("monitoredRequests"), "monitoredRequests");
         long uniqueConnections = nonNegative(report.get("monitoredUniqueIdentities"), "monitoredUniqueIdentities");
         Map<String, Object> statuses = objectMap(report.get("statusCounts"), "statusCounts");
         Map<String, Object> services = objectMap(report.get("serviceCounts"), "serviceCounts");
+        Map<String, Object> serviceStatuses = report.get("serviceStatusCounts") == null
+                ? Map.of()
+                : objectMap(report.get("serviceStatusCounts"), "serviceStatusCounts");
         if (!Set.of("2xx", "3xx", "4xx", "5xx").containsAll(statuses.keySet())
                 || !statuses.keySet().containsAll(Set.of("2xx", "3xx", "4xx", "5xx"))) {
             throw new IllegalArgumentException("Atlas 응답 상태 집계 형식이 올바르지 않습니다.");
@@ -177,11 +181,65 @@ public class UsageAuditService {
         if (!ACCESS_SERVICES.containsAll(services.keySet())) {
             throw new IllegalArgumentException("등록되지 않은 Atlas 프로젝트가 보고서에 포함되어 있습니다.");
         }
+        if (!ACCESS_SERVICES.containsAll(serviceStatuses.keySet())) {
+            throw new IllegalArgumentException("등록되지 않은 Atlas 프로젝트 상태가 보고서에 포함되어 있습니다.");
+        }
+        if ("atlas".equals(reportSource)) {
+            // V38 seeds historical aggregate rows as legacy. Replace that seed only
+            // when the authoritative Atlas source for the same day arrives so the
+            // combined report never double-counts it.
+            jdbc.update("delete from public.atlas_access_daily_source_reports where target_date = ? and report_source = 'legacy'",
+                    targetDate);
+        }
 
+        jdbc.update("""
+                insert into public.atlas_access_daily_source_reports(target_date, report_source, generated_at, delivered_at,
+                    monitored_requests, monitored_unique_connections, status_2xx, status_3xx, status_4xx, status_5xx)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict (target_date, report_source) do update set
+                    generated_at = excluded.generated_at,
+                    delivered_at = excluded.delivered_at,
+                    monitored_requests = excluded.monitored_requests,
+                    monitored_unique_connections = excluded.monitored_unique_connections,
+                    status_2xx = excluded.status_2xx,
+                    status_3xx = excluded.status_3xx,
+                    status_4xx = excluded.status_4xx,
+                    status_5xx = excluded.status_5xx,
+                    imported_at = now()
+                """, targetDate, reportSource, Timestamp.from(generatedAt), deliveredAt == null ? null : Timestamp.from(deliveredAt), requests, uniqueConnections,
+                nonNegative(statuses.get("2xx"), "statusCounts.2xx"),
+                nonNegative(statuses.get("3xx"), "statusCounts.3xx"),
+                nonNegative(statuses.get("4xx"), "statusCounts.4xx"),
+                nonNegative(statuses.get("5xx"), "statusCounts.5xx"));
+        jdbc.update("delete from public.atlas_access_daily_source_services where target_date = ? and report_source = ?",
+                targetDate, reportSource);
+        for (String service : ACCESS_SERVICES) {
+            Map<String, Object> projectStatuses = serviceStatuses.containsKey(service)
+                    ? objectMap(serviceStatuses.get(service), "serviceStatusCounts." + service)
+                    : Map.of();
+            if (!projectStatuses.isEmpty()
+                    && (!Set.of("2xx", "3xx", "4xx", "5xx").containsAll(projectStatuses.keySet())
+                    || !projectStatuses.keySet().containsAll(Set.of("2xx", "3xx", "4xx", "5xx")))) {
+                throw new IllegalArgumentException("Atlas 프로젝트별 응답 상태 집계 형식이 올바르지 않습니다.");
+            }
+            jdbc.update("""
+                    insert into public.atlas_access_daily_source_services(target_date, report_source, service_name, request_count,
+                        status_2xx, status_3xx, status_4xx, status_5xx)
+                    values (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, targetDate, reportSource, service, nonNegative(services.getOrDefault(service, 0), "serviceCounts." + service),
+                    nonNegative(projectStatuses.getOrDefault("2xx", 0), "serviceStatusCounts." + service + ".2xx"),
+                    nonNegative(projectStatuses.getOrDefault("3xx", 0), "serviceStatusCounts." + service + ".3xx"),
+                    nonNegative(projectStatuses.getOrDefault("4xx", 0), "serviceStatusCounts." + service + ".4xx"),
+                    nonNegative(projectStatuses.getOrDefault("5xx", 0), "serviceStatusCounts." + service + ".5xx"));
+        }
         jdbc.update("""
                 insert into public.atlas_access_daily_reports(target_date, generated_at, delivered_at,
                     monitored_requests, monitored_unique_connections, status_2xx, status_3xx, status_4xx, status_5xx)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                select target_date, max(generated_at), max(delivered_at), sum(monitored_requests),
+                       sum(monitored_unique_connections), sum(status_2xx), sum(status_3xx), sum(status_4xx), sum(status_5xx)
+                  from public.atlas_access_daily_source_reports
+                 where target_date = ?
+                 group by target_date
                 on conflict (target_date) do update set
                     generated_at = excluded.generated_at,
                     delivered_at = excluded.delivered_at,
@@ -192,18 +250,17 @@ public class UsageAuditService {
                     status_4xx = excluded.status_4xx,
                     status_5xx = excluded.status_5xx,
                     imported_at = now()
-                """, targetDate, Timestamp.from(generatedAt), deliveredAt == null ? null : Timestamp.from(deliveredAt), requests, uniqueConnections,
-                nonNegative(statuses.get("2xx"), "statusCounts.2xx"),
-                nonNegative(statuses.get("3xx"), "statusCounts.3xx"),
-                nonNegative(statuses.get("4xx"), "statusCounts.4xx"),
-                nonNegative(statuses.get("5xx"), "statusCounts.5xx"));
+                """, targetDate);
         jdbc.update("delete from public.atlas_access_daily_services where target_date = ?", targetDate);
-        for (String service : ACCESS_SERVICES) {
-            jdbc.update("""
-                    insert into public.atlas_access_daily_services(target_date, service_name, request_count)
-                    values (?, ?, ?)
-                    """, targetDate, service, nonNegative(services.getOrDefault(service, 0), "serviceCounts." + service));
-        }
+        jdbc.update("""
+                insert into public.atlas_access_daily_services(target_date, service_name, request_count,
+                    status_2xx, status_3xx, status_4xx, status_5xx)
+                select target_date, service_name, sum(request_count), sum(status_2xx), sum(status_3xx),
+                       sum(status_4xx), sum(status_5xx)
+                  from public.atlas_access_daily_source_services
+                 where target_date = ?
+                 group by target_date, service_name
+                """, targetDate);
         return Map.of("imported", true, "targetDate", targetDate.toString(), "projectCount", ACCESS_SERVICES.size());
     }
 
@@ -268,7 +325,7 @@ public class UsageAuditService {
                  limit 31
                 """);
         List<Map<String, Object>> projects = jdbc.queryForList("""
-                select s.service_name, s.request_count
+                select s.service_name, s.request_count, s.status_2xx, s.status_3xx, s.status_4xx, s.status_5xx
                   from public.atlas_access_daily_services s
                  where s.target_date = ?
                  order by s.request_count desc, s.service_name
@@ -303,6 +360,16 @@ public class UsageAuditService {
             throw new IllegalArgumentException("조회할 계정 권한이 올바르지 않습니다.");
         }
         return normalized;
+    }
+
+    private String reportSource(Object value) {
+        String source = value == null || String.valueOf(value).isBlank()
+                ? "atlas"
+                : String.valueOf(value).trim().toLowerCase(Locale.ROOT);
+        if (!Set.of("atlas", "archiveos").contains(source)) {
+            throw new IllegalArgumentException("Atlas 보고서 출처가 올바르지 않습니다.");
+        }
+        return source;
     }
 
     private String usageFilters() {
