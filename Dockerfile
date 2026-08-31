@@ -1,5 +1,7 @@
 FROM node:24-alpine3.24 AS frontend-build
 WORKDIR /app
+ARG VITE_COMMIT_SHA=""
+ENV VITE_COMMIT_SHA=${VITE_COMMIT_SHA}
 COPY package*.json ./
 RUN npm ci
 COPY . .

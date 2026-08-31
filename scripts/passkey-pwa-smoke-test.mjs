@@ -16,7 +16,7 @@ for (const file of required) {
 }
 
 const manifest = JSON.parse(read("public/manifest.webmanifest"));
-if (manifest.display !== "standalone" || !String(manifest.start_url).includes("#/dashboard")) {
+if (manifest.display !== "standalone" || !String(manifest.start_url).includes("pwa-install=1#/dashboard")) {
   throw new Error("PWA manifest is not installable as the ArchiveOS dashboard.");
 }
 
@@ -26,8 +26,19 @@ if (!migration.includes("public_key bytea") || migration.includes(" public_key b
 }
 
 const serviceWorker = read("public/service-worker.js");
-if (!serviceWorker.includes('request.method !== "GET"') || !serviceWorker.includes('url.pathname.startsWith("/api/")')) {
+if (!serviceWorker.includes('request.method !== "GET"') || !serviceWorker.includes('url.pathname.startsWith("/api/")') || !serviceWorker.includes('cache: "no-store"')) {
   throw new Error("Service worker must never cache mutating requests or API data.");
+}
+
+const main = read("src/main.tsx");
+const app = read("src/App.tsx");
+if (!main.includes('updateViaCache: "none"') || !app.includes("archiveos.app.release") || !app.includes("앱 다시 설치 준비")) {
+  throw new Error("Installed ArchiveOS must detect and repair a production release mismatch.");
+}
+
+const backend = read("backend/src/server.ts");
+if (!backend.includes('path === "/login/webauthn" ? "manual"') || !backend.includes('method: "PASSKEY"')) {
+  throw new Error("Passkey authentication must preserve Spring Security's session cookie across the proxy.");
 }
 
 const settings = read("src/pages/SettingsPage.tsx");

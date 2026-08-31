@@ -1,4 +1,4 @@
-const CACHE_NAME = "archiveos-shell-v1";
+const CACHE_NAME = "archiveos-shell-v2";
 const APP_ROOT = new URL("./", self.registration.scope).pathname;
 const SHELL_ASSETS = [
   APP_ROOT,
@@ -28,7 +28,7 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(async () => (await caches.match(APP_ROOT)) || Response.error()),
+      fetch(request, { cache: "no-store" }).catch(async () => (await caches.match(APP_ROOT)) || Response.error()),
     );
     return;
   }
