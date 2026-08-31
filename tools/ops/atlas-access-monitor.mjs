@@ -10,6 +10,10 @@ import { fileURLToPath } from 'node:url';
 
 const DEFAULT_START_DATE = '2026-08-27';
 const DAY_MS = 86_400_000;
+const LOG_STREAM_HIGH_WATER_MARK = 4 * 1024 * 1024;
+const MAX_REQUEST_PATH_LENGTH = 2048;
+const MAX_REFERRER_LENGTH = 2048;
+const MAX_USER_AGENT_LENGTH = 512;
 const MONTHS = new Map(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((month, index) => [month, index]));
 const STATIC_ASSET = /\.(?:avif|css|gif|ico|jpe?g|js|map|png|svg|webmanifest|webp|woff2?|ttf)(?:$|\?)/i;
 
@@ -50,10 +54,10 @@ export function parseNginxLine(line) {
     ip: match[1],
     timestamp,
     method: request[0] || 'UNKNOWN',
-    path: request[1]?.startsWith('/') ? request[1] : '/__unparsed-request__',
+    path: request[1]?.startsWith('/') ? request[1].slice(0, MAX_REQUEST_PATH_LENGTH) : '/__unparsed-request__',
       status: Number(match[4]),
-      referrer: match[6] && match[6] !== '-' ? match[6] : null,
-      userAgent: match[7] && match[7] !== '-' ? match[7] : null,
+      referrer: match[6] && match[6] !== '-' ? match[6].slice(0, MAX_REFERRER_LENGTH) : null,
+      userAgent: match[7] && match[7] !== '-' ? match[7].slice(0, MAX_USER_AGENT_LENGTH) : null,
   };
 }
 
@@ -103,6 +107,7 @@ export function classifyService(pathname, referrer = null, defaultProject = 'Atl
 }
 
 const AUTOMATED_AGENT = /bot|crawler|spider|curl|wget|python|uptime|healthcheck|monitor|zgrab|masscan|go-http-client|java\//i;
+const SENSITIVE_PROBE_PATH = /(?:^|\/)(?:\.env|\.git|wp-admin|wp-login\.php|xmlrpc\.php|phpmyadmin|actuator\/env|swagger(?:-ui)?|v\d+\/api-docs)(?:\/|$)/i;
 
 export function buildHumanPageEvents({ events, targetDate }) {
   requiredDate(targetDate, 'targetDate');
@@ -116,8 +121,12 @@ export function buildHumanPageEvents({ events, targetDate }) {
       && event.status >= 200 && event.status < 400
       && path !== '/__unparsed-request__'
       && !STATIC_ASSET.test(path)
-      && !path.startsWith('/.well-known/')
+      && !path.startsWith('/api/')
+      && !path.startsWith('/actuator/')
+      && path !== '/health'
       && path !== '/edge-healthz'
+      && !path.startsWith('/.well-known/')
+      && !SENSITIVE_PROBE_PATH.test(path)
       && event.userAgent
       && !AUTOMATED_AGENT.test(event.userAgent);
   }).map(event => {
@@ -299,25 +308,43 @@ async function loadJson(path, fallback) {
   catch (error) { if (error?.code === 'ENOENT') return fallback; throw error; }
 }
 
-async function logFiles(logDir) {
+async function logFiles(logDir, { beforeDate = null, targetDate = null } = {}) {
   const names = await readdir(logDir);
-  return names.filter(name => /^access\.log(?:-|$)/.test(name)).sort().map(name => join(logDir, name));
+  const beforeCompact = beforeDate?.replaceAll('-', '') || null;
+  const targetCompact = targetDate?.replaceAll('-', '') || null;
+  return names.filter(name => {
+    if (!/^access\.log(?:-|$)/.test(name)) return false;
+    const dated = /^access\.log-(\d{8})(?:\.gz)?$/.exec(name)?.[1] || null;
+    if (beforeCompact) {
+      if (name === 'access.log') return false;
+      return dated ? dated < beforeCompact : true;
+    }
+    if (targetCompact) {
+      if (name === 'access.log') return targetDate === kstDate(Date.now());
+      return dated === targetCompact;
+    }
+    return true;
+  }).sort().map(name => join(logDir, name));
 }
 
-async function readEvents(logDir) {
+async function readEvents(logDir, selection = {}) {
   const events = [];
   let malformedLines = 0;
   const occurrences = new Map();
-  for (const path of await logFiles(logDir)) {
-    const source = createReadStream(path);
+  for (const path of await logFiles(logDir, selection)) {
+    // OCI block volumes can amplify the default 64 KiB reads heavily while a
+    // rotated log is being scanned. Larger sequential reads keep the daily
+    // monitor bounded without changing the source logs or report semantics.
+    const source = createReadStream(path, { highWaterMark: LOG_STREAM_HIGH_WATER_MARK });
     const input = path.endsWith('.gz') ? source.pipe(createGunzip()) : source;
     const lines = createInterface({ input, crlfDelay: Infinity });
     for await (const line of lines) {
       const event = parseNginxLine(line);
       if (event) {
         const identityParts = [event.ip, event.timestamp, event.method, String(event.path).split('?')[0].slice(0, 512) || '/', event.status, event.userAgent].join('\n');
-        const occurrence = occurrences.get(identityParts) || 0;
-        occurrences.set(identityParts, occurrence + 1);
+        const occurrenceKey = createHash('sha256').update(identityParts).digest('base64url');
+        const occurrence = occurrences.get(occurrenceKey) || 0;
+        occurrences.set(occurrenceKey, occurrence + 1);
         events.push({ ...event, sourceOccurrence: occurrence });
       } else malformedLines += 1;
     }
@@ -431,8 +458,8 @@ async function main() {
   const reportsDir = join(stateDir, 'reports');
   if (!dryRun) { await mkdir(reportsDir, { recursive: true, mode: 0o700 }); await chmod(stateDir, 0o700); await chmod(reportsDir, 0o700); }
   const salt = await loadOrCreateSalt(saltPath, !dryRun);
-  const { events, malformedLines } = await readEvents(logDir);
   if (command === 'baseline') {
+    const { events, malformedLines } = await readEvents(logDir, { beforeDate: startDate });
     const previousBaseline = await loadJson(baselinePath, null);
     const next = buildBaseline({ events, previousBaseline, salt, startDate });
     const baseline = {
@@ -450,8 +477,8 @@ async function main() {
     return;
   }
   if (command !== 'report') throw new Error(`Unknown command: ${command}`);
-    const defaultDate = options.has('current') ? kstDate(Date.now()) : dateBefore(kstDate(Date.now()));
-    const targetDate = requiredDate(String(options.get('date') || defaultDate), '--date');
+  const defaultDate = options.has('current') ? kstDate(Date.now()) : dateBefore(kstDate(Date.now()));
+  const targetDate = requiredDate(String(options.get('date') || defaultDate), '--date');
   if (targetDate < startDate) {
     console.log(JSON.stringify({ mode: 'report', skipped: true, reason: 'before monitoring start', targetDate, startDate }, null, 2));
     return;
@@ -464,6 +491,7 @@ async function main() {
   }
   const baseline = await loadJson(baselinePath, null);
   if (!baseline || baseline.cutoff !== `${startDate}T00:00:00+09:00`) throw new Error('Finalized baseline is missing or has the wrong cutoff.');
+  const { events, malformedLines } = await readEvents(logDir, { targetDate });
   const cohortState = await loadJson(cohortPath, { schemaVersion: 1, identities: {} });
   const report = buildDailyReport({ events, baselineIdentities: new Set(baseline.identities), cohort: cohortState.identities, salt, targetDate, startDate, defaultProject });
   const humanPageEvents = buildHumanPageEvents({ events, targetDate });
