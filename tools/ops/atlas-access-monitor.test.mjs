@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildDailyReport, classifyService } from './atlas-access-monitor.mjs';
+import { buildDailyReport, buildHumanPageEvents, classifyService } from './atlas-access-monitor.mjs';
 
 const salt = Buffer.from('archiveos-monitor-regression-salt');
 const timestamp = Date.parse('2026-08-31T03:00:00+09:00');
@@ -25,5 +25,16 @@ const report = buildDailyReport({
 assert.deepEqual(report.statusCounts, { '2xx': 1, '3xx': 0, '4xx': 1, '5xx': 1, other: 0 });
 assert.deepEqual(report.serviceStatusCounts['Travel Atlas'], { '2xx': 1, '3xx': 0, '4xx': 0, '5xx': 1 });
 assert.deepEqual(report.serviceStatusCounts['Atlas Home/Other'], { '2xx': 0, '3xx': 0, '4xx': 1, '5xx': 0 });
+
+const humanEvents = buildHumanPageEvents({
+  events: [
+    { ...events[0], userAgent: 'Mozilla/5.0' },
+    { ...events[1], status: 200, userAgent: 'Mozilla/5.0' },
+    { ...events[2], status: 200, userAgent: 'Mozilla/5.0' },
+  ],
+  targetDate: '2026-08-31',
+});
+assert.equal(humanEvents.length, 1);
+assert.deepEqual(humanEvents.map(event => event.route), ['/travel/']);
 
 console.log('atlas-access-monitor regression: PASS');
