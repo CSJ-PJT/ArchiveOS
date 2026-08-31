@@ -1,5 +1,6 @@
 package com.archiveos.ai.security;
 
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -59,7 +60,8 @@ public class AtlasSsoGrantRepository {
                     (code_hash, credential_key, platform_role, client_id, redirect_uri,
                      code_challenge, requested_app, expires_at)
                 values (?, ?, ?, ?, ?, ?, ?, ?)
-                """, codeHash, username, role.name(), clientId, redirectUri, challenge, app, expiresAt);
+                """, codeHash, username, role.name(), clientId, redirectUri, challenge, app,
+                Timestamp.from(expiresAt));
     }
 
     public Optional<AuthorizationCode> lockCode(String codeHash) {
