@@ -2538,16 +2538,31 @@ async function relayArchiveOsAi(
     if (correlationId) headers.set("x-correlation-id", correlationId);
     if (integrationToken) headers.set("x-archiveos-integration-token", integrationToken);
     appendClientRequestHeaders(headers, request);
-    const upstream = await fetch(`${baseUrl}${path}`, { ...init, headers });
+    // Spring Security completes WebAuthn authentication with a redirect and
+    // places JSESSIONID on that 302 response. Following it inside the proxy
+    // discards the browser-bound cookie, so keep this one redirect manual.
+    const upstream = await fetch(`${baseUrl}${path}`, {
+      ...init,
+      headers,
+      redirect: path === "/login/webauthn" ? "manual" : init?.redirect,
+    });
     const payload = await upstream.json().catch(() => ({}));
     const setCookies = typeof upstream.headers.getSetCookie === "function" ? upstream.headers.getSetCookie() : [];
+    let sessionCookieForwarded = setCookies.length > 0;
     if (setCookies.length) response.setHeader("set-cookie", setCookies);
     else {
       const setCookie = upstream.headers.get("set-cookie");
-      if (setCookie) response.setHeader("set-cookie", setCookie);
+      if (setCookie) {
+        response.setHeader("set-cookie", setCookie);
+        sessionCookieForwarded = true;
+      }
     }
     const upstreamCorrelation = upstream.headers.get("x-correlation-id");
     if (upstreamCorrelation) response.setHeader("x-correlation-id", upstreamCorrelation);
+    if (path === "/login/webauthn" && upstream.status >= 300 && upstream.status < 400 && sessionCookieForwarded) {
+      response.status(200).json({ data: { authenticated: true, method: "PASSKEY" } });
+      return;
+    }
     if (upstream.ok) onSuccess?.(payload);
     response.status(upstream.status).json(payload);
   } catch (error) {

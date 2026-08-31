@@ -4,7 +4,7 @@
   "short_name": "ArchiveOS",
   "description": "Archive 생태계 운영·관제 콘솔",
   "lang": "ko-KR",
-  "start_url": "./#/dashboard",
+  "start_url": "./?pwa-install=1#/dashboard",
   "scope": "./",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
