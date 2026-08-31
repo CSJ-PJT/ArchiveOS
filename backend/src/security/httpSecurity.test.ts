@@ -96,6 +96,16 @@ passkeyLimiter(passkeyRequest, passkeyResponse, () => { passkeyAllowed += 1; });
 assert.equal(passkeyAllowed, 1);
 assert.equal(passkeyStatus, 429);
 
+const ssoLimiter = createApiRateLimiter({ now: () => 1_700, generalLimit: 20, loginLimit: 1 });
+let ssoAllowed = 0;
+let ssoStatus = 0;
+const ssoRequest = { method: "POST", path: "/api/auth/sso/exchange", ip: "203.0.113.44", header: () => undefined } as any;
+const ssoResponse = { setHeader() {}, status(value: number) { ssoStatus = value; return this; }, json() { return this; } } as any;
+ssoLimiter(ssoRequest, ssoResponse, () => { ssoAllowed += 1; });
+ssoLimiter(ssoRequest, ssoResponse, () => { ssoAllowed += 1; });
+assert.equal(ssoAllowed, 1);
+assert.equal(ssoStatus, 429);
+
 const recoveryLimiter = createApiRateLimiter({ now: () => 1_700, generalLimit: 20, loginLimit: 1 });
 let recoveryAllowed = 0;
 let recoveryStatus = 0;

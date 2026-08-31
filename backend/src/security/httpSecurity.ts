@@ -122,6 +122,8 @@ function apiRateLimitPolicy(method: string, requestPath: string, limits: Record<
     || requestPath.startsWith("/api/auth/recovery/")
     || requestPath === "/api/auth/passkeys/authenticate/options"
     || requestPath === "/api/auth/passkeys/authenticate"
+    || requestPath === "/api/auth/sso/authorize"
+    || requestPath === "/api/auth/sso/exchange"
   )) return { name: "login", limit: limits.login };
   if (normalizedMethod === "POST" && requestPath === "/api/mail/webhooks/resend") return { name: "webhook", limit: limits.webhook };
   if (requestPath === "/api/rag/ask" || requestPath === "/api/rag/search" || requestPath.startsWith("/api/rag/verification/")) {
