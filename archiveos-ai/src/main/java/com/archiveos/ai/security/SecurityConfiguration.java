@@ -6,21 +6,28 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.webauthn.management.JdbcPublicKeyCredentialUserEntityRepository;
+import org.springframework.security.web.webauthn.management.JdbcUserCredentialRepository;
 
 @Configuration
 public class SecurityConfiguration {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, SessionAuthenticationFilter sessionFilter,
-                                            AuditLogService audit, ObjectMapper mapper) throws Exception {
+                                            AuditLogService audit, ObjectMapper mapper,
+                                            PasskeyProperties passkeys) throws Exception {
         AuditLogFilter auditFilter = new AuditLogFilter(audit, mapper);
-        return http
+        http
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, error) -> json(response, 401, "Authentication required."))
                         .accessDeniedHandler((request, response, error) -> json(response, 403, "Insufficient role.")))
@@ -31,6 +38,8 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/auth/session").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/auth/admin/users").hasRole("ADMIN")
+                        .requestMatchers("/webauthn/register/**").authenticated()
+                        .requestMatchers("/webauthn/authenticate/options", "/login/webauthn").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/security/**", "/api/audit/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/openai/usage").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/runtime/public-access").hasRole("ADMIN")
@@ -73,8 +82,41 @@ public class SecurityConfiguration {
                         .requestMatchers("/api/**").hasRole("ADMIN")
                         .anyRequest().permitAll())
                 .addFilterBefore(sessionFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(auditFilter, SessionAuthenticationFilter.class)
-                .build();
+                .addFilterAfter(auditFilter, SessionAuthenticationFilter.class);
+        if (passkeys.enabled()) {
+            http.webAuthn(webAuthn -> webAuthn
+                    .rpId(passkeys.rpId())
+                    .rpName(passkeys.rpName())
+                    .allowedOrigins(passkeys.allowedOrigins())
+                    .disableDefaultRegistrationPage(true));
+        }
+        return http.build();
+    }
+
+    @Bean
+    JdbcPublicKeyCredentialUserEntityRepository passkeyUsers(JdbcOperations jdbc) {
+        return new JdbcPublicKeyCredentialUserEntityRepository(jdbc);
+    }
+
+    @Bean
+    JdbcUserCredentialRepository passkeyCredentials(JdbcOperations jdbc) {
+        return new JdbcUserCredentialRepository(jdbc);
+    }
+
+    @Bean
+    UserDetailsService passkeyUserDetails(AdminCredentialRepository credentials, SecurityProperties properties) {
+        return username -> {
+            AdminCredentialRepository.Credential stored = credentials.find(username).orElse(null);
+            if (stored != null && stored.enabled()) {
+                return User.withUsername(stored.username()).password(stored.passwordHash())
+                        .roles(stored.role().name()).build();
+            }
+            if ("admin".equalsIgnoreCase(username) && properties.configured()) {
+                return User.withUsername("admin").password("{noop}passkey-only")
+                        .roles(PlatformRole.ADMIN.name()).build();
+            }
+            throw new UsernameNotFoundException("Passkey account is not enabled.");
+        };
     }
 
     private void json(HttpServletResponse response, int status, String message) throws java.io.IOException {

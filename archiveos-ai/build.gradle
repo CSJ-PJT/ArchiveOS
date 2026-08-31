@@ -36,6 +36,7 @@ dependencies {
     implementation "org.flywaydb:flyway-core"
     implementation "org.springframework.boot:spring-boot-starter-validation"
     implementation "org.springframework.boot:spring-boot-starter-security"
+    implementation "com.webauthn4j:webauthn4j-core:0.29.7.RELEASE"
     implementation "com.svix:svix:1.95.2"
     implementation "org.springframework.ai:spring-ai-starter-model-openai"
     implementation "org.springframework.ai:spring-ai-starter-vector-store-pgvector"

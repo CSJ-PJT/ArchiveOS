@@ -306,6 +306,15 @@ cd ..
 docker compose config --quiet
 ```
 
+## 패스키와 설치형 앱
+
+- 관리자 비밀번호 로그인 후 설정의 `패스키·지문 로그인`에서 현재 기기를 등록합니다.
+- 지문·얼굴·PIN 확인은 기기 안에서만 수행되며 서버에는 WebAuthn 공개키만 저장됩니다.
+- PostgreSQL credential 바이너리는 `bytea`로 저장하고 Large Object는 사용하지 않습니다.
+- 공개 환경은 `ARCHIVEOS_PASSKEY_RP_ID=archiveos.kr`와 정확한 HTTPS origin을 사용합니다.
+- `manifest.webmanifest`와 service worker가 ArchiveOS를 설치형 PWA로 제공합니다. API 응답과 변경 요청은 캐시하지 않습니다.
+- 계정 복구를 위해 최소 하나의 비밀번호 또는 별도 기기의 패스키를 유지합니다.
+
 ## 현재 상태
 
 - Archive-Market / Archive-Nexus / Archive-Logistics / Archive-Ledger 관제 등록

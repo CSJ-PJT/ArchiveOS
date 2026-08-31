@@ -1,5 +1,11 @@
 server:
   port: ${ARCHIVEOS_AI_PORT:4100}
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        secure: ${ARCHIVEOS_SECURE_COOKIE:false}
+        same-site: strict
 
 spring:
   application:
@@ -37,6 +43,11 @@ spring:
         initialize-schema: false
 
 archiveos:
+  passkeys:
+    enabled: ${ARCHIVEOS_PASSKEYS_ENABLED:true}
+    rp-id: ${ARCHIVEOS_PASSKEY_RP_ID:archiveos.kr}
+    rp-name: ${ARCHIVEOS_PASSKEY_RP_NAME:ArchiveOS}
+    allowed-origins: ${ARCHIVEOS_PASSKEY_ALLOWED_ORIGINS:https://archiveos.kr,https://www.archiveos.kr}
   approval:
     auto-approve-all-enabled: ${ARCHIVEOS_AUTO_APPROVE_ALL_ENABLED:false}
     auto-approval-batch-size: ${ARCHIVEOS_AUTO_APPROVAL_BATCH_SIZE:200}

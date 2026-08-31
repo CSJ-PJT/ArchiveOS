@@ -4,13 +4,18 @@ import com.archiveos.ai.audit.AdminAccessAuditService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -52,9 +57,26 @@ public class AuthController {
     }
 
     @GetMapping("/session")
-    public Map<String, Object> session(Authentication authentication) {
+    public Map<String, Object> session(Authentication authentication, HttpServletRequest request) {
         if (authentication != null && authentication.getPrincipal() instanceof PlatformSession session) {
             return Map.of("data", describe(session));
+        }
+        if (authentication != null && authentication.isAuthenticated()
+                && authentication.getPrincipal() instanceof UserDetails user) {
+            PlatformRole role = resolveRole(authentication);
+            HttpSession httpSession = request.getSession(false);
+            Instant createdAt = httpSession == null ? Instant.now()
+                    : Instant.ofEpochMilli(httpSession.getCreationTime());
+            Instant expiresAt = httpSession == null ? createdAt.plus(Duration.ofMinutes(sessions.properties().sessionTimeoutMinutes()))
+                    : Instant.ofEpochMilli(httpSession.getLastAccessedTime())
+                        .plusSeconds(httpSession.getMaxInactiveInterval());
+            if (role == PlatformRole.ADMIN && httpSession != null
+                    && httpSession.getAttribute("ARCHIVEOS_PASSKEY_AUDITED") == null) {
+                adminAccessAudit.recordSuccessfulPasskeyLogin(user.getUsername(), ClientAddressResolver.resolve(request),
+                        request.getHeader("User-Agent"), httpSession.getId());
+                httpSession.setAttribute("ARCHIVEOS_PASSKEY_AUDITED", Boolean.TRUE);
+            }
+            return Map.of("data", describe(user.getUsername(), role, createdAt, expiresAt));
         }
         return Map.of("data", Map.of("actor", "anonymous", "role", PlatformRole.PUBLIC.name(), "authenticated", false));
     }
@@ -63,6 +85,10 @@ public class AuthController {
     public Map<String, Object> logout(HttpServletRequest request, HttpServletResponse response) {
         sessions.logout(readCookie(request));
         response.addCookie(cookie("", 0));
+        HttpSession httpSession = request.getSession(false);
+        if (httpSession != null) httpSession.invalidate();
+        SecurityContextHolder.clearContext();
+        response.addCookie(expiredCookie("JSESSIONID"));
         return Map.of("data", Map.of("loggedOut", true));
     }
 
@@ -86,13 +112,28 @@ public class AuthController {
     }
 
     private Map<String, Object> describe(PlatformSession session) {
+        return describe(session.actor(), session.role(), session.createdAt(), session.expiresAt());
+    }
+
+    private Map<String, Object> describe(String actor, PlatformRole role, Instant createdAt, Instant expiresAt) {
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("actor", session.actor());
-        data.put("role", session.role().name());
+        data.put("actor", actor);
+        data.put("role", role.name());
         data.put("authenticated", true);
-        data.put("createdAt", session.createdAt());
-        data.put("expiresAt", session.expiresAt());
+        data.put("createdAt", createdAt);
+        data.put("expiresAt", expiresAt);
         return data;
+    }
+
+    private PlatformRole resolveRole(Authentication authentication) {
+        return authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority)
+                .filter(value -> value.startsWith("ROLE_"))
+                .map(value -> value.substring(5))
+                .map(value -> {
+                    try { return PlatformRole.valueOf(value); }
+                    catch (IllegalArgumentException ignored) { return null; }
+                })
+                .filter(java.util.Objects::nonNull).findFirst().orElse(PlatformRole.PUBLIC);
     }
 
     private Cookie cookie(String value, int maxAge) {
@@ -101,6 +142,16 @@ public class AuthController {
         cookie.setSecure(sessions.properties().secureCookie());
         cookie.setPath("/");
         cookie.setMaxAge(maxAge);
+        cookie.setAttribute("SameSite", "Strict");
+        return cookie;
+    }
+
+    private Cookie expiredCookie(String name) {
+        Cookie cookie = new Cookie(name, "");
+        cookie.setHttpOnly(true);
+        cookie.setSecure(sessions.properties().secureCookie());
+        cookie.setPath("/");
+        cookie.setMaxAge(0);
         cookie.setAttribute("SameSite", "Strict");
         return cookie;
     }

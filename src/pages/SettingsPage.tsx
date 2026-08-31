@@ -4,7 +4,13 @@ import { SectionCard } from "../components/shared/SectionCard";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { useTheme, type ThemeMode } from "../theme/ThemeProvider";
 import { formatTimeAgo, stringifyMeta } from "./pageUtils";
-import { getOpenAiUsage, loginAdmin, logoutAdmin, type OpenAiUsageSummary, type PlatformRole } from "../lib/backendApi";
+import { deletePasskeyCredential, getOpenAiUsage, getPasskeys, loginAdmin, logoutAdmin, type OpenAiUsageSummary, type PasskeyStatus, type PlatformRole } from "../lib/backendApi";
+import { createPasskey, passkeysAvailable, signInWithPasskey } from "../lib/passkeys";
+
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
 
 const sections = [
   "Appearance",
@@ -18,6 +24,7 @@ const sections = [
   "Slack",
   "Public Access",
   "Security",
+  "Passkeys",
   "Build Information",
 ] as const;
 
@@ -40,6 +47,11 @@ export function SettingsPage({
   const [openAiUsage, setOpenAiUsage] = useState<OpenAiUsageSummary | null>(null);
   const [openAiUsageBusy, setOpenAiUsageBusy] = useState(false);
   const [openAiUsageError, setOpenAiUsageError] = useState<string | null>(null);
+  const [passkeys, setPasskeys] = useState<PasskeyStatus | null>(null);
+  const [passkeyLabel, setPasskeyLabel] = useState("");
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [passkeyError, setPasskeyError] = useState<string | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
 
   async function loadOpenAiUsage() {
     if (data.auth.role !== "ADMIN") return;
@@ -67,6 +79,54 @@ export function SettingsPage({
     finally { setAuthBusy(false); }
   }
 
+  async function passkeyLogin() {
+    setPasskeyBusy(true); setAuthError(null);
+    try { await signInWithPasskey(); await onRefresh(); }
+    catch (error) { setAuthError(error instanceof Error ? error.message : String(error)); }
+    finally { setPasskeyBusy(false); }
+  }
+
+  async function loadPasskeys() {
+    setPasskeyBusy(true); setPasskeyError(null);
+    try { setPasskeys(await getPasskeys()); }
+    catch (error) { setPasskeyError(error instanceof Error ? error.message : String(error)); }
+    finally { setPasskeyBusy(false); }
+  }
+
+  async function addPasskey() {
+    setPasskeyBusy(true); setPasskeyError(null);
+    try { await createPasskey(passkeyLabel); setPasskeyLabel(""); setPasskeys(await getPasskeys()); }
+    catch (error) { setPasskeyError(error instanceof Error ? error.message : String(error)); }
+    finally { setPasskeyBusy(false); }
+  }
+
+  async function removePasskey(id: string) {
+    setPasskeyBusy(true); setPasskeyError(null);
+    try { await deletePasskeyCredential(id); setPasskeys(await getPasskeys()); }
+    catch (error) { setPasskeyError(error instanceof Error ? error.message : String(error)); }
+    finally { setPasskeyBusy(false); }
+  }
+
+  useEffect(() => {
+    if (open === "Passkeys" && data.auth.role === "ADMIN" && !passkeys && !passkeyBusy) void loadPasskeys();
+  }, [data.auth.role, open, passkeys, passkeyBusy]);
+
+  useEffect(() => {
+    const capture = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", capture);
+    return () => window.removeEventListener("beforeinstallprompt", capture);
+  }, []);
+
+  async function installApp() {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  }
+
   if (data.auth.role === "PUBLIC") {
     return <div className="page-stack"><SectionCard title="운영자 로그인" eyebrow="PUBLIC 세션에서는 설정을 변경할 수 없습니다">
       <div className="decision-panel">
@@ -77,6 +137,10 @@ export function SettingsPage({
         <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="관리자 비밀번호" />
         {authError ? <div className="empty-state error-state">{authError}</div> : null}
         <button className="button button-primary" type="button" onClick={login} disabled={authBusy || !password}>{authBusy ? "로그인 중..." : "로그인"}</button>
+        <div className="passkey-divider"><span>또는</span></div>
+        <button className="button button-secondary" type="button" onClick={() => void passkeyLogin()} disabled={passkeyBusy || !passkeysAvailable()}>{passkeyBusy ? "지문 확인 중..." : "지문·패스키로 로그인"}</button>
+        {installPrompt ? <button className="button button-secondary" type="button" onClick={() => void installApp()}>ArchiveOS 앱 설치</button> : null}
+        {!passkeysAvailable() ? <p className="small-note">HTTPS와 패스키를 지원하는 브라우저에서 사용할 수 있습니다.</p> : null}
       </div>
     </SectionCard></div>;
   }
@@ -170,6 +234,21 @@ export function SettingsPage({
             <KeyValue label="Authentication" value={data.security?.authentication.status || "unknown"} />
             <KeyValue label="OAuth provider" value={data.security?.oauth.provider || "Not configured"} />
             <KeyValue label="Approved devices" value={data.security?.deviceApproval.approvedDevicesCount ?? 0} />
+          </SettingsRow>
+
+          <SettingsRow title="패스키·지문 로그인" status={passkeys?.items.length ? "configured" : "not_configured"} open={open === "Passkeys"} onToggle={() => setOpen(open === "Passkeys" ? "" : "Passkeys")}>
+            <p className="body-copy">지문은 이 기기에서만 확인됩니다. ArchiveOS에는 공개키와 사용 이력만 저장됩니다.</p>
+            {passkeyError ? <div className="empty-state error-state">{passkeyError}</div> : null}
+            <div className="passkey-register-row">
+              <input value={passkeyLabel} onChange={(event) => setPasskeyLabel(event.target.value)} maxLength={80} placeholder="예: 갤럭시 관리자 패스키" aria-label="패스키 기기 이름" />
+              <button className="button button-primary" type="button" onClick={() => void addPasskey()} disabled={passkeyBusy || !passkeysAvailable()}>{passkeyBusy ? "처리 중..." : "현재 기기에 패스키 등록"}</button>
+              <button className="button button-secondary" type="button" onClick={() => void loadPasskeys()} disabled={passkeyBusy}>새로고침</button>
+            </div>
+            {passkeys?.items.length ? <ul className="passkey-list">{passkeys.items.map((credential) => <li key={credential.id}>
+              <div><strong>{credential.label || "이름 없는 패스키"}</strong><small>등록 {credential.created ? new Date(credential.created).toLocaleString("ko-KR") : "시각 없음"} · 최근 사용 {credential.last_used ? formatTimeAgo(credential.last_used) : "아직 없음"}</small></div>
+              <button className="button button-secondary" type="button" onClick={() => void removePasskey(credential.id)} disabled={passkeyBusy}>삭제</button>
+            </li>)}</ul> : <p className="small-note">등록된 패스키가 없습니다. 비밀번호로 로그인한 뒤 현재 기기를 등록하세요.</p>}
+            {installPrompt ? <button className="button button-secondary" type="button" onClick={() => void installApp()}>이 기기에 ArchiveOS 앱 설치</button> : <p className="small-note">설치 버튼이 보이지 않으면 브라우저 메뉴에서 ‘홈 화면에 추가’ 또는 ‘앱 설치’를 선택하세요.</p>}
           </SettingsRow>
 
           <SettingsRow title="Build Information" status={data.runtimeVersion ? "connected" : "unknown"} open={open === "Build Information"} onToggle={() => setOpen(open === "Build Information" ? "" : "Build Information")}>

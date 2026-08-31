@@ -26,6 +26,23 @@ export type AuthSession = {
   expiresAt?: string;
 };
 
+export type PasskeyCredentialSummary = {
+  id: string;
+  label: string;
+  created: string | null;
+  last_used: string | null;
+  transports: string;
+  backup_eligible: boolean;
+  backup_state: boolean;
+};
+
+export type PasskeyStatus = {
+  enabled: boolean;
+  supported: boolean;
+  rpId: string;
+  items: PasskeyCredentialSummary[];
+};
+
 export type UsageAuditEntry = {
   id: string;
   occurred_at: string;
@@ -718,6 +735,44 @@ export async function loginAdmin(password: string, role: Exclude<PlatformRole, "
 export async function logoutAdmin() {
   const response = await request<ApiEnvelope<{ loggedOut: boolean }>>("/api/auth/logout", { method: "POST" });
   return response.data;
+}
+
+export async function getPasskeys() {
+  const response = await request<ApiEnvelope<PasskeyStatus>>("/api/auth/passkeys");
+  return response.data;
+}
+
+export async function getPasskeyRegistrationOptions() {
+  return request<Record<string, unknown>>("/api/auth/passkeys/register/options", { method: "POST" });
+}
+
+export async function registerPasskeyCredential(payload: Record<string, unknown>) {
+  return request<Record<string, unknown>>("/api/auth/passkeys/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getPasskeyAuthenticationOptions() {
+  return request<Record<string, unknown>>("/api/auth/passkeys/authenticate/options", { method: "POST" });
+}
+
+export async function authenticatePasskeyCredential(payload: Record<string, unknown>) {
+  return request<Record<string, unknown>>("/api/auth/passkeys/authenticate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deletePasskeyCredential(credentialId: string) {
+  const response = await fetch(`${backendUrl}/api/auth/passkeys/${encodeURIComponent(credentialId)}`, {
+    method: "DELETE",
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response));
 }
 
 export async function recordConsoleUsage(route: string) {
