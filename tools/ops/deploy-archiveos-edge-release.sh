@@ -32,6 +32,11 @@ test -f "$release_dir/index.html"
 find "$release_dir" -type f -exec chmod 0644 {} +
 find "$release_dir" -type d -exec chmod 0755 {} +
 chown -R root:root "$release_dir"
+# Files staged through /tmp retain user_tmp_t on SELinux hosts and Nginx then
+# returns 403 after an otherwise successful atomic cutover. Restore the
+# persistent /srv label before the symlink can become active.
+restorecon -RF "$release_dir"
+matchpathcon -V "$release_dir"
 
 install -o root -g root -m 0644 "$header_source" "$header_target"
 cp -a "$domain_config" "${domain_config}.bak-${stamp}"
