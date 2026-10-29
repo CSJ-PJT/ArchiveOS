@@ -57,6 +57,19 @@ function classify(text) {
   for (const [type, words] of Object.entries(needles)) out[type] = words.filter(w => text.includes(w));
   return out;
 }
+
+const routesAndPanels = [];
+for (const [path, content] of textByAsset) {
+  for (const phrase of ["DEVELOPMENT / RELEASE", "전체 목표 구현률", "원본 기준 부재", "Steam Windows PC 작업영역별 추정", "Steam 개발"]) {
+    const at = content.indexOf(phrase);
+    if (at >= 0) {
+      const surrounding = content.slice(Math.max(0, at - 175), Math.min(content.length, at + phrase.length + 200))
+        .replace(/[\\r\\n|]/g, " ").replace(/https?:\\/\\/[^"'`\\s]+/g, "[url]");
+      routesAndPanels.push({ path, phrase, surrounding });
+    }
+  }
+}
+
 const existing = [...new Set(results.flatMap(r => r.existingGameOps || []))];
 const modern = [...new Set(results.flatMap(r => r.newDashboard || []))];
 const report = [
@@ -70,6 +83,10 @@ const report = [
   "",
   `Existing GameOps marker set detected: ${existing.length}/${needles.existingGameOps.length}`,
   `New PR #17 marker set detected: ${modern.length}/${needles.newDashboard.length}`,
+  "",
+  "",
+  "## Static bundle context around matched headings (limited public text)",
+  ...routesAndPanels.map(x => `- \`${x.phrase}\` in \`${x.path}\`: \`${x.surrounding.replaceAll("`", "'")}\``),
   "",
   "A missing marker in downloaded assets does not prove absence from unrequested lazy chunks. A visible GameOps page is confirmed only by the user/browser. This job never deploys or changes runtime.",
 ].join("\n");
