@@ -68,6 +68,7 @@ export function DeepStakeProgressBoard({ compact = false }: { compact?: boolean 
   const scoreIsStale = Date.now() - Date.parse(scoreReviewedAt) > 24 * 60 * 60 * 1000;
   const stages = evaluated.snapshot.gates;
   const verification = evaluated.snapshot.verification;
+  const developer = evaluated.snapshot.developerReport;
   const total = original.total;
   const renderStamp = (value: string) => new Date(value).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 
@@ -102,13 +103,28 @@ export function DeepStakeProgressBoard({ compact = false }: { compact?: boolean 
         <small>전체 회귀·Native·출시 승인과 무관</small>
       </article>
       <article className="ds-metric">
-        <span>현재 빌드 Native E2E</span>
+        <span>원본 영수증 기준 Native E2E</span>
         <strong className="ds-fail-label">{statusText[verification.nativeStatus]}</strong>
         <p>PID {verification.nativePid ?? "미기록"} · exit {verification.nativeExitCode ?? "미기록"}</p>
-        <small>단일 플레이 루프의 연속 통과 증거 없음</small>
+        <small>{developer ? "이전 파일 검증 기준이며, 최신 로컬 Codex 자체 보고는 아래에서 구분" : "단일 플레이 루프의 연속 통과 증거 없음"}</small>
       </article>
     </div>
 
+    {developer ? <section className="ds-developer-report" aria-label="로컬 Codex 개발자 자체 검증 보고">
+      <div className="ds-section-heading">
+        <h3>로컬 Codex 자체 검증 보고</h3>
+        <span>{developer.builds.join(" · ")} · {renderStamp(developer.reportedAtUtc)}</span>
+      </div>
+      <div className="ds-developer-grid">
+        <div><strong>첫날 생활 E2E 통과 보고</strong><small>개발자 자체 시험 · 원본 Native 영수증 및 독립 QA 대조 전</small></div>
+        <div><strong>{developer.nativeRuns.map((run) => `PID ${run.pid} exit ${run.reportedExitCode}`).join(" · ")}</strong><small>신규 실행 및 별도 프로세스 복원 (로컬 보고)</small></div>
+        <div><strong>{developer.tests.map((test) => `${test.passed}/${test.total}`).join(" · ")}</strong><small>관련 테스트 (자체 보고, 범위별 별도)</small></div>
+        <div><strong>{developer.firstVillageMvpEvidenceScore.score}/{developer.firstVillageMvpEvidenceScore.maximum}</strong><small>첫 마을 MVP 증거 점수 · 위 Steam 9영역 추정치와 별개</small></div>
+      </div>
+      <p>{developer.reportedFirstDayFlow}</p>
+      {!compact ? <p>이동 {developer.movement.routes}개 경로 · 정지 {developer.movement.stopPoints}곳: {developer.movement.maxStopDistanceMeters}m 미만 보고. 남은 검증: {developer.unresolved.join(" · ")}</p> : null}
+      <small>출처: 사용자가 제공한 DeepStake Project Codex 화면. 이 보고는 원본 실행 파일·테스트 XML·독립 PC 검증의 대체물이 아니며 전체 게임 완성률에 자동 가산하지 않습니다.</small>
+    </section> : null}
     <div className="ds-historical">
       <div className="ds-section-heading"><h3>원본 72건 상태 분포</h3><span>항목 연결 {original72Mapped ? "72/72" : "0/72"}</span></div>
       <div className="ds-stacked" role="img" aria-label={`완료 ${counts.completed}, 진행 ${counts.in_progress}, 미구현 ${counts.unimplemented}, 외부 의존 ${counts.external}`}>
