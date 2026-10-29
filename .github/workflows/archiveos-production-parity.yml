@@ -1,0 +1,26 @@
+name: Read-only OCI production parity
+
+on:
+  pull_request:
+    paths:
+      - "scripts/probe-archiveos-live.mjs"
+      - ".github/workflows/archiveos-production-parity.yml"
+      - "src/components/console/DeepStakeProgressBoard.tsx"
+      - "public/deepstake-progress.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Public HTTP fingerprint (no deployment)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check public ArchiveOS frontdoor
+        run: node scripts/probe-archiveos-live.mjs
