@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "scripts/probe-archiveos-live.mjs"
+      - "scripts/probe-archiveos-gameops-assets.mjs"
       - ".github/workflows/archiveos-production-parity.yml"
       - "src/components/console/DeepStakeProgressBoard.tsx"
       - "public/deepstake-progress.json"
@@ -24,3 +25,5 @@ jobs:
           node-version: '24'
       - name: Check public ArchiveOS frontdoor
         run: node scripts/probe-archiveos-live.mjs
+      - name: Compare deployed GameOps asset signatures
+        run: node scripts/probe-archiveos-gameops-assets.mjs
