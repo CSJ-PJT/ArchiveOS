@@ -1,0 +1,239 @@
+{
+  "schema": "deepstake-steam-progress-v1",
+  "asOfUtc": "2026-10-29T00:51:55.618Z",
+  "scope": "steam-windows-pc",
+  "sourceLabel": "2026-10-29 v271 결과 + 기존 MAIN PM 결과 파일에 기반한 수동 검토 스냅샷",
+  "original72": {
+    "total": 72,
+    "historicalPercent": 24,
+    "historicalAtUtc": "2026-10-22T00:00:00Z",
+    "historicalCounts": {
+      "completed": 10,
+      "in_progress": 10,
+      "unimplemented": 47,
+      "external": 5
+    },
+    "source": "ArchiveOS 2026-10-22 원래 72개 총괄 집계. 2026-10-24 영수증에서 확인; 개별 72 ID/계산식은 미복구."
+  },
+  "steamMvp": {
+    "method": "Steam Windows PC MVP 가중 추정: 각 작업영역 weight와 근거 검토 점수 estimate(0~100)의 가중평균. 주관적 계획 지표이며 정식 완료율/72 집계와 무관.",
+    "workstreams": [
+      {
+        "id": "ui-entry",
+        "label": "게임 시작·메뉴·GUI",
+        "weight": 12,
+        "estimate": 35,
+        "gate": "blocked",
+        "note": "도입부의 실제 활성 버튼과 입력 순서가 v271 native에서 차단. 과거 좁은 UI 사례는 통과.",
+        "evidence": [
+          "PM_G1_N7_NATIVE_POINTER_READINESS_FIRSTDAY_RESULT_20261028.json",
+          "WINDOWS_FIRSTDAY_KEY_STOP_RESULT_20261029.json"
+        ]
+      },
+      {
+        "id": "movement",
+        "label": "8방향 이동·상호작용",
+        "weight": 16,
+        "estimate": 30,
+        "gate": "partial",
+        "note": "입력 경로의 제한적 native 통과와 실제 첫날 정지 오차가 공존. 사람의 물리 키보드 미검증.",
+        "evidence": [
+          "PM_G1_N7_NATIVE_MOVEMENT_FIRSTDAY_RESULT_20261028.json",
+          "PM_FOCUS_CAP_OVERRIDE_NATIVE_REQUAL_RESULT_20261028_1646.json"
+        ]
+      },
+      {
+        "id": "jobs",
+        "label": "직업·배송·보상",
+        "weight": 12,
+        "estimate": 35,
+        "gate": "partial",
+        "note": "과거 2회 배송·급여 수령 native 증거가 있으나 v271 단일 통합 플레이는 중단.",
+        "evidence": [
+          "PM_G1_FIRST_EARNED_DAY_NATIVE_RESULT_20261026.json",
+          "WINDOWS_FIRSTDAY_KEY_STOP_RESULT_20261029.json"
+        ]
+      },
+      {
+        "id": "market",
+        "label": "상점·구매·재고",
+        "weight": 10,
+        "estimate": 25,
+        "gate": "partial",
+        "note": "과거 범위 한정 구매·재고 유지 PASS. 최신 동일 세션 E2E는 미도달.",
+        "evidence": [
+          "PM_G1_DAY_JOURNAL_UNIFIED_NEARBY_HUD_RESULT_20261026.json",
+          "WINDOWS_FIRSTDAY_KEY_STOP_RESULT_20261029.json"
+        ]
+      },
+      {
+        "id": "save-reopen",
+        "label": "저장·별도 실행 복원",
+        "weight": 12,
+        "estimate": 30,
+        "gate": "partial",
+        "note": "과거 고립된 n7 주민 콜드 저장 성공. v271에서는 첫 도입부에서 중단돼 콜드 미실행.",
+        "evidence": [
+          "PM_G1_FIRST_EARNED_DAY_NATIVE_RESULT_20261026.json",
+          "WINDOWS_FIRSTDAY_KEY_STOP_RESULT_20261029.json"
+        ]
+      },
+      {
+        "id": "visual",
+        "label": "마을 화면·콘셉트 구현",
+        "weight": 14,
+        "estimate": 20,
+        "gate": "partial",
+        "note": "건물 외곽·지붕·도로·녹지 일부 개선. 원본과 같은 시점 3뷰 수용 불통과.",
+        "evidence": [
+          "PM_P5_GREEN_COVER_RESULT_20261025.json",
+          "PM_G1_SELECTED_N8_LOCAL_STREET_PROJECTION_RESULT_20261027.json"
+        ]
+      },
+      {
+        "id": "gpu",
+        "label": "GPU 안전·가림·도로 복원",
+        "weight": 10,
+        "estimate": 35,
+        "gate": "fail",
+        "note": "사적 바닥 RGB 차이 0/0으로 개선했으나 엄격한 도로 손실 1px이 남아 전체 FAIL.",
+        "evidence": [
+          "PM_P13_OPAQUE_SOURCE_AND_ROAD_FRAGMENT_RESULT_20261026.json",
+          "PM_P18_ORIGINAL_SAMPLE_COVERAGE_RESULT_20261026.json"
+        ]
+      },
+      {
+        "id": "performance",
+        "label": "응답성·안정성",
+        "weight": 8,
+        "estimate": 10,
+        "gate": "blocked",
+        "note": "N8 Native 호스트 처리 중앙값 약 1.04초 관측, 구조 개선과 장시간 독립 QA는 미검증.",
+        "evidence": [
+          "PM_G1_SELECTED_N8_STEP_CADENCE_RESULT_20261027.json"
+        ]
+      },
+      {
+        "id": "steam-qa",
+        "label": "독립 QA·Steam 출시 게이트",
+        "weight": 6,
+        "estimate": 0,
+        "gate": "not_run",
+        "note": "GTX 1080 별도 PC 실기기 QA, 패키징·Steamworks 심사·사용자 플레이 승인은 아직 근거 없음.",
+        "evidence": []
+      }
+    ],
+    "history": [
+      {
+        "atUtc": "2026-10-29T00:51:55.618Z",
+        "estimate": 26.4,
+        "source": "이 날짜 첫 Steam PC MVP 추정 모델 도입; 이전 전체 72 점수와 비교 금지"
+      }
+    ]
+  },
+  "verification": {
+    "suite": "v271 키 해제·접근 관련 EditMode 한정",
+    "editorPassed": 30,
+    "editorTotal": 30,
+    "nativePid": 48668,
+    "nativeExitCode": 1,
+    "nativeStatus": "fail",
+    "nativeFailure": "SkipOptionalArrival 실제 활성 버튼을 찾지 못해 create 시나리오 종료. 근무·구매·저장 검증까지 도달하지 못함.",
+    "isIndependentQA": false
+  },
+  "gates": [
+    {
+      "id": "windows-build",
+      "label": "Windows 소스 일치 빌드",
+      "status": "pass",
+      "detail": "v271 내부 QA Windows 빌드와 영수증 있음. 사용자 출시 승인 아님.",
+      "evidence": "WINDOWS_FIRSTDAY_KEY_STOP_RESULT_20261029.json"
+    },
+    {
+      "id": "gameplay",
+      "label": "첫날 생활 루프 완주",
+      "status": "fail",
+      "detail": "버튼 활성 상태에서 Native 종료; 급여·구매·저장·콜드 연결 실패.",
+      "evidence": "WINDOWS_FIRSTDAY_KEY_STOP_RESULT_20261029.json"
+    },
+    {
+      "id": "gpu-zero",
+      "label": "엄격 GPU 검사",
+      "status": "fail",
+      "detail": "바닥은 0/0, 도로 손실 1px(요구 0) 그대로.",
+      "evidence": "PM_P18_ORIGINAL_SAMPLE_COVERAGE_RESULT_20261026.json"
+    },
+    {
+      "id": "physical-input",
+      "label": "물리 입력·실제 화면",
+      "status": "not_run",
+      "detail": "엔진 합성 입력 증거는 있으나 OS 키·마우스·전체 GUI 독립 검증 없음.",
+      "evidence": "PM_G1_N7_NATIVE_MOVEMENT_FIRSTDAY_RESULT_20261028.json"
+    },
+    {
+      "id": "cold-271",
+      "label": "현재 빌드 별도 PID 복원",
+      "status": "not_run",
+      "detail": "v271은 도입부에서 실패해 별도 프로세스 시작 전 중단.",
+      "evidence": "WINDOWS_FIRSTDAY_KEY_STOP_RESULT_20261029.json"
+    },
+    {
+      "id": "concept",
+      "label": "동일 카메라 3뷰 수용",
+      "status": "not_run",
+      "detail": "실제 원본 콘셉트 비교 수용 미검증.",
+      "evidence": "PM_G1_SELECTED_N8_LOCAL_STREET_PROJECTION_RESULT_20261027.json"
+    },
+    {
+      "id": "independent",
+      "label": "독립 PC QA·Steam 제출",
+      "status": "not_run",
+      "detail": "독립 검증·출시 승인은 확인되지 않음.",
+      "evidence": "WINDOWS_FIRSTDAY_KEY_STOP_RESULT_20261029.json"
+    }
+  ],
+  "events": [
+    {
+      "id": "d5-230",
+      "atUtc": "2026-10-24T12:40:44Z",
+      "label": "v230 사용자용 보호 빌드 확보",
+      "status": "partial",
+      "evidence": "FINAL_SAFETY_BUILD_D5_20261024.json"
+    },
+    {
+      "id": "p13",
+      "atUtc": "2026-10-26T05:34:36Z",
+      "label": "개인 바닥 GPU RGB 결함 0/0으로 개선",
+      "status": "partial",
+      "evidence": "PM_P13_OPAQUE_SOURCE_AND_ROAD_FRAGMENT_RESULT_20261026.json"
+    },
+    {
+      "id": "first-day",
+      "atUtc": "2026-10-26T00:00:00Z",
+      "label": "이전 범위 한정 배송·보상·구매·콜드 실행 성공",
+      "status": "partial",
+      "evidence": "PM_G1_FIRST_EARNED_DAY_NATIVE_RESULT_20261026.json"
+    },
+    {
+      "id": "n8",
+      "atUtc": "2026-10-27T00:00:00Z",
+      "label": "N8 신규 월드 이동·표시 기반 실행 검증(지연 차단)",
+      "status": "partial",
+      "evidence": "PM_G1_SELECTED_N8_HELD_MOVEMENT_RESULT_20261027.json"
+    },
+    {
+      "id": "v270",
+      "atUtc": "2026-10-28T07:58:24Z",
+      "label": "v270 생활 E2E 이동 오차로 중단",
+      "status": "fail",
+      "evidence": "PM_FOCUS_CAP_OVERRIDE_NATIVE_REQUAL_RESULT_20261028_1646.json"
+    },
+    {
+      "id": "v271",
+      "atUtc": "2026-10-29T00:51:55.618Z",
+      "label": "v271 테스트 30/30·빌드 PASS, Native 도입 버튼에서 실패",
+      "status": "fail",
+      "evidence": "WINDOWS_FIRSTDAY_KEY_STOP_RESULT_20261029.json"
+    }
+  ]
+}
