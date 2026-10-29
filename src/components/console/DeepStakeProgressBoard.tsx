@@ -64,6 +64,8 @@ export function DeepStakeProgressBoard({ compact = false }: { compact?: boolean 
   const { counts, steamEstimate, stale, original72Mapped, original72VerifiedFloor, original72InProgressUpperBound } = evaluated;
   const original = evaluated.snapshot.original72;
   const steam = evaluated.snapshot.steamMvp;
+  const scoreReviewedAt = steam.history[steam.history.length - 1]?.atUtc ?? evaluated.snapshot.asOfUtc;
+  const scoreIsStale = Date.now() - Date.parse(scoreReviewedAt) > 24 * 60 * 60 * 1000;
   const stages = evaluated.snapshot.gates;
   const verification = evaluated.snapshot.verification;
   const total = original.total;
@@ -85,7 +87,7 @@ export function DeepStakeProgressBoard({ compact = false }: { compact?: boolean 
         <div className="ds-bar" role="img" aria-label={`Steam PC MVP 추정 ${steamEstimate.toFixed(1)}퍼센트`}>
           <i style={{ width: `${steamEstimate}%` }} />
         </div>
-        <small>9개 작업영역 가중 평가 · 정식 전체 게임 완성률 아님</small>
+        <small>9개 영역 가중 평가 · 점수 검토 {renderStamp(scoreReviewedAt)}{scoreIsStale ? " (재평가 필요)" : ""} · 공식 완료율 아님</small>
       </article>
       <article className="ds-metric">
         <span>원래 72개 수용기준</span>
