@@ -1,8 +1,8 @@
 {
   "schema": "deepstake-steam-progress-v1",
-  "asOfUtc": "2026-10-29T00:51:55.618Z",
+  "asOfUtc": "2026-10-29T07:03:00Z",
   "scope": "steam-windows-pc",
-  "sourceLabel": "2026-10-29 v271 결과 + 기존 MAIN PM 결과 파일에 기반한 수동 검토 스냅샷",
+  "sourceLabel": "2026-10-29 DeepStake Project 로컬 Codex 사용자 제공 스크린샷(v287·v288 자체 보고) + 이전 v271 원본 영수증; 서로 독립 검증 범위가 다름",
   "original72": {
     "total": 72,
     "historicalPercent": 24,
@@ -234,6 +234,67 @@
       "label": "v271 테스트 30/30·빌드 PASS, Native 도입 버튼에서 실패",
       "status": "fail",
       "evidence": "WINDOWS_FIRSTDAY_KEY_STOP_RESULT_20261029.json"
+    },
+    {
+      "id": "local-v287-user-report",
+      "atUtc": "2026-10-29T07:03:00Z",
+      "label": "로컬 Codex v287 Native 신규 PID44712·복원 PID30340 exit0 / 생활 E2E 보고 (영수증 대조 전)",
+      "status": "partial",
+      "evidence": "2026-10-29 사용자 제공 DeepStake Project 화면; 원본 native-result 영수증 직접 미검증"
+    },
+    {
+      "id": "local-v288-user-report",
+      "atUtc": "2026-10-29T07:03:00Z",
+      "label": "로컬 Codex v288 저장경로 분리·잘못된 설정 거부, 66/66 관련 테스트, 수동 시험용 런처 준비 보고",
+      "status": "partial",
+      "evidence": "2026-10-29 사용자 제공 DeepStake Project 화면; 별도 독립 실기기 QA 미실행"
     }
-  ]
+  ],
+  "developerReport": {
+    "source": "user-provided-codex-screenshots",
+    "reportedAtUtc": "2026-10-29T07:03:00Z",
+    "builds": [
+      "v287",
+      "v288"
+    ],
+    "nativeRuns": [
+      {
+        "pid": 44712,
+        "reportedExitCode": 0,
+        "purpose": "v287 신규 주민·근무·급여·물 구매·저장"
+      },
+      {
+        "pid": 30340,
+        "reportedExitCode": 0,
+        "purpose": "v287 별도 프로세스 재진입·상태 복원"
+      }
+    ],
+    "tests": [
+      {
+        "label": "상태 전송 주기 오류 수정 관련 시험 (자체 보고)",
+        "passed": 66,
+        "total": 66
+      }
+    ],
+    "movement": {
+      "routes": 17,
+      "stopPoints": 34,
+      "maxStopDistanceMeters": 0.03,
+      "reportedAllWithin": true
+    },
+    "reportedFirstDayFlow": "v287 로컬 Codex가 근무→급여→물 구매→메뉴 저장→별도 PID 복원 통과를 보고. v288은 저장 경로 분리 및 잘못된 설정 거부 검사 통과, 수동 시험 런처 준비를 보고.",
+    "firstVillageMvpEvidenceScore": {
+      "score": 56,
+      "maximum": 100,
+      "method": "DeepStake 로컬 Codex의 별도 첫 마을 MVP 증거 점수 (Steam MVP 9영역 가중 26.4%와 다른 분모; 전체 게임 완성률 아님)"
+    },
+    "unresolved": [
+      "실제 사람 키보드·마우스 조작 독립 QA",
+      "체감 이동 지연 개선 미판정",
+      "거리 시각 품질 콘셉트 수용 미달",
+      "P18 GPU 엄격 안전검사/도로 1px",
+      "Steam 출시 독립 승인"
+    ],
+    "independentlyVerified": false
+  }
 }
