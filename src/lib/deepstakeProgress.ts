@@ -53,11 +53,26 @@ export type SteamEvent = {
   evidence: string;
 };
 
+export type DeveloperReport = {
+  /** A user-supplied screenshot of local Codex output is not a native test receipt. */
+  source: "user-provided-codex-screenshots";
+  reportedAtUtc: string;
+  builds: string[];
+  nativeRuns: Array<{ pid: number; reportedExitCode: number; purpose: string }>;
+  tests: Array<{ label: string; passed: number; total: number }>;
+  movement: { routes: number; stopPoints: number; maxStopDistanceMeters: number; reportedAllWithin: boolean };
+  reportedFirstDayFlow: string;
+  firstVillageMvpEvidenceScore: { score: number; maximum: number; method: string };
+  unresolved: string[];
+  independentlyVerified: false;
+};
+
 export type SteamSnapshot = {
   schema: typeof DEEPSTAKE_SCHEMA;
   asOfUtc: string;
   scope: "steam-windows-pc";
   sourceLabel: string;
+  developerReport?: DeveloperReport;
   original72: Original72Snapshot;
   steamMvp: {
     method: string;
@@ -137,6 +152,23 @@ export function parseSteamSnapshot(value: unknown): SteamSnapshot {
   if (!data.verification || !Number.isInteger(data.verification.editorPassed) || !Number.isInteger(data.verification.editorTotal) ||
     data.verification.editorPassed < 0 || data.verification.editorTotal < data.verification.editorPassed ||
     !validGate(data.verification.nativeStatus)) throw new Error("시험 검증 수치가 잘못되었습니다.");
+  if (data.developerReport !== undefined) {
+    const report = data.developerReport;
+    if (!report || report.source !== "user-provided-codex-screenshots" || !validTime(report.reportedAtUtc) ||
+      report.independentlyVerified !== false || !Array.isArray(report.builds) || !Array.isArray(report.nativeRuns) ||
+      !Array.isArray(report.tests) || !Array.isArray(report.unresolved) ||
+      !report.firstVillageMvpEvidenceScore || !Number.isFinite(report.firstVillageMvpEvidenceScore.score) ||
+      !Number.isFinite(report.firstVillageMvpEvidenceScore.maximum) || report.firstVillageMvpEvidenceScore.maximum <= 0 ||
+      report.firstVillageMvpEvidenceScore.score < 0 ||
+      report.firstVillageMvpEvidenceScore.score > report.firstVillageMvpEvidenceScore.maximum ||
+      !report.movement || !Number.isInteger(report.movement.routes) || report.movement.routes < 0 ||
+      !Number.isInteger(report.movement.stopPoints) || report.movement.stopPoints < 0 ||
+      !Number.isFinite(report.movement.maxStopDistanceMeters) || report.movement.maxStopDistanceMeters <= 0 ||
+      report.nativeRuns.some((r) => !Number.isInteger(r.pid) || r.pid < 1 || !Number.isInteger(r.reportedExitCode)) ||
+      report.tests.some((t) => !t.label || !Number.isInteger(t.passed) || !Number.isInteger(t.total) || t.passed < 0 || t.total < t.passed)) {
+      throw new Error("로컬 개발자 보고가 올바르지 않거나 독립 검증으로 오표기되었습니다.");
+    }
+  }
   if (!Array.isArray(data.gates) || data.gates.some((g) => !g || !safeId(g.id) || !validGate(g.status) || typeof g.evidence !== "string")) throw new Error("출시 게이트 상태가 잘못되었습니다.");
   if (!Array.isArray(data.events) || data.events.some((e) => !e || !safeId(e.id) || !validTime(e.atUtc) || !validGate(e.status))) throw new Error("개발 이벤트가 잘못되었습니다.");
   return data;
