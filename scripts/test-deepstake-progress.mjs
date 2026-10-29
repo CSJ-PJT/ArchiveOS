@@ -30,6 +30,16 @@ assert.equal(snapshot.verification.editorPassed, 30);
 assert.equal(snapshot.verification.editorTotal, 30);
 assert.equal(snapshot.verification.nativeStatus, "fail");
 assert.equal(snapshot.verification.nativeExitCode, 1);
+assert.equal(snapshot.developerReport.source, "user-provided-codex-screenshots");
+assert.equal(snapshot.developerReport.independentlyVerified, false, "Screenshot is not independent QA");
+assert.deepEqual(snapshot.developerReport.nativeRuns.map((run) => run.pid), [44712, 30340]);
+assert.deepEqual(snapshot.developerReport.nativeRuns.map((run) => run.reportedExitCode), [0, 0]);
+assert.equal(snapshot.developerReport.tests[0].passed, 66);
+assert.equal(snapshot.developerReport.tests[0].total, 66);
+assert.equal(snapshot.developerReport.movement.routes, 17);
+assert.equal(snapshot.developerReport.movement.stopPoints, 34);
+assert.equal(snapshot.developerReport.firstVillageMvpEvidenceScore.score, 56);
+assert.equal(modeled, 26.4, "Local screenshot evidence cannot silently change weighted Steam MVP progress");
 assert.ok(snapshot.gates.some((gate) => gate.id === "gpu-zero" && gate.status === "fail"));
 assert.ok(snapshot.gates.some((gate) => gate.id === "gameplay" && gate.status === "fail"));
 
