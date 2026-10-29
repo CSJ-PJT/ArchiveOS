@@ -31,3 +31,14 @@ PR #17은 2026-07-31 상태의 GitHub main을 기준으로 ConsoleDashboardPage�
 ## 권한 경계
 
 이 ChatGPT 대화에는 OCI SSH 및 현재 운영 소스의 로컬 파일 접근 경로가 없고, Remote Desktop Commander의 월간 호출 제한이 있다. 따라서 개발 지시/검증 자료 작성은 가능하지만 로컬 GameOps 구현 파일 수정 및 OCI 승격 실행을 완료한 것으로 주장할 수 없다. 사용자 로컬 Codex Archive Project의 단일 운영 소유자가 이 기존 PR #17과 실제 현행 운영 소스에서 이식·배포해야 한다.
+
+
+## 2026-10-29 v287/v288 로컬 Codex 사용자 스크린샷 추가
+
+- v287: 신규 Native PID 44712 및 재진입 PID 30340 모두 exit0, 근무→급여→물 구매→저장→별도 PID 복원을 로컬 Codex가 보고.
+- v288: 저장 경로 분리·잘못된 설정 거부 검사 통과 및 수동 이어하기 런처 준비 보고, 상태 전송 주기 관련 테스트 66/66.
+- 동일 소스 로컬 보고로 이동 17개 경로 정지 34곳 0.03m 미만, 종료 후 불필요 이동 없음.
+- '첫 마을 MVP 증거점수 56/100'은 9영역 가중 추정 26.4%, 과거 72건 24% 및 전체 게임 완성률과 전부 별도.
+- 현재 증거는 사용자가 제공한 DeepStake Project Codex 화면이므로 Native 원본 종료 영수증 및 TestResult XML 독립 재검증이 필요. 실제 사람의 키/마우스 테스트, 거리 시각 품질, 체감 입력 지연, P18 GPU 1px, 출시 승인은 아직 미확정.
+- ArchiveOS GameOps 기존 카드에서는 v287/288 **개발자 자체 보고를 최신 동향으로 표시**하고, 오래된 v271 원본 Native FAIL은 그 당시 검증으로만 라벨링. 독립 QA 카드의 상태는 그대로 미승인으로 둔다.
+- GitHub PR #17의 public/deepstake-progress.json에 developerReport를 별도 보존. **단 이 PR은 운영에 자동 배포되지 않으므로 최신 OCI 운영 소스에 단일 패치로 통합해야 실제 표시됨.**
