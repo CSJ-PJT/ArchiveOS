@@ -49,6 +49,8 @@ const overview = readFileSync("src/pages/ConsoleDashboardPage.tsx", "utf8");
 for (const fragment of ["original72Mapped", "steamEstimate", "Steam Windows PC", "ds-stacked", "ds-workstream-chart"]) {
   assert.ok(dashboard.includes(fragment), `Dashboard missing ${fragment}`);
 }
-assert.ok(operations.includes("Steam 개발"));
-assert.ok(overview.includes("<DeepStakeProgressBoard compact />"));
+assert.ok(!operations.includes("DeepStakeProgressBoard"), "Game monitoring must not appear in general operations");
+assert.ok(!operations.includes("Steam 개발"), "Duplicate Steam tab must not exist in general operations");
+assert.ok(!overview.includes("DeepStakeProgressBoard"), "Game monitoring must not appear on ArchiveOS main dashboard");
+assert.ok(!overview.includes("Steam PC MVP"), "Global ArchiveOS KPI must not be replaced by game KPIs");
 console.log(`Steam PC progress snapshot validated: historical72=72, modeled=${modeled}% (ESTIMATE only), native=FAIL`);
