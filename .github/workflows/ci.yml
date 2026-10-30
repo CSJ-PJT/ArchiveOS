@@ -101,8 +101,27 @@ jobs:
   compose-config:
     name: Validate Docker Compose
     runs-on: ubuntu-latest
+    # Test-only interpolation values: config --quiet never starts a container.
+    env:
+      DB_NAME: archiveos_ci
+      DB_USER: archiveos_ci
+      DB_PASSWORD: ci-compose-config-only
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Validate configuration
         run: docker compose config --quiet
+
+  production-readonly:
+    name: OCI public UI fingerprint (read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Probe public health and deployment fingerprint
+        run: node scripts/probe-archiveos-live.mjs
