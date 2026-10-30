@@ -1,5 +1,7 @@
 # ArchiveOS OCI 운영판에 DeepStake Steam PC 진행 관제 반영
 
+> **2026-10-30 사용자 최상위 수정:** 이 변경은 ArchiveOS 메인 대시보드나 일반 운영 메뉴에 표시하지 않는다. 기존 OCI의 **'개발 관제' 전용 라우트**에만 적용한다. 현재 운영 소스 기준의 최종 실행 절차는 `docs/operations/OCI_GAME_MONITORING_ONLY_20261030.md`이며, 이 문서의 과거 상충 지침보다 우선한다. GitHub main이 최신 운영 소스가 아니므로 PR 전체를 그대로 OCI에 배포하지 않는다.
+
 ## 적용 원칙
 
 현재 보고된 운영판은 **2026-10-22 OCI 정적 릴리스 `archiveos-ui-schedule-20261022-v1`** 이다. 2026-10-22 검증 보고서에 따르면 `#/schedule` 화면과 `src/pages/SchedulePage.tsx`, `archiveos-ai/.../db/migration/V47__create_schedule_control.sql`, `/api/schedule/overview` 등이 존재한다. 개발 당시 Git 워크트리의 기존 변경과 분리한 PR은 없었다.
