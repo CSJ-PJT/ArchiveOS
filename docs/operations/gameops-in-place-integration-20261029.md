@@ -1,5 +1,7 @@
 # 2026-10-29 — GameOps 기존 화면에 Steam PC 개발 진척 연결
 
+> **2026-10-30 사용자 최상위 수정:** 이 변경은 ArchiveOS 메인 대시보드나 일반 운영 메뉴에 표시하지 않는다. 기존 OCI의 **'개발 관제' 전용 라우트**에만 적용한다. 현재 운영 소스 기준의 최종 실행 절차는 `docs/operations/OCI_GAME_MONITORING_ONLY_20261030.md`이며, 이 문서의 과거 상충 지침보다 우선한다. GitHub main이 최신 운영 소스가 아니므로 PR 전체를 그대로 OCI에 배포하지 않는다.
+
 ## 실제 OCI 공개 파일 확인
 
 2026-10-29 15:57 KST, GitHub Actions 40832390692, Public HTTP fingerprint:
