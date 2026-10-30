@@ -3,7 +3,6 @@ import type { AppData } from "../app/AppShell";
 import type { CoreRoute } from "../app/navigation";
 import { LiveMeshTopology } from "../components/console/LiveMeshTopology";
 import { DashboardRagCopilot } from "../components/console/DashboardRagCopilot";
-import { DeepStakeProgressBoard } from "../components/console/DeepStakeProgressBoard";
 import { Icon, type IconName } from "../components/shared/Icon";
 import { StatusBadge, normalizeStatus, type SemanticStatus } from "../components/shared/StatusBadge";
 import { useI18n } from "../i18n/I18nProvider";
@@ -64,8 +63,6 @@ export function ConsoleDashboardPage({ data, onNavigate, onRefresh }: { data: Ap
       <DashboardKpi icon="workflow" label="처리 적체" value={displayCount(data.liveFlow?.processingBacklog)} helper="현재 처리 대기 기준" status={numberStatus(data.liveFlow?.processingBacklog)} trend={backlogTrend} trendTone="backlog" trendLabel="최근 30분" mobileTrendLabel="처리 대기 기준" action={translate("copilot.analyze")} onClick={() => setCopilotQuestion(translate("copilot.questionBacklog"))} />
       <DashboardKpi icon="overview" label="생태계 균형" value={balanceView.label} valueCompact helper={balanceShortSummary(balance?.balanceStatus)} helperTitle={balance?.reviewReason || balanceView.description} status={balanceView.status} badgeLabel={balanceView.badge} note={balance ? "마지막 계산 기준" : "재무 Runtime Mesh 수집 대기"} action={translate("copilot.analyze")} onClick={() => setCopilotQuestion(interpolate(translate("copilot.questionBalance"), { status: balance?.balanceStatus || "NO_DATA" }))} />
     </section>
-
-    <DeepStakeProgressBoard compact />
 
     <LiveMeshTopology topology={data.liveFlowTopology} summary={data.liveFlow} events={allEvents} onNavigate={onNavigate} onAsk={setCopilotQuestion} />
 
