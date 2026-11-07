@@ -1,0 +1,22 @@
+tenancy_ocid         = "ocid1.tenancy.oc1..replace"
+compartment_ocid     = "ocid1.compartment.oc1..replace"
+region               = "ap-osaka-1"
+vcn_id               = "ocid1.vcn.oc1.ap-osaka-1.replace"
+public_subnet_id     = "ocid1.subnet.oc1.ap-osaka-1.replace"
+compute_image_id     = "ocid1.image.oc1.ap-osaka-1.replace"
+ssh_authorized_keys  = "ssh-ed25519 REPLACE_WITH_APPROVED_PUBLIC_KEY"
+management_cidr      = "203.0.113.10/32"
+canary_allowed_cidrs = ["203.0.113.10/32"]
+certificate_id       = "ocid1.certificate.oc1.ap-osaka-1.replace"
+canary_hostname      = "archiveos-canary.example.invalid"
+backup_bucket_name   = "archiveos-private-backups"
+
+# Paid defaults requiring explicit approval:
+compute_shape             = "VM.Standard.E4.Flex"
+compute_ocpus             = 2
+compute_memory_gb         = 16
+boot_volume_gb            = 100
+data_volume_gb            = 200
+data_volume_vpus_per_gb   = 10
+load_balancer_min_mbps    = 10
+load_balancer_max_mbps    = 10
