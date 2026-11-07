@@ -58,6 +58,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
         String scope = compatibleHeader(request, ArchiveScopeRegistry.SCOPE_HEADER, ArchiveScopeRegistry.LEGACY_SCOPE_HEADER);
         if (source == null || scope == null) return;
         source = ArchiveScopeRegistry.canonicalService(source);
+        scope = ArchiveScopeRegistry.canonicalScope(scope);
         PlatformRole role;
         String expected;
         if ("/api/live-flow/events/ingest".equals(request.getRequestURI())
